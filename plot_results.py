@@ -4,9 +4,8 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 import networkx as nx
 
-def plot_fig(N,D,G,q,Q, G_res):
-    # ── Layout nodi (triangolo equilatero) ─────────────────────────────────────────
-    
+def plot_fig(N,D,G,q,Q, G_res, k):
+    # # Node layout (equilateral or equidistant triangle)
     pos = {
         0: np.array([0.0,  0.866]),
         1: np.array([-1.0, 0.0 ]),
@@ -18,7 +17,7 @@ def plot_fig(N,D,G,q,Q, G_res):
     for i in range(N)
     }
     """
-    # ── Figura ─────────────────────────────────────────────────────────────────────
+    
     fig, ax = plt.subplots(figsize=(8, 7), facecolor="#ffffff")
     ax.set_facecolor("#ffffff")
     ax.set_aspect("equal")
@@ -26,9 +25,9 @@ def plot_fig(N,D,G,q,Q, G_res):
     ax.set_xlim(-2, 2)
     ax.set_ylim(-0.7, 1.7)
 
-    # ── Archi con frecce e label del flusso q ─────────────────────────────────────
-    cmap_pos = "#2a702f"   # blu  → flusso positivo
-    cmap_neg = "#f87171"   # rosso → flusso negativo
+    # Arcs with arrows and q flow labels
+    cmap_pos = "#2a702f"   
+    cmap_neg = "#f87171"   # red -> flow equal to maximum capacity
     node_radius = 0.14
 
     drawn_edges = set()
@@ -38,21 +37,17 @@ def plot_fig(N,D,G,q,Q, G_res):
         drawn_edges.add((m, n))
 
         p0, p1 = pos[m], pos[n]
-
-        # versore direzione m→n e perpendicolare (calcolati una volta per coppia)
         d_unit = (p1 - p0) / np.linalg.norm(p1 - p0)
         perp = np.array([-d_unit[1], d_unit[0]]) * 0.06
 
         for sign, (src, dst) in [(1, (m, n)), (-1, (n, m))]:
             val_show = q[(src, dst)]
-            color = cmap_pos if val_show >= 0 else cmap_neg
-            off = sign * perp  # le due frecce stanno su lati opposti
+            color = cmap_pos if val_show < k[(src,dst)] else cmap_neg
+            off = sign * perp 
 
-            # direzione src→dst (può essere m→n o n→m)
             d = pos[dst] - pos[src]
             d = d / np.linalg.norm(d)
 
-            # accorcia partenza e arrivo del raggio del nodo
             p_start = pos[src] + d * node_radius + off
             p_end   = pos[dst] - d * node_radius + off
 
@@ -76,8 +71,7 @@ def plot_fig(N,D,G,q,Q, G_res):
                 path_effects=[pe.withStroke(linewidth=2, foreground="#ffffff")],
             )
 
-    # ── Nodi ──────────────────────────────────────────────────────────────────────
-    
+    # plot prosumers and related information    
     for n, p in pos.items():
         circle = plt.Circle(p, node_radius, color="#fafafa", zorder=3, linewidth=1,
                             ec="#5e5e92")
@@ -96,22 +90,22 @@ def plot_fig(N,D,G,q,Q, G_res):
                 bbox=dict(boxstyle="round,pad=0.3", fc="#ffffff", ec="#5e5e92", lw=1),
                 zorder=5)
 
-    # ── Legenda ───────────────────────────────────────────────────────────────────
-    
+    # Legend    
     legend_elements = [
-        mpatches.Patch(color=cmap_pos, label="q[(m,n)] > 0  n buys from m"),
-        mpatches.Patch(color=cmap_neg, label="q[(m,n)] < 0  n sells to m"),
+        mpatches.Patch(color=cmap_pos, label="q[(m,n)] < k[(m,n)]"),
+        mpatches.Patch(color=cmap_neg, label="q[(m,n)] = k[(m,n)] "),
     ]
     ax.legend(handles=legend_elements, loc="lower center", ncol=2,
             facecolor="#ffffff", edgecolor="#5e5e92", labelcolor="#5e5e92",
             fontsize=8, framealpha=0.9)
-    
-    #ax.set_title("Grafo dei flussi  —  D, G per nodo", color="white",fontsize=14, fontfamily="monospace", pad=14)
 
     plt.tight_layout()
     plt.savefig("graph_visualization.png",
                 dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
 
+"""
+plot figure convergence as residual VI
+"""
 def plot_convergence(residuals):
     plt.figure(figsize=(6,4))
     plt.semilogy(residuals, marker='o')
