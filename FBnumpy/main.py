@@ -10,33 +10,37 @@ from utils import project_all_agents_global
 Initialize problem parameters
 """""""""""""""""""""""""""""
 
-N = 3 # number of prosumers
+N = 6 # number of prosumers
 gamma = 0.1 # step Forward-Backward
 max_iter = 100 
 
 # set of neighbors of each prosumer
 neighbors = {
-    0:[1,2],
-    1:[0,2],
-    2:[0,1]
+    0: [1, 2, 3],
+    1: [0, 2],
+    2: [0, 1],
+    3: [0, 4, 5],
+    4: [3, 5],
+    5: [3, 4]
 }
 
 # Box Constraints on D and G
-D_min = np.array([0.0, 0.0, 0.0])
-D_max = np.array([10.0, 10.0, 10])
+D_min = np.zeros(N)
+D_max = np.array([10.0, 8.0, 8.0, 6.0, 6.0, 6.0])
+
 G_min = np.zeros(N)
-G_max = np.array([10.0, 0.0, 0.0])
+G_max = np.array([10.0, 0.0, 0.0, 5.0, 0.0, 0.0])
 
 # generations of renewable sources note
-G_res = np.array([0.0, 3.0, 5.0])
+G_res = np.array([0.0, 3.0, 5.0, 2.0, 4.0, 1.0])
 
 # coefficiets of Usage Benefit: U_n(D) = -a_tilde_n (D - D_star)^2
-a_tilde = np.array([5.0, 15.0, 10.0])
-D_star = np.array([6.0, 3.0, 3.0])
+a_tilde = np.array([5.0, 15.0, 10.0, 8.0, 12.0, 6.0])
+D_star  = np.array([6.0, 3.0, 3.0, 2.5, 2.0, 1.5])
 
 # coefficiets of Flexibility Activation Cost: C_n(G) = 0.5 a_n G^2 + b_n G
-a = np.array([4.0, 4.0, 4.0])
-b = np.array([0.0, 0.0, 0.0])
+a = np.array([4.0, 4.0, 4.0, 3.0, 4.0, 4.0])
+b = np.zeros(N)
 
 # price preferences c_{mn}
 c = {}
@@ -45,7 +49,7 @@ k = {}
 for n in neighbors:
     for m in neighbors[n]:
         c[(m, n)] = 0.1   # esempio
-        if m==0:
+        if m==0 or n==0:
             k[(m, n)] = 10.0      # capacità fisica
         else:
             k[(m, n)] = 5.0      # capacità fisica

@@ -2,10 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
-import networkx as nx
 
-def plot_fig(N,D,G,q,Q, G_res, k):
+def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
     # # Node layout (equilateral or equidistant triangle)
+    
     pos = {
         0: np.array([0.0,  0.866]),
         1: np.array([-1.0, 0.0 ]),
@@ -42,7 +42,7 @@ def plot_fig(N,D,G,q,Q, G_res, k):
 
         for sign, (src, dst) in [(1, (m, n)), (-1, (n, m))]:
             val_show = q[(src, dst)]
-            color = cmap_pos if val_show < k[(src,dst)] else cmap_neg
+            color = cmap_pos if val_show < (k[(src,dst)]-0.2) else cmap_neg
             off = sign * perp 
 
             d = pos[dst] - pos[src]
@@ -100,20 +100,24 @@ def plot_fig(N,D,G,q,Q, G_res, k):
             fontsize=8, framealpha=0.9)
 
     plt.tight_layout()
-    plt.savefig("graph_visualization.png",
+    plt.savefig(namefig,
                 dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    #plt.show()
 
 """
 plot figure convergence as residual VI
 """
-def plot_convergence(residuals):
+def plot_convergence(residuals, residuals_l, namefig="plot_convergence.png", title="Convergence of Forward-Backward"):
+    plt.style.use("seaborn-v0_8-pastel")
     plt.figure(figsize=(6,4))
     plt.semilogy(residuals, marker='o')
+    plt.semilogy(residuals_l, marker='*')
     plt.xlabel('Iteration')
     plt.ylabel('Residual VI ||x - Pi_X(x - γF(x))||')
-    plt.title('Convergence Forward-Backward')
+    plt.title(title)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("plot_convergence.png",dpi=150, bbox_inches="tight")
+    plt.savefig(namefig,dpi=150, bbox_inches="tight")
+    #plt.show()
 
 
