@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
+from matplotlib.ticker import MaxNLocator
 
 def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
     # # Node layout (equilateral or equidistant triangle)
@@ -100,7 +101,7 @@ def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
             fontsize=8, framealpha=0.9)
 
     plt.tight_layout()
-    plt.savefig(namefig,
+    plt.savefig(f"plot/{namefig}",
                 dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
     #plt.show()
 
@@ -115,9 +116,10 @@ def plot_convergence(residuals, residuals_l, namefig="plot_convergence.png", tit
     plt.xlabel('Iteration')
     plt.ylabel('Residual VI ||x - Pi_X(x - γF(x))||')
     plt.title(title)
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(namefig,dpi=150, bbox_inches="tight")
+    plt.savefig(f"plot/{namefig}",dpi=150, bbox_inches="tight")
     #plt.show()
 
 

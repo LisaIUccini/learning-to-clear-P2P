@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from torch.utils.data import Dataset, DataLoader
 from modelsLearning import LearnedUpdate
 
-from utils_torch import F_torch, flatten_state, project_all_agents_global_torch, project_all_agents_global_approx , unflatten_state, build_edge_list, initialize_DGq_torch, projection_loss_torch
+from old.utils_torch import F_torch, flatten_state, project_all_agents_global_torch, project_all_agents_global_approx , unflatten_state, build_edge_list, initialize_DGq_torch, projection_loss_torch, cost
 from plot_results import plot_fig, plot_convergence
 
 # ---------------------------------------------------------
@@ -141,14 +141,14 @@ def learned_FB_step(x, model, t:int, training:bool):
     x_in = x_base.unsqueeze(0).unsqueeze(-1)   # (1, d, 1)
     update = model(x_in, t).squeeze(0)    # (d,)
     if training:
-        x_next =  0.7 * x_base + 0.3 * update
+        x_next =  x_base +  update
     else:
         
         x_next =  0.8 * x_base + 0.2 * update
     
     """
-    if t<5:
-        x_next = 0.3 * x_base + 0.7 * update
+    if t<13:
+        x_next =  x_base +  update
     else:
         x_next = x_base.clone() # pure FB after 13 steps
     
@@ -199,7 +199,9 @@ def meta_training_proj(model, dataloader, meta_optimizer,
                 x_next = learned_FB_step(x, model, t, True)  # x is the next iterate after the learned FB step
 
                 # step-difference residual as in your current meta-loss 
-                meta_loss = meta_loss + torch.norm(x_next - x_old)*0.95 ** (T - t)  # (T-t) non c'era nel test T300e150)
+                D_n, G_n, q_n = unflatten_state(x_next, N, neighbors)
+                cost_next = cost(N, D_n, G_n, q_n, a_tilde, a, b, D_star, c, neighbors)
+                meta_loss = meta_loss + cost_next + torch.norm(x_next-x_old) *0.5 ** (T - t)  # (T-t) non c'era nel test T300e150)
                 x = x_next.clone()  # update x for the next iteration
 
             meta_loss.backward()
@@ -210,7 +212,7 @@ def meta_training_proj(model, dataloader, meta_optimizer,
         print(f"Epoch {epoch+1}/{epochs}, Loss: {meta_loss_epoch:.6f}")
         print("------------------------------------------------------------")
     
-    plot_convergence(meta_loss_epoch_list, "meta_training_loss.png", "Meta-Training Loss over Epochs")
+    plot_convergence(meta_loss_epoch_list, [],  "meta_training_loss.png", "Meta-Training Loss over Epochs")
 
     return model
 
@@ -260,11 +262,11 @@ def main():
     x = flatten_state(D, G, q, neighbors)
     x_base = x.clone()
 
-    """
+    
     x_in = x.unsqueeze(0).unsqueeze(-1)   # (1, d, 1)
     update = learned_update(x_in, 0).squeeze(0)   # (d,)
-    x = 0.5 * x + 0.5 * update.clone()
-    """
+    x = x + update
+    
 
     residuals_l2p = []
     residuals = []
@@ -281,7 +283,7 @@ def main():
         x = x_next.clone()     
         x_base = x_base_new.clone()
 
-        
+         
         if err < tol or err_l < tol:
             print(f"Convergenza raggiunta a iterazione {it}")
             break
@@ -299,22 +301,19 @@ def main():
     for n in range(N):
         Qn = sum(ql[(m, n)] for m in neighbors[n])
         Ql[n]=Qn
-        print("Q",n,"=",Qn)
-        print("balance ",n,"=",Gl[n]+G_res[n]+Qn-Dl[n])
-
+    print("COST L2Play: ", cost(N, Dl, Gl, ql, a_tilde, a, b, D_star, c, neighbors))
     plot_fig(N,Dl,Gl,ql,Ql, G_res, k, "graph_visualization_LFB.png")
 
     Q = np.zeros(N)
     for n in range(N):
         Qn = sum(q[(m, n)] for m in neighbors[n])
-        Ql[n]=Qn
-        print("Q",n,"=",Qn)
-        print("balance ",n,"=",G[n]+G_res[n]+Qn-D[n])
-
+        Q[n]=Qn
+        
+    print("COST FB: ", cost(N, D, G, q, a_tilde, a, b, D_star, c, neighbors))
     plot_fig(N,D,G,q,Q, G_res, k)
 
     #plot_convergence(residuals_l2p, "plot_convergence_LFB_x+u.png", "Convergence of Learned FB x+u")
-    plot_convergence(residuals, residuals_l2p, "plot_convergence.png", "Convergence of FB compared base operator")
+    plot_convergence(residuals, residuals_l2p, "plot_convergence.png", "Convergence FB base vs with learned update")
 
 if __name__ == "__main__":
     main()

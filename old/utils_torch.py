@@ -18,6 +18,34 @@ def initialize_DGq_torch(D_min, D_max, G_min, G_max, neighbors, k, N):
 
     return D, G, q
 
+def cost(N, D, G, q, a_tilde, a, b, D_star, c, neighbors):
+    """
+    Compute the cost function F(D,G,q) for all agents.
+
+    Parameters:
+    - D, G: torch tensors, shape (N,)
+    - q: dict with keys (m,n), values torch tensors
+    - a_tilde, a, b: torch tensors, shape (N,)
+    - c: dict of torch tensors for edges
+    - D_star: torch tensor, shape (N,)
+    - neighbors: dict of neighbor lists
+
+    Returns:
+    - cost: torch tensor scalar
+    """
+    cost = 0.0
+
+    for n in range(N):
+        # Cost for D and G
+        cost = cost + a_tilde[n] * (D[n] - D_star[n])**2 + 0.5 * a[n] * G[n]**2 + b[n] * G[n]
+
+        # Cost for q
+        for m in neighbors[n]:
+            if (m, n) in q:
+                cost = cost + c[(n, m)] * q[(m, n)]
+
+    return cost
+
 def F_torch(D, G, N, a_tilde, a, b, D_star, c, neighbors, device):
     """
     Compute gradients w.r.t. D, G, q using PyTorch tensors.
