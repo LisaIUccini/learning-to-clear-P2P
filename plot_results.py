@@ -108,13 +108,14 @@ def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
 """
 plot figure convergence as residual VI
 """
-def plot_convergence(residuals, residuals_l, namefig="plot_convergence.png", title="Convergence of Forward-Backward"):
+def plot_convergence(residuals, residuals_l, legend1="", legend2="", namefig="plot_convergence.png", title="Convergence of Forward-Backward"):
     plt.style.use("seaborn-v0_8-pastel")
     plt.figure(figsize=(6,4))
-    plt.semilogy(residuals, marker='o')
-    plt.semilogy(residuals_l, marker='*')
+    plt.semilogy(residuals, marker='o', label=legend1)
+    plt.semilogy(residuals_l, marker='*', label=legend2)
     plt.xlabel('Iteration')
     plt.ylabel('Residual VI ||x - Pi_X(x - γF(x))||')
+    plt.legend(loc='best', fontsize=9, frameon=False)
     plt.title(title)
     plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.grid(True)

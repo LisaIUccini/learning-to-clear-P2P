@@ -45,12 +45,12 @@ class EnergyNetwork:
     # Initialization
     # --------------------------------------------------
     def init_state(self):
-        D = torch.zeros(self.N, device=self.device)
-        G = torch.zeros(self.N, device=self.device)
+        D = self.D_min + (self.D_max - self.D_min) * torch.rand(self.N, device=self.device)#torch.zeros(self.N, device=self.device)
+        G = self.G_min + (self.G_max - self.G_min) * torch.rand(self.N, device=self.device)
         q = {}
         for n in self.neighbors:
             for m in self.neighbors[n]:
-                q[(m, n)] = torch.tensor(0.0, device=self.device)
+                q[(m, n)] = 0 + (self.k[(m,n)] - 0) * torch.rand(1, device=self.device).item()#torch.tensor(0.0, device=self.device)
         return D, G, q
     
 

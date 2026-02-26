@@ -22,7 +22,7 @@ np.random.seed(1234)
 
 N = 3 # number of prosumers
 gamma = 0.1 # step Forward-Backward
-max_iter = 100
+max_iter = 20
 tol=1e-6
 
 # set of neighbors of each prosumer
@@ -138,10 +138,8 @@ def learned_FB_step(n:EnergyNetwork, model, t:int, training:bool):
 
     x_in = n_new.x.unsqueeze(0).unsqueeze(-1)   # (1, d, 1)
     update = model(x_in, t).squeeze(0)    # (d,)
-    if training:
-        n_new.__setflattenstate__(n_new.x +  update)
-    else:
-        n_new.__setflattenstate__(0.8 * n_new.x + 0.2 * update)
+    
+    n_new.__setflattenstate__(n_new.x +  update)
     
     """
     if t<13:
@@ -186,9 +184,7 @@ def meta_training_proj(model, dataloader, meta_optimizer,
                 n_old = n.clone()
                 n_new,_ = learned_FB_step(n, model, t, True)  # x is the next iterate after the learned FB step
 
-                # step-difference residual as in your current meta-loss 
-                cost_next = n_new.cost() 
-                meta_loss = meta_loss + cost_next + torch.norm(n_new.x-n_old.x) * 0.95 ** (T - t)  # (T-t) non c'era nel test T300e150)
+                meta_loss = meta_loss + torch.norm(n_new.x-n_old.x) * 0.95 ** (T - t)  # (T-t) non c'era nel test T300e150)
                 n = n_new.clone()  # update n for the next iteration
 
             meta_loss.backward()
@@ -207,7 +203,7 @@ def meta_training_proj(model, dataloader, meta_optimizer,
 def main():
     # Fixed dataset
     d = 2 * N + len(build_edge_list(neighbors))  # dimension of the flattened state
-    training_samples = 10
+    training_samples = 50
     batch_size = 1
     training_dataset = ProjectionDataset(training_samples, device) #d*training_samples
     training_dataloader = DataLoader(
@@ -216,11 +212,11 @@ def main():
         shuffle=True,
     )
 
-    learned_update = LearnedUpdate(d, q=0, rho=0.95).to(device) 
-    meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=2e-3)
+    learned_update = LearnedUpdate(d, q=0, rho=0.5).to(device) #esempio 0 -> 0.4
+    meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=2e-3) #esempio 0 -> 1e-2
 
-    T = 50
-    epochs = 20
+    T = 15
+    epochs = 50
     load = True # se True, salta la meta-training e carica un modello pre-trained (assicurati di avere il file .pt nella cartella)
     if load: 
         # Load the pre-trained learned optimizer parameters
@@ -272,7 +268,7 @@ def main():
         n_base = n_l_new.clone()     
         n_pure_base = n_pure_new.clone()
 
-                
+               
         if err < tol or err_l < tol:
             print(f"Convergenza raggiunta a iterazione {it}")
             break
@@ -289,8 +285,8 @@ def main():
 
     #plot_convergence(residuals_l2p, "plot_convergence_LFB_x+u.png", "Convergence of Learned FB x+u")
     
-    plot_convergence(upd, [], "update_convergence.png", "Convergence learned update")
-    plot_convergence(residuals, residuals_l2p, "plot_convergence.png", "Convergence FB base vs with learned update")
+    plot_convergence(upd, [], "increment update", "", "update_convergence.png", "Convergence learned update")
+    plot_convergence(residuals, residuals_l2p, "pure FB", "FB with learned update", "plot_convergence.png", "Convergence FB base vs with learned update")
 
 if __name__ == "__main__":
     main()
