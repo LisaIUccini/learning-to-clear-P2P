@@ -117,7 +117,7 @@ def plot_convergence(residuals, residuals_l, legend1="", legend2="", namefig="pl
     plt.ylabel('Residual VI ||x - Pi_X(x - γF(x))||')
     plt.legend(loc='best', fontsize=9, frameon=False)
     plt.title(title)
-    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+    plt.xticks(range(len(residuals)))
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(f"plot/{namefig}",dpi=150, bbox_inches="tight")

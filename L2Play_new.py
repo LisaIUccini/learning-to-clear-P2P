@@ -22,7 +22,7 @@ np.random.seed(1234)
 
 N = 3 # number of prosumers
 gamma = 0.1 # step Forward-Backward
-max_iter = 20
+max_iter = 18
 tol=1e-6
 
 # set of neighbors of each prosumer
@@ -141,12 +141,6 @@ def learned_FB_step(n:EnergyNetwork, model, t:int, training:bool):
     
     n_new.__setflattenstate__(n_new.x +  update)
     
-    """
-    if t<13:
-        x_next =  x_base +  update
-    else:
-        x_next = x_base.clone() # pure FB after 13 steps
-    """
 
     n_new.project_all_agents_global_approx()
     return n_new, update.norm().item()
@@ -212,8 +206,8 @@ def main():
         shuffle=True,
     )
 
-    learned_update = LearnedUpdate(d, q=0, rho=0.5).to(device) #esempio 0 -> 0.4
-    meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=2e-3) #esempio 0 -> 1e-2
+    learned_update = LearnedUpdate(d, q=0, rho=0.5).to(device) #esempio 0 -> 0.3 random->0.5
+    meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=2e-3) #esempio 0 -> 1e-1  random -> 2e-3
 
     T = 15
     epochs = 50
@@ -244,11 +238,11 @@ def main():
     
     n_pure_base = n_base.clone()
 
-    """
+    
     x_in = n_base.x.unsqueeze(0).unsqueeze(-1)   # (1, d, 1)
     update = learned_update(x_in, 0).squeeze(0)   # (d,)
-    n_base.__setflattenstate__(0.5 * n_base.x + 0.5 * update)
-    """
+    n_base.__setflattenstate__(update)
+    
 
     residuals_l2p = []
     residuals = []
@@ -268,7 +262,7 @@ def main():
         n_base = n_l_new.clone()     
         n_pure_base = n_pure_new.clone()
 
-               
+             
         if err < tol or err_l < tol:
             print(f"Convergenza raggiunta a iterazione {it}")
             break
