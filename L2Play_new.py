@@ -61,6 +61,7 @@ for n in neighbors:
         else:
             k[(m, n)] = torch.tensor(5.0, dtype=torch.float32)
 
+
 for n in neighbors:
     print(f"Node {n} neighbors: {neighbors[n]} D_min={D_min[n].item()} D_max={D_max[n].item()} G_min={G_min[n].item()} G_max={G_max[n].item()} G_res={G_res[n].item():.2f} D_star={D_star[n].item():.2f} a_tilde={a_tilde[n].item():.2f} a={a[n].item():.2f} b={b[n].item():.2f}")
 
@@ -206,16 +207,20 @@ def main():
         shuffle=True,
     )
 
-    learned_update = LearnedUpdate(d, q=0, rho=0.5).to(device) #esempio 0 -> 0.3 random->0.5
-    meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=2e-3) #esempio 0 -> 1e-1  random -> 2e-3
+    rho = 0.5
+    lr = 2e-3
+
+    learned_update = LearnedUpdate(d, q=0, rho=rho).to(device) #esempio 0 -> 0.3 random->0.5
+    meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=lr) #esempio 0 -> 1e-1  random -> 2e-3
 
     T = 15
     epochs = 50
     load = True # se True, salta la meta-training e carica un modello pre-trained (assicurati di avere il file .pt nella cartella)
+    
     if load: 
         # Load the pre-trained learned optimizer parameters
         directory_path = './'
-        file_path = os.path.join(directory_path, 'learned_update_T'+str(T)+'e'+str(epochs)+'.pt')
+        file_path = os.path.join(directory_path, f'N'+str(N)+'learned_update_T'+str(T)+'e'+str(epochs)+'s'+str(training_samples)+'_rho'+str(rho)+'lr'+str(lr)+'.pt')
         if os.path.exists(file_path):
             print(f"Loading pre-trained learned optimizer from {file_path}")
             learned_update.load_state_dict(torch.load(file_path))
@@ -228,7 +233,7 @@ def main():
         directory_path = './'
         os.makedirs(directory_path, exist_ok=True)
 
-        file_path = os.path.join(directory_path, f'learned_update_T'+str(T)+'e'+str(epochs)+'.pt')
+        file_path = os.path.join(directory_path, f'N'+str(N)+'learned_update_T'+str(T)+'e'+str(epochs)+'s'+str(training_samples)+'_rho'+str(rho)+'lr'+str(lr)+'.pt')
         torch.save(learned_update.state_dict(), file_path)
         print(f"Trained learned optimizer saved to {file_path}")
 
@@ -238,11 +243,11 @@ def main():
     
     n_pure_base = n_base.clone()
 
-    
+    """
     x_in = n_base.x.unsqueeze(0).unsqueeze(-1)   # (1, d, 1)
     update = learned_update(x_in, 0).squeeze(0)   # (d,)
     n_base.__setflattenstate__(update)
-    
+    """
 
     residuals_l2p = []
     residuals = []
@@ -251,19 +256,19 @@ def main():
     for it in range(max_iter):
         n_pure_new = FB_step(n_pure_base, False) # pure FB step
         
-        err_l = torch.sum((n_pure_new.x - n_pure_base.x) ** 2) #torch.norm(x_next - x).item()
-        residuals.append(err_l.detach().cpu().numpy())
+        err = torch.sum((n_pure_new.x - n_pure_base.x) ** 2) #torch.norm(x_next - x).item()
+        residuals.append(err.detach().cpu().numpy())
 
         n_l_new, update  = learned_FB_step(n_base, learned_update, it, False)
-        err = torch.sum((n_l_new.x - n_base.x) ** 2) #torch.norm(x_next - x).item()
-        residuals_l2p.append(err.detach().cpu().numpy())
+        err_l = torch.sum((n_l_new.x - n_base.x) ** 2) #torch.norm(x_next - x).item()
+        residuals_l2p.append(err_l.detach().cpu().numpy())
         upd.append(update)
         
         n_base = n_l_new.clone()     
         n_pure_base = n_pure_new.clone()
 
              
-        if err < tol or err_l < tol:
+        if err < tol:
             print(f"Convergenza raggiunta a iterazione {it}")
             break
         
@@ -280,7 +285,7 @@ def main():
     #plot_convergence(residuals_l2p, "plot_convergence_LFB_x+u.png", "Convergence of Learned FB x+u")
     
     plot_convergence(upd, [], "increment update", "", "update_convergence.png", "Convergence learned update")
-    plot_convergence(residuals, residuals_l2p, "pure FB", "FB with learned update", "plot_convergence.png", "Convergence FB base vs with learned update")
+    plot_convergence(residuals, residuals_l2p, "pure FB", "FB with learned update", "N"+str(N)+"_plot_convergenceT"+str(T)+"e"+str(epochs)+'s'+str(training_samples)+'_rho'+str(rho)+'lr'+str(lr)+".png", "Convergence FB base vs with learned update")
 
 if __name__ == "__main__":
     main()
