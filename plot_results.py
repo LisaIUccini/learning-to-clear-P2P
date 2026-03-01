@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 from matplotlib.ticker import MaxNLocator
+import solveVI_dynamic_DR as solveVI
 
 def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
     # # Node layout (equilateral or equidistant triangle)
@@ -122,5 +123,23 @@ def plot_convergence(residuals, residuals_l, legend1="", legend2="", namefig="pl
     plt.tight_layout()
     plt.savefig(f"plot/{namefig}",dpi=150, bbox_inches="tight")
     #plt.show()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Plot convergenza
+# ─────────────────────────────────────────────────────────────────────────────
+
+def plot_convergenceDR(result: solveVI.DRResult, title: str = ""):
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.semilogy(result.residuals, color='steelblue', linewidth=2)
+    ax.axhline(y=result.residuals[-1], color='tomato', linestyle='--',
+               linewidth=1, label=f'finale = {result.residuals[-1]:.1e}')
+    ax.set_xlabel("Iterazione $k$")
+    ax.set_ylabel(r"$\|r(u^k)\|$  (scala log)")
+    ax.set_title(f"Convergenza Douglas-Rachford"
+                 f"{' — ' + title if title else ''}")
+    ax.legend();  ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    return fig
 
 
