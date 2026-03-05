@@ -3,8 +3,8 @@ import numpy as np
 from plot_results import plot_fig
 from plot_results import plot_convergence
 
-from utils import F
-from utils import project_all_agents_global
+from initParameter import F
+from initParameter import project_all_agents_global
 
 """""""""""""""""""""""""""""
 Initialize problem parameters

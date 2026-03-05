@@ -7,8 +7,9 @@ from modelsLearning import LearnedUpdate
 
 
 from energy_network import EnergyNetwork
-
+import initParameter
 from plot_results import plot_fig, plot_convergence
+
 
 # ---------------------------------------------------------
 #  Device & seeds
@@ -19,51 +20,7 @@ torch.manual_seed(1234)
 np.random.seed(1234)
 
 # =============== Initialize problem parameters ===============
-
-N = 3 # number of prosumers
-gamma = 0.1 # step Forward-Backward
-max_iter = 18
-tol=1e-6
-
-# set of neighbors of each prosumer
-neighbors = {
-    0:[1,2],
-    1:[0,2],
-    2:[0,1]
-}
-
-# Box Constraints on D and G
-D_min = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
-D_max = torch.tensor([10.0, 10.0, 10.0], dtype=torch.float32)
-G_min = torch.zeros(N, dtype=torch.float32)
-G_max = torch.tensor([10.0, 0.0, 0.0], dtype=torch.float32)
-
-# generations of renewable sources note
-G_res = torch.tensor([0.0, 3.0, 5.0], dtype=torch.float32)
-
-# coefficiets of Usage Benefit: U_n(D) = -a_tilde_n (D - D_star)^2
-a_tilde = torch.tensor([5.0, 15.0, 10.0], dtype=torch.float32)
-D_star  = torch.tensor([6.0, 3.0, 3.0], dtype=torch.float32)
-
-# coefficiets of Flexibility Activation Cost: C_n(G) = 0.5 a_n G^2 + b_n G
-a = torch.tensor([4.0, 4.0, 4.0], dtype=torch.float32)
-b = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
-
-# price preferences c_{mn}
-c = {}
-# interconnection capacity constraint  k_{mn}
-k = {}
-for n in neighbors:
-    for m in neighbors[n]:
-        c[(m, n)] = torch.tensor(0.1, dtype=torch.float32)
-        if m == 0:
-            k[(m, n)] = torch.tensor(10.0, dtype=torch.float32)
-        else:
-            k[(m, n)] = torch.tensor(5.0, dtype=torch.float32)
-
-
-for n in neighbors:
-    print(f"Node {n} neighbors: {neighbors[n]} D_min={D_min[n].item()} D_max={D_max[n].item()} G_min={G_min[n].item()} G_max={G_max[n].item()} G_res={G_res[n].item():.2f} D_star={D_star[n].item():.2f} a_tilde={a_tilde[n].item():.2f} a={a[n].item():.2f} b={b[n].item():.2f}")
+N, gamma, max_iter, tol, neighbors, D_min, D_max, G_min, G_max, G_res, D_star, a_tilde, a, b, c, k = initParameter.initN10()
 
 def build_edge_list(neighbors):
         """
@@ -179,7 +136,7 @@ def meta_training_proj(model, dataloader, meta_optimizer,
                 n_old = n.clone()
                 n_new,_ = learned_FB_step(n, model, t, True)  # x is the next iterate after the learned FB step
 
-                meta_loss = meta_loss + torch.norm(n_new.x-n_old.x) * 0.95 ** (T - t)  # (T-t) non c'era nel test T300e150)
+                meta_loss = meta_loss + torch.norm(n_new.x-FB_step(n_new.clone(), True).x) #* 0.95 ** (T - t)  # (T-t) non c'era nel test T300e150)
                 n = n_new.clone()  # update n for the next iteration
 
             meta_loss.backward()
@@ -207,15 +164,15 @@ def main():
         shuffle=True,
     )
 
-    rho = 0.5
-    lr = 2e-3
+    rho = 0.3
+    lr = 1e-3
 
     learned_update = LearnedUpdate(d, q=0, rho=rho).to(device) #esempio 0 -> 0.3 random->0.5
     meta_optimizer = torch.optim.Adam(learned_update.parameters(), lr=lr) #esempio 0 -> 1e-1  random -> 2e-3
 
     T = 15
-    epochs = 50
-    load = True # se True, salta la meta-training e carica un modello pre-trained (assicurati di avere il file .pt nella cartella)
+    epochs = 20
+    load = False # se True, salta la meta-training e carica un modello pre-trained (assicurati di avere il file .pt nella cartella)
     
     if load: 
         # Load the pre-trained learned optimizer parameters

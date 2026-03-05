@@ -4,10 +4,11 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 from matplotlib.ticker import MaxNLocator
 import solveVI_dynamic_DR as solveVI
+from energy_network import EnergyNetwork
 
 def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
     # # Node layout (equilateral or equidistant triangle)
-    
+    """
     pos = {
         0: np.array([0.0,  0.866]),
         1: np.array([-1.0, 0.0 ]),
@@ -18,7 +19,7 @@ def plot_fig(N,D,G,q,Q, G_res, k, namefig="graph_visualization.png"):
     i: np.array([np.cos(2 * np.pi * i / N), np.sin(2 * np.pi * i / N)])
     for i in range(N)
     }
-    """
+    
     
     fig, ax = plt.subplots(figsize=(8, 7), facecolor="#ffffff")
     ax.set_facecolor("#ffffff")
@@ -141,5 +142,66 @@ def plot_convergenceDR(result: solveVI.DRResult, title: str = ""):
     ax.legend();  ax.grid(True, alpha=0.3)
     plt.tight_layout()
     return fig
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Report
+# ─────────────────────────────────────────────────────────────────────────────
+
+def check_and_report_v2(net: EnergyNetwork,
+                        result: solveVI.DRResult,
+                        tol_feas: float = 1e-3):
+    print("\n" + "=" * 58)
+    print("  Risultati — Market Energy Game v2 (OSQP)")
+    print("=" * 58)
+    print(f"  Convergenza : {'✓' if result.converged else '✗'}  "
+          f"({result.n_iter} iter,  ‖r‖ = {result.residuals[-1]:.2e})")
+
+    violations = []
+    for n in range(net.N):
+        D   = net.D[n].item()
+        G   = net.G[n].item()
+        Q_n = sum(net.q[(m, n)].item() for m in net.neighbors.get(n, []))
+        bal = D - (net.G_res[n].item() + G + Q_n)
+        if abs(bal) > tol_feas:
+            violations.append(f"Nodo {n}: bilanciamento = {bal:.4f}")
+        if D < net.D_min[n].item() - tol_feas or D > net.D_max[n].item() + tol_feas:
+            violations.append(f"Nodo {n}: D={D:.3f} fuori bounds")
+        if G < net.G_min[n].item() - tol_feas or G > net.G_max[n].item() + tol_feas:
+            violations.append(f"Nodo {n}: G={G:.3f} fuori bounds")
+    seen = set()
+    for n in range(net.N):
+        for m in net.neighbors.get(n, []):
+            e = (min(m, n), max(m, n))
+            if e in seen: continue
+            seen.add(e)
+            rec = net.q[(m, n)].item() + net.q[(n, m)].item()
+            if rec > tol_feas:
+                violations.append(f"Arco ({m},{n}): reciprocità = {rec:.4f}")
+
+    if violations:
+        print(f"\n  ⚠  {len(violations)} violazioni:")
+        for v in violations: print(f"     {v}")
+    else:
+        print(f"\n  ✓  Tutti i vincoli soddisfatti")
+
+    print(f"\n{'─'*58}")
+    print(f"  {'n':>3}  {'D*':>5}  {'D':>6}  {'G':>6}  {'ΔG':>5}  {'Q_n':>7}  {'Π_n':>7}")
+    print(f"{'─'*58}")
+    SW = 0.0
+    for n in range(net.N):
+        D   = net.D[n].item(); G = net.G[n].item()
+        Q_n = sum(net.q[(m, n)].item() for m in net.neighbors.get(n, []))
+        U_n = -net.a_tilde[n].item() * (D - net.D_star[n].item()) ** 2 + 1.0
+        C_n = 0.5 * net.a[n].item() * G ** 2 + net.b[n].item() * G + 1.0
+        Ct  = sum(net.c[(n, m)] * net.q[(m, n)].item() for m in net.neighbors.get(n, []))
+        Pi  = U_n - C_n - Ct
+        SW += Pi
+        print(f"  {n:>3}  {net.D_star[n].item():>5.2f}  {D:>6.3f}  {G:>6.3f}  "
+              f"{net.G_res[n].item():>5.2f}  {Q_n:>7.3f}  {Pi:>7.4f}")
+    print(f"{'─'*58}")
+    #print(f"  Social Welfare = {SW:.4f}")
+    return violations, SW
+
+
 
 

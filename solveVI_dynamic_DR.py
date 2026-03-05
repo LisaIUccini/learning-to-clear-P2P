@@ -84,7 +84,7 @@ Convergence is declared when  ‖r(u^k)‖ ≤ tol.
 """
 
 import torch
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 @dataclass
@@ -95,6 +95,12 @@ class DRResult:
     n_iter:     int  = 0                # iterations performed
     converged:  bool = False
 
+@dataclass
+class RHResult:
+    """Output of the receding-horizon DR controller."""
+    x_history:  List[torch.Tensor]   # states  x[0], x[1], ..., x[T]
+    u_history:  List[torch.Tensor]   # actions u*[0], ..., u*[T-1]
+    dr_results: List[DRResult]       # DR result at each time step
 # ─────────────────────────────────────────────────────────────────────────────
 # Splitting of M  (eq. 32 and 34 of the paper)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -221,7 +227,7 @@ def solve_inner_qp(H_plus_M1:  torch.Tensor,
     """
     # ── External solver (e.g. OSQP) ─────────────────────────────────────────
     if qp_solver is not None:
-        return qp_solver(H_plus_M1, q_k, project_C, u_init)
+        return qp_solver(H_plus_M1, q_k, u_init)
 
     # ── Built-in: Projected Gradient Descent ────────────────────────────────
     # min  0.5 y^T A y + q^T y   s.t.  y ∈ C
@@ -249,8 +255,7 @@ def solve_inner_qp(H_plus_M1:  torch.Tensor,
 # ─────────────────────────────────────────────────────────────────────────────
 # Main algorithm:  Douglas-Rachford for AVI(C, M, q)
 # ─────────────────────────────────────────────────────────────────────────────
-def douglas_rachford_once(
-        M:           torch.Tensor,
+def douglas_rachford_step(
         M2:           torch.Tensor,
         q:           torch.Tensor,
         project_C:   Callable,
@@ -283,12 +288,9 @@ def douglas_rachford_once(
             rhs    = H @ (2.0 * lam * y + (1.0 - 2.0 * lam) * u)  +  M2 @ u
             u_new  = H_plus_M2_inv @ rhs
 
-            # ── Natural residual  r(u^{k+1}) ─────────────────────────────────────
-            # r(u) = u − π_C( u − M u − q )
-            r  = natural_residual(u_new, u, M, q, project_C)
-            rk = torch.norm(r).item()
 
-            return u_new, rk
+            return u_new
+
 
 def douglas_rachford_avi(
         M:           torch.Tensor,
@@ -380,12 +382,17 @@ def douglas_rachford_avi(
     # ── Main loop ────────────────────────────────────────────────────────────
     for k in range(max_iter):
 
-        u_new, rk = douglas_rachford_once(M, M2, q, project_C, M2_minus_H, H_plus_M1, H_plus_M2_inv, H, lam, u=u, qp_solver=qp_solver)
-    
+        u_new = douglas_rachford_step(M2, q, project_C, M2_minus_H, H_plus_M1, H_plus_M2_inv, H, lam, u=u, qp_solver=qp_solver)
+
+        # ── Natural residual  r(u^{k+1}) ─────────────────────────────────────
+        # r(u) = u − π_C( u − M u − q )
+        #r  = natural_residual(u_new, u, M, q, project_C)
+        rk = torch.norm(u_new - u).item()
+        
         result.residuals.append(rk)
 
         if verbose and (k % log_every == 0):
-            print(f"  iter {k:5d}   ‖r‖ = {rk:.4e}")
+            print(f"  iter {k:5d}   ‖Δu‖ = {rk:.4e}")
 
         # ── Convergence check ─────────────────────────────────────────────────
         if rk <= tol:
@@ -393,7 +400,7 @@ def douglas_rachford_avi(
             result.n_iter    = k + 1
             result.converged = True
             if verbose:
-                print(f"  ✓ Converged at iter {k+1}   ‖r‖ = {rk:.4e}")
+                print(f"  ✓ Converged at iter {k+1}   ‖Δu‖ = {rk:.4e}")
             break
 
         u = u_new
@@ -403,7 +410,7 @@ def douglas_rachford_avi(
         result.n_iter    = max_iter
         result.converged = False
         if verbose:
-            print(f"  ✗ Max iterations reached.  ‖r‖ = {result.residuals[-1]:.4e}")
+            print(f"  ✗ Max iterations reached.  ‖Δu‖ = {result.residuals[-1]:.4e}")
 
     result.u_star = u
     return result
@@ -414,17 +421,24 @@ def douglas_rachford_avi(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def receding_horizon_dr(
-        build_avi:   Callable,
-        project_C:   Callable,
-        x0:          torch.Tensor,
-        T_sim:       int,
-        lam:         float = 0.5,
-        max_iter:    int   = 200,
-        tol:         float = 1e-6,
-        H:           Optional[torch.Tensor] = None,
-        qp_solver:   Optional[Callable]     = None,
-        verbose:     bool  = False,
-) -> Tuple[list, list]:
+        # ── Callbacks che l'utente deve implementare ──────────────────────────
+        build_M:          Callable,
+        build_q:          Callable,
+        build_projection: Callable,
+        step_dynamics:    Callable,
+        # ── Stato iniziale e orizzonte ────────────────────────────────────────
+        x0:               torch.Tensor,
+        T_sim:            int,
+        # ── Parametri DR ──────────────────────────────────────────────────────
+        lam:              float = 0.5,
+        H:                Optional[torch.Tensor] = None,
+        M1:               Optional[torch.Tensor] = None,
+        M2:               Optional[torch.Tensor] = None,
+        max_iter:         int   = 500,
+        tol:              float = 1e-6,
+        qp_solver:        Optional[Callable] = None,
+        verbose:          bool  = False,
+) -> RHResult:
     """
     Receding-horizon controller based on DR (Figure 2 of the paper).
 
@@ -456,57 +470,82 @@ def receding_horizon_dr(
     u_history  : list of torch.Tensor   applied first actions u*[0|t]
     res_history: list of list           residual sequences per time step
     """
+    # ── PRECOMPUTAZIONE  (una volta sola) ────────────────────────────────────
+    # M non cambia mai durante la simulazione (corrisponde a M^OL del paper)
+    M = build_M()
+    n = M.shape[0]
+    dtype  = M.dtype
+    device = M.device
+
+    if M1 is None or M2 is None:
+        M1, M2 = split_M_canonical(M)
+
+    if H is None:
+        H = torch.eye(n, dtype=dtype, device=device)
+
+    if verbose:
+        print(f"{'═'*52}")
+        print(f"  Receding-Horizon DR   T_sim={T_sim}  n={n}")
+        print(f"  M precomputata — non verrà ricalcolata")
+        print(f"{'═'*52}")
+
+    # ── LOOP TEMPORALE ───────────────────────────────────────────────────────
     x          = x0.clone()
+    x_history  = [x.clone()]
     u_history  = []
-    res_history = []
-    u_warm     = None
+    dr_results = []
+    u_warm     = None   # warm start: soluzione del passo precedente
 
     for t in range(T_sim):
-        
-        # Build AVI for current state
-        #aggiorna net con x[t] e ricalcola M, q, u_warm
-        M, q, u_warm = build_avi(x)
 
-        #ricalcolerei proiezione se i vinoli dipendono da x[t]
-        #project_C_t = project_C(u, x=x)
+        # ── 1. Aggiorna q con x[t] ────────────────────────────────────────
+        # q cambia perché dipende dallo stato (q^OL_{x_0} = col(Γ_i^T Q̄_i Θ x_0))
+        q = build_q(x)
 
-        # Solve AVI(C, M, q) with DR
+        # ── 2. Aggiorna π_C con x[t] ─────────────────────────────────────
+        # La proiezione può cambiare se i vincoli dipendono da x
+        # (es. bounds di storage che dipendono dal SoC)
+        project_C = build_projection(x)
+
+        # ── 3. Douglas-Rachford  (eq. 33) ─────────────────────────────────
+        # M è sempre quella precomputata — solo q e project_C cambiano
         result = douglas_rachford_avi(
-            M          = M,
-            q          = q,
-            project_C  = project_C,
+            M          = M,             # ← COSTANTE
+            q          = q,             # ← aggiornata con x[t]
+            project_C  = project_C,     # ← aggiornata con x[t]
+            M1         = M1,
+            M2         = M2,
             H          = H,
             lam        = lam,
             max_iter   = max_iter,
             tol        = tol,
-            u_init     = u_warm,
+            u_init     = u_warm,        # warm start dal passo precedente
             qp_solver  = qp_solver,
-            verbose    = verbose,
+            verbose    = False,
         )
 
         u_star = result.u_star
 
-        """
-        5. Ricostruisce D_n e scrivi in net
-            u_full = S @ result.u_star + s
-            net.set_from_u(u_full, offset, dim_n)
+        # ── 4. Warm start per il passo successivo ─────────────────────────
+        # Usa la soluzione corrente come punto iniziale al passo t+1
+        # (riduce le iterazioni DR — Sezione IV del paper)
+        u_warm = u_star.clone()
 
-        6. Avanza lo stato
-            x[t+1] = f(x[t], u_star)
-        """
-
-        # Apply first block of u* (caller's responsibility to extract it)
-        u_history.append(u_star)
-        res_history.append(result.residuals)
+        # ── 5. Avanza lo stato  x[t+1] = f(x[t], u*[t]) ─────────────────
+        x_new = step_dynamics(x, u_star)
 
         if verbose:
-            status = "✓" if result.converged else "✗"
-            print(f"  t={t:3d}  {status}  iters={result.n_iter:4d}  "
+            sym = "✓" if result.converged else "✗"
+            print(f"  t={t:3d}  {sym}  iter={result.n_iter:4d}  "
                   f"‖r‖={result.residuals[-1]:.2e}")
 
-        # The caller must provide the state update via build_avi's side-effect
-        # or explicitly here. We return u_history so the caller can advance x.
-        # (For modularity, the state update is left to the caller.)
-        break  # remove this if build_avi also advances x internally
+        u_history.append(u_star)
+        dr_results.append(result)
+        x = x_new
+        x_history.append(x.clone())
 
-    return u_history, res_history
+    return RHResult(
+        x_history  = x_history,
+        u_history  = u_history,
+        dr_results = dr_results,
+    )
