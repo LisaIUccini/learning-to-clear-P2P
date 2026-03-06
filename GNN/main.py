@@ -70,9 +70,9 @@ def main(N_choice: int = 3, load: bool = True):
     batch_size  = 1
     T           = 15       # unrolling steps
     epochs      = 50
-    lr          = 1e-3
+    lr          = 2e-3
     alpha       = 0.95     # discount factor in loss
-    d_h         = 32       # GNN hidden dimension
+    d_h         = 12#len(net_template.flatten())  # GNN hidden dimension
     rho         = 0.5      # summability decay
 
     save_path = (
@@ -80,6 +80,7 @@ def main(N_choice: int = 3, load: bool = True):
         f"_rho{rho}_lr{lr}.pt"
     )
 
+    print("\nsave_path:", save_path)
     # ------------------------------------------------------------------
     # Model
     # ------------------------------------------------------------------
@@ -103,8 +104,8 @@ def main(N_choice: int = 3, load: bool = True):
             num_samples  = num_samples,
             net_template = net_template,
             gamma        = gamma,
-            gne_max_iter = 2000,
-            gne_tol      = 1e-8,
+            gne_max_iter = 200,
+            gne_tol      = 1e-6,
             device       = device,
         )
 
@@ -144,16 +145,9 @@ def main(N_choice: int = 3, load: bool = True):
         net_init = net_template.clone()
         net_init.D, net_init.G, net_init.Q = net_init._init_state()
 
-        # Compute GNE offline for this instance
-        print("  Computing GNE...")
-        x_star = compute_gne(
-            net_init.clone(), gamma,100, 1e-6
-        ).flatten().detach()
-
         # Run pure FB vs FB+GNN
         results = run_comparison(
             net_init = net_init,
-            x_star   = x_star,
             model    = model,
             gamma    = gamma,
             max_iter = max_iter,
@@ -164,14 +158,18 @@ def main(N_choice: int = 3, load: bool = True):
 
         # Plot individual instance
         plot_results(
-            results,
+            results,  # only residuals
             save_path=f"figures/N{N}_test_instance_{i+1}.png"
         )
+        print(f"Pure FB     — has violation? "
+          f"{results['pure'].constraint_violation()}")
+        print(f"FB + GNN    — has violation? "
+          f"{results['learned'].constraint_violation()}")
 
     # ------------------------------------------------------------------
     # Aggregate plot over all test instances
     # ------------------------------------------------------------------
-    max_len = max(len(r["dist_pure"]) for r in all_results)
+    max_len = max(len(r["residuals_pure"]) for r in all_results)
 
     def pad_and_mean(key):
         padded = []
@@ -183,8 +181,7 @@ def main(N_choice: int = 3, load: bool = True):
 
     avg_results = {
         key: pad_and_mean(key)
-        for key in ["residuals_pure", "residuals_learned",
-                    "dist_pure", "dist_learned"]
+        for key in ["residuals_pure", "residuals_learned"]
     }
 
     plot_results(
@@ -196,12 +193,12 @@ def main(N_choice: int = 3, load: bool = True):
     # Final summary
     # ------------------------------------------------------------------
     print("\n--- Summary ---")
-    print(f"Pure FB     — final avg dist to GNE: "
-          f"{avg_results['dist_pure'][-1]:.6f}")
-    print(f"FB + GNN    — final avg dist to GNE: "
-          f"{avg_results['dist_learned'][-1]:.6f}")
-    speedup = avg_results['dist_pure'][-1] / max(avg_results['dist_learned'][-1], 1e-12)
-    print(f"Distance ratio (pure/learned): {speedup:.2f}x")
+    print(f"Pure FB     — final avg residual to GNE: "
+          f"{avg_results['residuals_pure'][-1]:.6f}")
+    print(f"FB + GNN    — final avg residual to GNE: "
+          f"{avg_results['residuals_learned'][-1]:.6f}")
+    
+
 
 
 if __name__ == "__main__":

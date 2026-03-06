@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from energy_network import EnergyNetwork, compute_gne
+
 from model import GNNUpdate
-from train import learned_FB_step
 import init_parameters
 
 
@@ -27,7 +27,11 @@ def pure_FB_step(net: EnergyNetwork, gamma: float) -> EnergyNetwork:
     net_new : EnergyNetwork with updated state
     """
     net_new = net.forward_step(gamma)
-    net_new.project_exact()
+    #net_new.project_exact()
+    x_proj, success = net_new.project_exact()
+    if success:
+        net_new.unflatten(x_proj)
+    
     return net_new
 
 
@@ -37,13 +41,13 @@ def pure_FB_step(net: EnergyNetwork, gamma: float) -> EnergyNetwork:
 
 def run_comparison(
     net_init: EnergyNetwork,
-    x_star: torch.Tensor,
     model: GNNUpdate,
     gamma: float,
     max_iter: int,
     tol: float,
     device: torch.device,
 ):
+    from train import learned_FB_step
     """
     Run pure FB and learned FB+GNN from the same initial state,
     tracking residuals and distance to GNE at each iteration.
@@ -73,8 +77,6 @@ def run_comparison(
 
     residuals_pure    = []
     residuals_learned = []
-    dist_pure         = []
-    dist_learned      = []
 
     with torch.no_grad():
         for it in range(max_iter):
@@ -83,38 +85,37 @@ def run_comparison(
             net_pure_new = pure_FB_step(net_pure, gamma)
 
             res_pure = torch.sum((net_pure_new.flatten() - net_pure.flatten()) ** 2).item()
-            d_pure   = torch.sum((net_pure.flatten() - x_star) ** 2).item()
 
             residuals_pure.append(res_pure)
-            dist_pure.append(d_pure)
 
             # --- Learned FB+GNN ---
             net_learned_new = learned_FB_step(
                 net_learned, model, it, gamma, training=False
             )
-
+            """
             res_learned = torch.sum(
                 (net_learned_new.flatten() - net_learned.flatten()) ** 2
             ).item()
-            d_learned = torch.sum((net_learned.flatten() - x_star) ** 2).item()
-
+            """
+            res_learned = torch.sum(
+                (net_learned_new.flatten() - pure_FB_step(net_learned, gamma).flatten()) ** 2
+            ).item()
             residuals_learned.append(res_learned)
-            dist_learned.append(d_learned)
 
             # Update states
             net_pure    = net_pure_new
             net_learned = net_learned_new
 
             # Check convergence of pure FB (used as stopping criterion)
-            if res_pure < tol:
+            if res_pure < tol: #or res_learned < tol:
                 print(f"  Pure FB converged at iteration {it+1}")
                 break
 
     return {
         "residuals_pure":    residuals_pure,
         "residuals_learned": residuals_learned,
-        "dist_pure":         dist_pure,
-        "dist_learned":      dist_learned,
+        "pure": net_pure,
+        "learned": net_learned,
     }
 
 
@@ -131,28 +132,28 @@ def plot_results(results: dict, save_path: str = None):
     results   : output of run_comparison
     save_path : if given, save figure here; otherwise show interactively
     """
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    plt.style.use("seaborn-v0_8-pastel")
+    fig, axes = plt.subplots(figsize=(12, 5))
 
-    iters = range(1, len(results["residuals_pure"]) + 1)
+    iters = range(0, len(results["residuals_pure"]) )
 
     # --- Left: residuals ||x_{t+1} - x_t||^2 ---
-    axes[0].semilogy(iters, results["residuals_pure"],    label="Pure FB",     color="steelblue")
-    axes[0].semilogy(iters, results["residuals_learned"], label="FB + GNN",    color="darkorange")
-    axes[0].set_xlabel("Iteration")
-    axes[0].set_ylabel(r"$\|x^{t+1} - x^t\|^2$")
-    axes[0].set_title("Residuals")
-    axes[0].legend()
-    axes[0].grid(True, which="both", alpha=0.3)
+    
 
-    # --- Right: distance to GNE ||x_t - x*||^2 ---
-    axes[1].semilogy(iters, results["dist_pure"],    label="Pure FB",  color="steelblue")
-    axes[1].semilogy(iters, results["dist_learned"], label="FB + GNN", color="darkorange")
-    axes[1].set_xlabel("Iteration")
-    axes[1].set_ylabel(r"$\|x^t - x^*\|^2$")
-    axes[1].set_title("Distance to GNE")
-    axes[1].legend()
-    axes[1].grid(True, which="both", alpha=0.3)
+    axes.semilogy(iters, results["residuals_pure"],   marker="o", label="Pure FB")
+    axes.semilogy(iters, results["residuals_learned"], marker="*", label="FB + GNN")
+    
+    
 
+    axes.set_xlabel("Iteration")
+    axes.set_ylabel(r"$\|x^{t+1} - x^t\|^2$")
+    axes.set_title("Residuals")
+    axes.legend()
+    
+    plt.xticks(range(len(results["residuals_pure"])))
+    axes.grid(True, which="both", alpha=0.3)
+
+    
     plt.tight_layout()
 
     if save_path is not None:
@@ -164,108 +165,3 @@ def plot_results(results: dict, save_path: str = None):
 
     plt.close()
 
-
-# ------------------------------------------------------------------
-# Main
-# ------------------------------------------------------------------
-
-def main():
-    # --- Device and seeds ---
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.manual_seed(0)
-    np.random.seed(0)
-
-    # --- Problem parameters ---
-    (N, gamma, max_iter, tol,
-     neighbors, D_min, D_max, G_min, G_max, G_res,
-     D_star, a_tilde, a, b, c, k) = init_parameters.initN3()
-
-    # --- Build network template ---
-    net_template = EnergyNetwork(
-        N, neighbors, D_min, D_max, G_min, G_max, G_res,
-        a_tilde, a, b, D_star, c, k, device
-    )
-
-    # --- Model hyperparameters (must match training) ---
-    d_h = 32
-    rho = 0.5
-    T   = 15
-    epochs       = 50
-    num_samples  = 50
-    lr           = 1e-3
-
-    model = GNNUpdate(d_h=d_h, rho=rho).to(device)
-
-    # --- Load trained weights ---
-    save_path = (
-        f"checkpoints/N{N}_T{T}_e{epochs}_s{num_samples}_learned_update"
-        f"_rho{rho}_lr{lr}.pt"
-    )
-
-    if not os.path.exists(save_path):
-        raise FileNotFoundError(
-            f"No trained model found at {save_path}. "
-            f"Run train.py first."
-        )
-
-    model.load_state_dict(torch.load(save_path, map_location=device))
-    print(f"Loaded model from {save_path}")
-
-    # --- Generate test instances (different seed from training) ---
-    n_test = 5
-    print(f"\nRunning inference on {n_test} test instances...")
-
-    all_results = []
-
-    for i in range(n_test):
-        print(f"\nTest instance {i+1}/{n_test}:")
-
-        # Random initial state
-        net_init = net_template.clone()
-        net_init.D, net_init.G, net_init.Q = net_init._init_state()
-
-        # Compute GNE offline for this instance
-        print("  Computing GNE...")
-        x_star = compute_gne(net_init.clone(), gamma, 200, 1e-6)
-
-        # Run comparison
-        results = run_comparison(
-            net_init = net_init,
-            x_star   = x_star.flatten().detach(),
-            model    = model,
-            gamma    = gamma,
-            max_iter = max_iter,
-            tol      = tol,
-            device   = device,
-        )
-        all_results.append(results)
-
-        # Plot individual result
-        plot_results(
-            results,
-            save_path=f"figures/test_instance_{i+1}.png",
-        )
-
-    # --- Aggregate: average over test instances ---
-    max_len = max(len(r["dist_pure"]) for r in all_results)
-
-    def pad_and_stack(key):
-        # Pad shorter sequences with their last value
-        padded = []
-        for r in all_results:
-            seq = r[key]
-            pad = [seq[-1]] * (max_len - len(seq))
-            padded.append(seq + pad)
-        return np.array(padded)  # (n_test, max_len)
-
-    avg_results = {
-        key: pad_and_stack(key).mean(axis=0).tolist()
-        for key in ["residuals_pure", "residuals_learned", "dist_pure", "dist_learned"]
-    }
-
-    plot_results(avg_results, save_path="figures/average_comparison.png")
-    print("\nDone.")
-
-
-if __name__ == "__main__":
-    main()

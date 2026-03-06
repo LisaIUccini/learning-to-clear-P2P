@@ -82,7 +82,7 @@ def initN10():
     """
     N        = 10
     gamma    = 0.1
-    max_iter = 250
+    max_iter = 100
     tol      = 1e-6
 
     neighbors = {

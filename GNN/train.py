@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from energy_network import EnergyNetwork
 from model import GNNUpdate
 from dataset import EnergyDataset
+from inference import pure_FB_step
 import init_parameters
 
 
@@ -21,13 +22,20 @@ def learned_FB_step(
     training: bool,
 ) -> EnergyNetwork:
     """
-    One step of the learned Forward-Backward algorithm:
+    One step of the distributed learned Forward-Backward algorithm.
 
-        y^t      = x^t - gamma * F(x^t)          (forward)
-        x_proj   = proj(y^t)                      (backward, approx if training)
-        data     = get_pyg_data(x_proj)           (build PyG input)
-        v_n, v_e = GNNUpdate(data, t)             (GNN perturbation)
-        x^{t+1}  = proj(x_proj + v_n + v_e)      (apply + re-project)
+    Execution is fully distributed: each node n independently queries
+    the GNN using only its own state and messages from its neighbors,
+    and receives back only its own perturbations.
+
+    Steps:
+        y^t      = x^t - gamma * F(x^t)              (forward, all nodes)
+        x_proj   = proj(y^t)                          (backward)
+        for each n:
+            data_n, idx_n = get_local_pyg_data(n)     (local subgraph of n)
+            v_n, v_e_n    = GNNUpdate(data_n, t)      (local perturbation)
+            x_n += v_n, Q[idx_n] += v_e_n             (apply locally)
+        x^{t+1}  = proj(x_proj + perturbations)       (re-project)
 
     Parameters
     ----------
@@ -46,25 +54,43 @@ def learned_FB_step(
     net_new = net.forward_step(gamma)
 
     # Backward step: project onto feasible set
+    
+    if training:
+        net_new.project_approx(create_graph=training)
+    else:
+        x_proj, success = net_new.project_exact()
+        if success:
+            net_new.unflatten(x_proj)
+
+
+    # --- Distributed GNN perturbation (parallel execution) ---
+    # All nodes read from the same frozen snapshot of the state,
+    # then each node applies its own perturbation independently.
+    # This is equivalent to all nodes acting simultaneously —
+    # no node sees the perturbation applied by another node.
+    snapshot = net_new.clone()
+
+    for n in range(net_new.N):
+        # Node n reads from the frozen snapshot — not from net_new.
+        # This ensures that n=1 sees the same D[0], G[0] as n=0 did,
+        # regardless of what n=0 already wrote to net_new.
+        data_n, _ = snapshot.get_local_pyg_data(n)
+
+        # GNN returns:
+        #   v_node_n : (1+k, 2)  — v_node_n[0] = (v_D_n, v_G_n) for ego node
+        #   v_edge_n : (k, 1)    — v_edge_n[i] = perturbation for q_{m_i, n}
+        v_node_n, v_edge_n = model(data_n, t)
+
+        # Node n writes its perturbation to net_new (not to snapshot)
+        net_new.apply_perturbation_node(n, v_node_n[0], v_edge_n[:, 0])
+
+    # Re-project after perturbation
     if training:
         net_new.project_approx()
     else:
-        net_new.project_exact()
-
-    # Build PyG Data object for GNN input
-    data = net_new.get_pyg_data()
-
-    # GNN produces perturbations v_nodes (N,2) and v_edges (|E|,1)
-    v_nodes, v_edges = model(data, t)
-
-    # Apply perturbation to state
-    net_new.apply_perturbation(v_nodes, v_edges)
-
-    # Re-project after perturbation (state may have left feasible set)
-    if training:
-        net_new.project_approx()
-    else:
-        net_new.project_exact()
+        x_proj, success = net_new.project_exact()
+        if success:
+            net_new.unflatten(x_proj)
 
     return net_new
 
@@ -146,9 +172,14 @@ def meta_train(
 
                     # Discounted squared distance to GNE
                     x_t = net.flatten()
+                    sample_loss = sample_loss + torch.sum(
+                        (x_t - pure_FB_step(net, gamma).flatten()) ** 2
+                    )
+                    """
                     sample_loss = sample_loss + (alpha ** (T - t)) * torch.sum(
                         (x_t - x_star) ** 2
                     )
+                    """
 
                 batch_loss = batch_loss + sample_loss
 
@@ -176,84 +207,3 @@ def meta_train(
 
     return model, loss_history
 
-
-# ------------------------------------------------------------------
-# Main
-# ------------------------------------------------------------------
-
-def main():
-    # --- Device and seeds ---
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.manual_seed(42)
-    np.random.seed(42)
-
-    # --- Problem parameters --
-    (N, gamma, max_iter, tol,
-     neighbors, D_min, D_max, G_min, G_max, G_res,
-     D_star, a_tilde, a, b, c, k) = init_parameters.initN3()
-
-    # --- Build network template ---
-    net_template = EnergyNetwork(
-        N, neighbors, D_min, D_max, G_min, G_max, G_res,
-        a_tilde, a, b, D_star, c, k, device
-    )
-    print(net_template)
-
-    # --- Training hyperparameters ---
-    num_samples  = 50
-    batch_size   = 1
-    T            = 15      # unrolling steps
-    epochs       = 50
-    rho          = 0.5    # summability decay
-    lr           = 1e-3
-    alpha        = 0.95    # discount factor in loss
-    d_h          = 32      # GNN hidden dimension
-
-    gamma = 0.1  # FB step size (fixed, not learned)
-    max_iter = 100
-    tol = 1e-6
-    
-
-    # --- Dataset (GNE computed offline) ---
-    dataset = EnergyDataset(
-        num_samples  = num_samples,
-        net_template = net_template,
-        gamma        = gamma,
-        gne_max_iter = max_iter,
-        gne_tol      = tol,
-        device       = device,
-    )
-
-    # --- Model ---
-    model = GNNUpdate(d_h=d_h, rho=rho).to(device)
-    print(f"GNNUpdate parameters: {sum(p.numel() for p in model.parameters())}")
-
-    # --- Save path ---
-    save_path = (
-        f"checkpoints/N{N}_T{T}_e{epochs}_s{num_samples}_learned_update"
-        f"_rho{rho}_lr{lr}.pt"
-    )
-
-    load = False
-
-    if load and os.path.exists(save_path):
-        print(f"Loading model from {save_path}")
-        model.load_state_dict(torch.load(save_path, map_location=device))
-    else:
-        model, loss_history = meta_train(
-            model        = model,
-            dataset      = dataset,
-            net_template = net_template,
-            gamma        = gamma,
-            T            = T,
-            epochs       = epochs,
-            lr           = lr,
-            alpha        = alpha,
-            batch_size   = batch_size,
-            device       = device,
-            save_path    = save_path,
-        )
-
-
-if __name__ == "__main__":
-    main()

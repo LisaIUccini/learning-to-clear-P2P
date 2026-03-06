@@ -37,7 +37,8 @@ def compute_gne(
         n_new = n.forward_step(gamma)
 
         # Backward step (exact projection)
-        n_new.project_exact()
+        #n_new.project_exact()
+        n_new.project_approx()  # faster but less accurate
 
         # Check convergence
         x_new = n_new.flatten()
@@ -302,21 +303,34 @@ class EnergyNetwork:
         )
 
         if not result.success:
-            raise ValueError(f"Exact projection failed: {result.message}")
+            #raise ValueError(f"Exact projection failed: {result.message}")
+            print(f"Warning: Exact projection failed")
 
         x_proj = torch.tensor(result.x, dtype=torch.float32, device=self.device)
-        self.unflatten(x_proj)
+        #self.unflatten(x_proj)
+        return x_proj, result.success
 
-    def project_approx(self, n_iter: int = 30, lr: float = 0.1):
+    def project_approx(self, n_iter: int = 30, lr: float = 0.1,
+                       create_graph: bool = False):
         """
-        Approximate differentiable projection. Used during training.
-        Updates state in place.
+        Approximate differentiable projection. Updates state in place.
+
+        Parameters
+        ----------
+        n_iter       : number of gradient correction steps
+        lr           : step size for the correction
+        create_graph : keep computational graph for backprop through projection.
+                       Set True during training, False during inference.
         """
         self.D = torch.clamp(self.D, self.D_min, self.D_max)
         self.G = torch.clamp(self.G, self.G_min, self.G_max)
 
         Q = self.Q.detach().clone()
         Q.requires_grad_(True)
+
+        # D and G are detached — they are fixed during Q correction
+        D = self.D.detach()
+        G = self.G.detach()
 
         for _ in range(n_iter):
             eq_loss = torch.tensor(0.0, device=self.device)
@@ -326,14 +340,16 @@ class EnergyNetwork:
                 else:
                     q_sum = torch.tensor(0.0, device=self.device)
                 eq_loss = eq_loss + (
-                    self.D[n] - self.G[n] - self.G_res[n] - q_sum
+                    D[n] - G[n] - self.G_res[n] - q_sum
                 ) ** 2
 
-            grads = torch.autograd.grad(eq_loss, Q, create_graph=True)[0]
-            Q = Q - lr * grads
-            Q = torch.clamp(Q, -self.k_edge, self.k_edge)
+            if create_graph:
+                grads = torch.autograd.grad(eq_loss, Q)[0]
+                Q = Q - lr * grads
+                Q = torch.clamp(Q, -self.k_edge, self.k_edge)
 
         self.Q = Q
+
 
     # ------------------------------------------------------------------
     # PyG Data object for the GNN
@@ -363,21 +379,108 @@ class EnergyNetwork:
             edge_attr=edge_attr,
         )
 
+    def get_local_pyg_data(self, n: int):
+        """
+        Build a PyG Data object for node n and its local neighborhood only.
+
+        Used for distributed execution: node n uses only its own state
+        and the messages from neighbors to compute its perturbation.
+
+        Local graph re-indexing:
+            node 0       : prosumer n  (ego node)
+            node 1..k    : neighbors m1, m2, ... (sorted)
+
+        Node features x : (1+k, 2)
+            x[0]   = [D_n, G_n]
+            x[1+i] = [D_mi, G_mi]
+
+        Edge features edge_attr : (k, 1)
+            edge_attr[i] = q_{nm_i} = Q[inverse_edge[(m_i, n)]]
+            i.e. trade decision of neighbor m_i communicated to n.
+
+        Edge index: all edges point toward ego node 0.
+            edge_index = [[1, 2, ..., k],
+                          [0, 0, ..., 0]]
+
+        Returns
+        -------
+        data                  : torch_geometric.data.Data
+        local_edge_global_idx : list[int]  global edge_list indices of incoming
+                                edges (m->n), same order as edge_attr rows.
+                                Used to write back v_edges into the global Q.
+        """
+        neighbors_n = sorted(self.neighbors[n])
+        k = len(neighbors_n)
+
+        # Node features: ego + neighbors
+        ego_feat = torch.stack([self.D[n], self.G[n]]).unsqueeze(0)  # (1, 2)
+        if k > 0:
+            nbr_feat = torch.stack(
+                [torch.stack([self.D[m], self.G[m]]) for m in neighbors_n]
+            )  # (k, 2)
+            x_local = torch.cat([ego_feat, nbr_feat], dim=0)  # (1+k, 2)
+        else:
+            x_local = ego_feat
+
+        # Edge index: neighbors -> ego
+        if k > 0:
+            src_local = torch.arange(1, k + 1, dtype=torch.long, device=self.device)
+            dst_local = torch.zeros(k, dtype=torch.long, device=self.device)
+            edge_index_local = torch.stack([src_local, dst_local], dim=0)  # (2, k)
+        else:
+            edge_index_local = torch.zeros(2, 0, dtype=torch.long, device=self.device)
+
+        # Edge features: q_{nm} for each neighbor m
+        # local_edge_global_idx[i] = index of (n, m_i) in edge_list (inverse edge)
+        # The feature of edge (m_i -> n) is Q[inverse_edge[(m_i, n)]] = q_{n,m_i}
+        local_edge_global_idx = [
+            self.inverse_edge[(m, n)] for m in neighbors_n
+        ]
+
+        if k > 0:
+            # Q[inv_i] is a scalar tensor — reshape to (1,) then stack to (k, 1)
+            edge_attr_local = torch.stack(
+                [self.Q[inv_i].reshape(1) for inv_i in local_edge_global_idx]
+            )  # (k, 1)
+        else:
+            edge_attr_local = torch.zeros(0, 1, device=self.device)
+
+        data = Data(
+            x=x_local,
+            edge_index=edge_index_local,
+            edge_attr=edge_attr_local,
+            num_nodes=1 + k,
+        )
+        return data, local_edge_global_idx
+
     # ------------------------------------------------------------------
     # Apply GNN perturbation
     # ------------------------------------------------------------------
 
-    def apply_perturbation(self, v_nodes: torch.Tensor, v_edges: torch.Tensor):
+    def apply_perturbation_node(
+        self,
+        n: int,
+        v_node_n: torch.Tensor,
+        v_edge_n: torch.Tensor,
+    ):
         """
-        Add GNN perturbations to the current state.
+        Apply perturbations produced by node n to its own local state.
 
-        v_nodes : (N, 2)   — v_nodes[n] = [v_D_n, v_G_n]
-        v_edges : (|E|, 1) — v_edges[i] = perturbation for Q[i] = q_{mn}
-                             perturbation decided by node n for trade with m
+        Called inside the distributed loop — each node n updates only
+        its own D[n], G[n], and Q[incoming edges of n].
+
+        Parameters
+        ----------
+        n        : node index
+        v_node_n : torch.Tensor (2,)  — [v_D_n, v_G_n]
+        v_edge_n : torch.Tensor (k,)  — perturbations for Q[incoming_idx[n]],
+                                        i.e. q_{mn} for each m in Omega_n (sorted)
         """
-        self.D = self.D + v_nodes[:, 0]
-        self.G = self.G + v_nodes[:, 1]
-        self.Q = self.Q + v_edges.squeeze(1)
+        self.D[n] = self.D[n] + v_node_n[0]
+        self.G[n] = self.G[n] + v_node_n[1]
+
+        for local_i, global_i in enumerate(self.incoming_idx[n]):
+            self.Q[global_i] = self.Q[global_i] + v_edge_n[local_i]
 
     # ------------------------------------------------------------------
     # Monitoring
@@ -405,6 +508,43 @@ class EnergyNetwork:
     def balance_violation(self):
         """D[n] - G[n] - G_res[n] - net_imports[n]. Should be 0 at feasibility."""
         return self.D - self.G - self.G_res - self.net_imports()
+    
+    def constraint_violation(self, tol: float = 1e-4) -> bool:
+        """
+        Returns True if any constraint is violated beyond tol, False otherwise.
+
+        Constraints checked:
+            1. D bounds     : D_min[n] <= D[n] <= D_max[n]
+            2. G bounds     : G_min[n] <= G[n] <= G_max[n]
+            3. Q capacity   : Q[i] <= k_edge[i]
+            4. Balance      : D[n] = G[n] + G_res[n] + sum_{m} q_{mn}
+            5. Reciprocity  : Q[idx(m,n)] + Q[idx(n,m)] <= 0
+        """
+        idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
+
+        # D and G bounds
+        if (self.D < self.D_min - tol).any(): return True
+        if (self.D > self.D_max + tol).any(): return True
+        if (self.G < self.G_min - tol).any(): return True
+        if (self.G > self.G_max + tol).any(): return True
+
+        # Q capacity
+        if (self.Q > self.k_edge + tol).any(): return True
+
+        # Balance equality
+        if (self.balance_violation().abs() > tol).any(): return True
+
+        # Reciprocity
+        visited = set()
+        for (m, n) in self.edge_list:
+            if (m, n) in visited or (n, m) not in idx_map:
+                continue
+            visited.add((m, n))
+            visited.add((n, m))
+            if float(self.Q[idx_map[(m,n)]]) + float(self.Q[idx_map[(n,m)]]) > tol:
+                return True
+
+        return False
 
     # ------------------------------------------------------------------
     # Clone
