@@ -1,4 +1,187 @@
 import torch
+import numpy as np
+import networkx as nx
+
+
+"""
+params = init_parameters(N=10, topology="tree", seed=42)
+params = init_parameters(N=30, topology="sparse", sparsity=0.7, seed=0)
+params = init_parameters(N=3,  topology="complete")
+"""
+
+# ------------------------------------------------------------------
+# Graph builder
+# ------------------------------------------------------------------
+
+def build_graph(N: int, topology: str, seed: int = 0,
+                sparsity: float = 0.5) -> dict:
+    """
+    Build a graph with N nodes and return neighbors dict.
+
+    Parameters
+    ----------
+    N        : number of nodes
+    topology : one of "complete", "star", "tree", "cycle", "path", "sparse"
+    seed     : random seed
+    sparsity : fraction of edges removed from complete graph [0,1).
+               Only used when topology="sparse".
+
+    Returns
+    -------
+    neighbors : dict {n: list of neighbor indices}
+    """
+    if topology == "complete":
+        G = nx.complete_graph(N)
+
+    elif topology == "star":
+        # Node 0 connected to all, plus random peer edges among non-root nodes
+        G = nx.star_graph(N - 1)
+        rng = np.random.default_rng(seed)
+        non_root = list(range(1, N))
+        # Add ~N/3 extra peer edges
+        n_extra = max(0, N // 3)
+        attempts = 0
+        added = 0
+        while added < n_extra and attempts < 1000:
+            u, v = rng.choice(non_root, size=2, replace=False)
+            if not G.has_edge(u, v):
+                G.add_edge(u, v)
+                added += 1
+            attempts += 1
+
+    elif topology == "tree":
+        # Random tree with node 0 as root (Prüfer sequence)
+        rng = np.random.default_rng(seed)
+        G = nx.random_labeled_tree(N, seed=int(rng.integers(1e6)))
+        # Relabel so node with highest degree becomes node 0
+        degrees = dict(G.degree())
+        root = max(degrees, key=degrees.get)
+        mapping = {root: 0}
+        other = [n for n in G.nodes if n != root]
+        for new_idx, old_idx in enumerate(other, start=1):
+            mapping[old_idx] = new_idx
+        G = nx.relabel_nodes(G, mapping)
+
+    elif topology == "cycle":
+        G = nx.cycle_graph(N)
+
+    elif topology == "path":
+        G = nx.path_graph(N)
+
+    elif topology == "sparse":
+        if not 0.0 <= sparsity < 1.0:
+            raise ValueError(f"sparsity must be in [0, 1), got {sparsity}")
+        max_edges = N * (N - 1) // 2
+        n_edges   = max(N - 1, round((1.0 - sparsity) * max_edges))
+        rng = np.random.default_rng(seed)
+        while True:
+            G = nx.gnm_random_graph(N, m=n_edges, seed=int(rng.integers(1e6)))
+            if nx.is_connected(G):
+                break
+
+    else:
+        raise ValueError(
+            f"Unknown topology '{topology}'. "
+            f"Choose from: complete, star, tree, cycle, path, sparse."
+        )
+
+    neighbors = {n: sorted(list(G.neighbors(n))) for n in range(N)}
+    return neighbors
+
+
+# ------------------------------------------------------------------
+# Main init function
+# ------------------------------------------------------------------
+
+def init_parameters_graph(
+    N: int,
+    topology: str = "tree",
+    seed: int = 0,
+    sparsity: float = 0.5,
+) -> tuple:
+    """
+    Initialize EnergyNetwork parameters for N prosumers.
+
+    Parameter ranges are calibrated on the original initN3/N10/N30:
+        D_max   ~ U[5, 20]      (demand capacity)
+        G_max   ~ U[0, 8]       (flexible generation)
+        G_res   ~ U[0, 4]       (renewable generation)
+        D_star  ~ U[2, 14]      (desired demand)
+        a_tilde ~ U[8, 15]      (demand cost curvature)
+        a       ~ U[2,  6]      (generation cost curvature)
+        b       = 0             (linear generation cost, as in originals)
+        c       ~ U[0.1, 0.5]   (trading cost)
+        k       ~ U[5, 20]      (trading capacity)
+
+    Node 0 is treated as the grid interface (root):
+        D_max[0]   = 0   (root does not consume)
+        G_max[0]   = 50  (root can inject from main grid)
+        a_tilde[0] = 0
+        D_star[0]  = 0
+
+    Parameters
+    ----------
+    N        : number of prosumers
+    topology : graph topology (see build_graph)
+    seed     : random seed
+    sparsity : only used when topology="sparse"
+
+    Returns
+    -------
+    tuple of 16 values matching EnergyNetwork constructor
+    """
+    rng = np.random.default_rng(seed)
+
+    # --- Graph ---
+    neighbors = build_graph(N, topology, seed, sparsity)
+
+    # --- Solver parameters ---
+    gamma    = 0.1
+    max_iter = 300
+    tol      = 1e-6
+
+    # --- Node parameters ---
+    D_min   = torch.zeros(N, dtype=torch.float32)
+    D_max   = torch.tensor(rng.uniform(5.0, 20.0, N),  dtype=torch.float32)
+    G_min   = torch.zeros(N, dtype=torch.float32)
+    G_max   = torch.tensor(rng.uniform(0.0,  8.0, N),  dtype=torch.float32)
+    G_res   = torch.tensor(rng.uniform(0.0,  4.0, N),  dtype=torch.float32)
+    D_star  = torch.tensor(rng.uniform(2.0, 14.0, N),  dtype=torch.float32)
+    a_tilde = torch.tensor(rng.uniform(8.0, 15.0, N),  dtype=torch.float32)
+    a       = torch.tensor(rng.uniform(2.0,  6.0, N),  dtype=torch.float32)
+    b       = torch.zeros(N, dtype=torch.float32)
+
+    # Node 0 = grid interface (root): no demand, unlimited supply
+    D_max[0]   = 0.0
+    G_max[0]   = 50.0
+    a_tilde[0] = 0.0
+    D_star[0]  = 0.0
+
+    # --- Edge parameters ---
+    c = {}
+    k = {}
+    for n in range(N):
+        for m in neighbors[n]:
+            # Higher cost and capacity for links involving root node
+            if m == 0 or n == 0:
+                c_val = float(rng.uniform(0.3, 0.5))
+                k_val = float(rng.uniform(15.0, 20.0))
+            else:
+                c_val = float(rng.uniform(0.1, 0.3))
+                k_val = float(rng.uniform(5.0, 10.0))
+            c[(n, m)] = torch.tensor(c_val, dtype=torch.float32)
+            # Capacity is symmetric — set both directions on first encounter
+            if (n, m) not in k:
+                k[(n, m)] = torch.tensor(k_val, dtype=torch.float32)
+                k[(m, n)] = torch.tensor(k_val, dtype=torch.float32)
+
+    return (
+        N, gamma, max_iter, tol,
+        neighbors,
+        D_min, D_max, G_min, G_max, G_res,
+        D_star, a_tilde, a, b, c, k,
+    )
+
 
 
 def _build_c_k(neighbors, c_fn, k_fn):

@@ -107,7 +107,7 @@ def run_comparison(
             net_learned = net_learned_new
 
             # Check convergence of pure FB (used as stopping criterion)
-            if res_pure < tol: #or res_learned < tol:
+            if res_pure < tol or res_learned < tol:
                 print(f"  Pure FB converged at iteration {it+1}")
                 break
 
@@ -154,6 +154,42 @@ def plot_results(results: dict, save_path: str = None):
     axes.grid(True, which="both", alpha=0.3)
 
     
+    plt.tight_layout()
+
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
+
+
+
+def plot_results_std(results: dict, std: dict = None, save_path: str = None):
+    fig, ax = plt.subplots(figsize=(7, 5))
+
+    iters = np.arange(1, len(results["residuals_pure"]) + 1)
+
+    def _plot(mean_key, color, label):
+        mean = np.array(results[mean_key])
+        ax.semilogy(iters, mean, label=label, color=color)
+        if std is not None:
+            s = np.array(std[mean_key])
+            lo = np.clip(mean - s, 1e-12, None)
+            hi = mean + s
+            ax.fill_between(iters, lo, hi, alpha=0.2, color=color)
+
+    _plot("residuals_pure",    "steelblue",  "Pure FB")
+    _plot("residuals_learned", "darkorange", "FB + GNN")
+
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel(r"$\|x^{t+1} - x^t\|^2$")
+    ax.set_title("Residuals")
+    ax.legend()
+    ax.grid(True, which="both", alpha=0.3)
+
     plt.tight_layout()
 
     if save_path is not None:

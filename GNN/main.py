@@ -26,10 +26,10 @@ from energy_network import EnergyNetwork
 from model import GNNUpdate
 from dataset import EnergyDataset, compute_gne
 from train import meta_train, learned_FB_step
-from inference import pure_FB_step, run_comparison, plot_results
+from inference import pure_FB_step, run_comparison, plot_results, plot_results_std
 
 
-def main(N_choice: int = 3, load: bool = True):
+def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
 
     # ------------------------------------------------------------------
     # Device and seeds
@@ -45,23 +45,10 @@ def main(N_choice: int = 3, load: bool = True):
     init_fn = {3: init_parameters.initN3,
                10: init_parameters.initN10,
                30: init_parameters.initN30}
-
+    
     if N_choice not in init_fn:
         raise ValueError(f"N must be 3, 10, or 30. Got {N_choice}.")
-
-    (N, gamma, max_iter, tol,
-     neighbors, D_min, D_max, G_min, G_max, G_res,
-     D_star, a_tilde, a, b, c, k) = init_fn[N_choice]()
-
-    # ------------------------------------------------------------------
-    # Build network template
-    # ------------------------------------------------------------------
-    net_template = EnergyNetwork(
-        N, neighbors, D_min, D_max, G_min, G_max, G_res,
-        a_tilde, a, b, D_star, c, k, device
-    )
-    print(net_template)
-    print(f"State dimension: {net_template.dim}")
+    
 
     # ------------------------------------------------------------------
     # Hyperparameters
@@ -76,7 +63,7 @@ def main(N_choice: int = 3, load: bool = True):
     rho         = 0.5      # summability decay
 
     save_path = (
-        f"checkpoints/N3_T{T}_e{epochs}_s{num_samples}_learned_update"
+        f"checkpoints/N{N_train}_T{T}_e{epochs}_s{num_samples}_learned_update"
         f"_rho{rho}_lr{lr}.pt"
     )
 
@@ -98,6 +85,26 @@ def main(N_choice: int = 3, load: bool = True):
     else:
         if load:
             print(f"Warning: model not found at {save_path}. Training from scratch.")
+
+        
+        (N, gamma, max_iter, tol,
+        neighbors, D_min, D_max, G_min, G_max, G_res,
+        D_star, a_tilde, a, b, c, k) = init_fn[N_choice]()
+        """
+        (N, gamma, max_iter, tol,
+        neighbors, D_min, D_max, G_min, G_max, G_res,
+        D_star, a_tilde, a, b, c, k) = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.5)
+        """
+
+        # ------------------------------------------------------------------
+        # Build network template
+        # ------------------------------------------------------------------
+        net_template = EnergyNetwork(
+            N, neighbors, D_min, D_max, G_min, G_max, G_res,
+            a_tilde, a, b, D_star, c, k, device
+        )
+        print(net_template)
+        print(f"State dimension: {net_template.dim}")
 
         print("\n--- Dataset generation ---")
         dataset = EnergyDataset(
@@ -141,8 +148,20 @@ def main(N_choice: int = 3, load: bool = True):
     for i in range(n_test):
         print(f"\nTest instance {i+1}/{n_test}:")
 
+        (N, gamma, max_iter, tol,
+        neighbors, D_min, D_max, G_min, G_max, G_res,
+        #D_star, a_tilde, a, b, c, k) = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.7, seed=0) #generate new 
+        D_star, a_tilde, a, b, c, k) = init_fn[N_choice]()
+
+        # ------------------------------------------------------------------
+        # Build network template
+        # ------------------------------------------------------------------
+        net_test = EnergyNetwork(
+            N, neighbors, D_min, D_max, G_min, G_max, G_res,
+            a_tilde, a, b, D_star, c, k, device
+        )
         # Random initial state (unseen during training)
-        net_init = net_template.clone()
+        net_init = net_test.clone()
         net_init.D, net_init.G, net_init.Q = net_init._init_state()
 
         # Run pure FB vs FB+GNN
@@ -184,11 +203,19 @@ def main(N_choice: int = 3, load: bool = True):
         for key in ["residuals_pure", "residuals_learned"]
     }
 
-    plot_results(
-        avg_results,
-        save_path=f"figures/N{N}_average_comparison.png"
-    )
+    def pad_and_stack(key):
+        padded = []
+        for r in all_results:
+            seq = r[key]
+            pad = [seq[-1]] * (max_len - len(seq))
+            padded.append(seq + pad)
+        return np.array(padded)  # (n_test, max_len)
 
+    stacked= {key: pad_and_stack(key) for key in ["residuals_pure", "residuals_learned"]}
+    std_results = {key: stacked[key].std(axis=0).tolist()  for key in ["residuals_pure", "residuals_learned"]}
+
+    #plot_results_std(avg_results, std=std_results, save_path=f"figures/N{N}_average_comparison.png")
+    plot_results(avg_results, save_path=f"figures/N{N}_average_comparison.png")
     # ------------------------------------------------------------------
     # Final summary
     # ------------------------------------------------------------------
@@ -203,10 +230,17 @@ def main(N_choice: int = 3, load: bool = True):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB")
-    parser.add_argument("--N",    type=int,  default=10, choices=[3, 10, 30],
-                        help="Network size (default: 3)")
+
+    parser.add_argument(
+        "--N", type=int, default=30, choices=[3, 10, 30],
+        help="Network size for standard mode (default: 3)"
+    )
+    parser.add_argument(
+        "--N_train", type=int, default=3, choices=[3, 10, 30],
+        help="Network size to train on in generalization mode (default: 3)"
+    )
     parser.add_argument("--load", action="store_true", default=False,
                         help="Load pre-trained model instead of training")
     args = parser.parse_args()
 
-    main(N_choice=args.N, load=True)#args.load)
+    main(N_choice=args.N, N_train=args.N_train, load=True)#args.load)

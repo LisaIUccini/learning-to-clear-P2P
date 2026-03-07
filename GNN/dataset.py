@@ -2,7 +2,8 @@ import torch
 from torch.utils.data import Dataset
 
 from energy_network import EnergyNetwork, compute_gne
-
+import init_parameters
+import random
 
 
 class EnergyDataset(Dataset):
@@ -49,8 +50,10 @@ class EnergyDataset(Dataset):
         print(f"Generating {num_samples} dataset samples (GNE computed offline)...")
 
         for i in range(num_samples):
+            
             # Re-randomize state (parameters are fixed, only D, G, Q change)
             net = net_template.clone()
+            
             net.D, net.G, net.Q = net._init_state()
 
             x0 = net.flatten().detach().clone()
