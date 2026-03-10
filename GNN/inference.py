@@ -10,32 +10,6 @@ import init_parameters
 
 
 # ------------------------------------------------------------------
-# Pure FB step (no learning)
-# ------------------------------------------------------------------
-
-def pure_FB_step(net: EnergyNetwork, gamma: float) -> EnergyNetwork:
-    """
-    One step of the pure Forward-Backward algorithm (no perturbation).
-
-    Parameters
-    ----------
-    net   : current EnergyNetwork state
-    gamma : FB step size
-
-    Returns
-    -------
-    net_new : EnergyNetwork with updated state
-    """
-    net_new = net.forward_step(gamma)
-    #net_new.project_exact()
-    x_proj, success = net_new.project_exact()
-    if success:
-        net_new.unflatten(x_proj)
-    
-    return net_new
-
-
-# ------------------------------------------------------------------
 # Run FB pure vs FB+GNN on a single instance
 # ------------------------------------------------------------------
 
@@ -107,8 +81,8 @@ def run_comparison(
             net_learned = net_learned_new
 
             # Check convergence of pure FB (used as stopping criterion)
-            if res_pure < tol or res_learned < tol:
-                print(f"  Pure FB converged at iteration {it+1}")
+            if res_pure < tol:# or res_learned < tol:
+                print(f" Pure Converged at iteration {it+1}")
                 break
 
     return {
@@ -143,10 +117,10 @@ def plot_results(results: dict, save_path: str = None):
     axes.semilogy(iters, results["residuals_pure"],   marker="o", label="Pure FB")
     axes.semilogy(iters, results["residuals_learned"], marker="*", label="FB + GNN")
     
-    
+    'Residual VI ||x - Pi_X(x - γF(x))||'
 
     axes.set_xlabel("Iteration")
-    axes.set_ylabel(r"$\|x^{t+1} - x^t\|^2$")
+    axes.set_ylabel('Residual VI ||x - Pi_X(x - γF(x))||')
     axes.set_title("Residuals")
     axes.legend()
     

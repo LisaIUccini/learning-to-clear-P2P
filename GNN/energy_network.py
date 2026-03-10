@@ -4,58 +4,6 @@ import numpy as np
 from scipy.optimize import minimize
 from torch_geometric.data import Data
 
-def compute_gne(
-    net: EnergyNetwork,
-    gamma: float,
-    max_iter: int = 200,
-    tol: float = 1e-6,
-) -> torch.Tensor:
-    """
-    Compute the Generalized Nash Equilibrium (GNE) of a given EnergyNetwork
-    instance by running the pure Forward-Backward algorithm to convergence.
-
-    Uses the exact (non-differentiable) projection — only called offline
-    during dataset generation, never during training.
-
-    Parameters
-    ----------
-    net      : EnergyNetwork instance with a fixed initial state
-    gamma    : FB step size
-    max_iter : maximum number of FB iterations
-    tol      : convergence tolerance on ||x_{t+1} - x_t||^2
-
-    Returns
-    -------
-    x_star : torch.Tensor (dim,)  —  flattened GNE state vector
-    """
-    n = net.clone()
-
-    for it in range(max_iter):
-        x_old = n.flatten().detach().clone()
-
-        # Forward step
-        n_new = n.forward_step(gamma)
-
-        # Backward step (exact projection)
-        #n_new.project_exact()
-        n_new.project_approx()  # faster but less accurate
-
-        # Check convergence
-        x_new = n_new.flatten()
-        residual = torch.sum((x_new - x_old) ** 2).item()
-
-        n = n_new
-
-        if residual < tol:
-            print(f"    GNE converged at iteration {it+1}, residual={residual:.2e}")
-            break
-    else:
-        print(f"    GNE did not converge after {max_iter} iterations, "
-              f"final residual={residual:.2e}")
-
-    return n
-
-
 class EnergyNetwork:
     """
     Peer-to-peer energy market modeled as a Generalized Nash Equilibrium Problem.
@@ -242,6 +190,7 @@ class EnergyNetwork:
 
     def project_exact(self):
         """
+        osqp, clarabel, prova altri solver
         Exact projection via scipy SLSQP. Not differentiable.
         Used during inference. Updates state in place.
         """
@@ -309,6 +258,7 @@ class EnergyNetwork:
         x_proj = torch.tensor(result.x, dtype=torch.float32, device=self.device)
         #self.unflatten(x_proj)
         return x_proj, result.success
+    
 
     def project_approx(self, n_iter: int = 30, lr: float = 0.1,
                        create_graph: bool = False):

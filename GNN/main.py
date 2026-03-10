@@ -24,7 +24,6 @@ import numpy as np
 import init_parameters
 from energy_network import EnergyNetwork
 from model import GNNUpdate
-from dataset import EnergyDataset, compute_gne
 from train import meta_train, learned_FB_step
 from inference import pure_FB_step, run_comparison, plot_results, plot_results_std
 
@@ -150,8 +149,10 @@ def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
 
         (N, gamma, max_iter, tol,
         neighbors, D_min, D_max, G_min, G_max, G_res,
-        #D_star, a_tilde, a, b, c, k) = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.7, seed=0) #generate new 
+        #D_star, a_tilde, a, b, c, k) = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.8,  seed=42, n_test=i) #generate new 
         D_star, a_tilde, a, b, c, k) = init_fn[N_choice]()
+        
+        init_parameters.plot_graph(neighbors=neighbors, save_path=f"figures/N{N}_graph_{i+1}.png")
 
         # ------------------------------------------------------------------
         # Build network template
@@ -176,10 +177,12 @@ def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
         all_results.append(results)
 
         # Plot individual instance
+        
         plot_results(
             results,  # only residuals
             save_path=f"figures/N{N}_test_instance_{i+1}.png"
         )
+        
         print(f"Pure FB     — has violation? "
           f"{results['pure'].constraint_violation()}")
         print(f"FB + GNN    — has violation? "
@@ -239,8 +242,8 @@ if __name__ == "__main__":
         "--N_train", type=int, default=3, choices=[3, 10, 30],
         help="Network size to train on in generalization mode (default: 3)"
     )
-    parser.add_argument("--load", action="store_true", default=False,
+    parser.add_argument("--load", action="store_true", default=True,
                         help="Load pre-trained model instead of training")
     args = parser.parse_args()
 
-    main(N_choice=args.N, N_train=args.N_train, load=True)#args.load)
+    main(N_choice=args.N, N_train=args.N_train, load=args.load)

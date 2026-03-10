@@ -74,6 +74,7 @@ class Prosumer:
 
         # --- Local state (initialized randomly within bounds) ---
         self.D, self.G, self.q = self._init_state()
+        self.q_neighbors = self._init_qnm()
 
     # ------------------------------------------------------------------
     # Initialization
@@ -96,6 +97,17 @@ class Prosumer:
         }
         return D, G, q
 
+    def _init_qnm(self):
+        q = {
+            m: torch.rand(1, device=self.device).squeeze() * self.k[m]
+            for m in self.neighbors
+        }
+
+    def set_qnm(self, m, val):
+        self.q_neighbors[m] = val
+    
+    def get_q_mn(self, m):
+        return self.q[m]
     # ------------------------------------------------------------------
     # State access and mutation
     # ------------------------------------------------------------------

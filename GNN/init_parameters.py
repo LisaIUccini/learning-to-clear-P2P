@@ -13,7 +13,7 @@ params = init_parameters(N=3,  topology="complete")
 # Graph builder
 # ------------------------------------------------------------------
 
-def build_graph(N: int, topology: str, seed: int = 0,
+def build_graph(N: int, topology: str, seed: int = None,
                 sparsity: float = 0.5) -> dict:
     """
     Build a graph with N nodes and return neighbors dict.
@@ -98,6 +98,7 @@ def init_parameters_graph(
     topology: str = "tree",
     seed: int = 0,
     sparsity: float = 0.5,
+    n_test = 0
 ) -> tuple:
     """
     Initialize EnergyNetwork parameters for N prosumers.
@@ -137,7 +138,7 @@ def init_parameters_graph(
 
     # --- Solver parameters ---
     gamma    = 0.1
-    max_iter = 300
+    max_iter = 50
     tol      = 1e-6
 
     # --- Node parameters ---
@@ -175,6 +176,7 @@ def init_parameters_graph(
                 k[(n, m)] = torch.tensor(k_val, dtype=torch.float32)
                 k[(m, n)] = torch.tensor(k_val, dtype=torch.float32)
 
+
     return (
         N, gamma, max_iter, tol,
         neighbors,
@@ -206,6 +208,79 @@ def _build_c_k(neighbors, c_fn, k_fn):
             c[(m, n)] = torch.tensor(c_fn(m, n), dtype=torch.float32)
             k[(m, n)] = torch.tensor(k_fn(m, n), dtype=torch.float32)
     return c, k
+
+
+def plot_graph(neighbors: dict, title: str = "Energy Network Graph",
+               save_path: str = None):
+    """
+    Plot the energy network graph from a neighbors dict.
+
+    Parameters
+    ----------
+    neighbors : dict {n: list of neighbor indices}
+    title     : plot title
+    save_path : if given, save figure here; otherwise show interactively
+    """
+    import matplotlib.pyplot as plt
+
+    G = nx.Graph()
+    N = len(neighbors)
+    G.add_nodes_from(range(N))
+    for n, nbrs in neighbors.items():
+        for m in nbrs:
+            G.add_edge(n, m)
+
+    # Layout: spring for general graphs, shell if star-like
+    degrees = dict(G.degree())
+    max_deg = max(degrees.values())
+    if max_deg >= N // 2:
+        # Star or hub-dominated: put highest-degree node at center
+        root = max(degrees, key=degrees.get)
+        shells = [[root], [n for n in range(N) if n != root]]
+        pos = nx.shell_layout(G, nlist=shells)
+    else:
+        pos = nx.spring_layout(G, seed=42)
+
+    # Node colors: root (node 0) in a different color
+    node_colors = ["#e05c5c" if n == 0 else "#5c8de0" for n in range(N)]
+    node_sizes  = [600 if n == 0 else 400 for n in range(N)]
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    nx.draw_networkx_edges(G, pos, ax=ax, alpha=0.5, edge_color="#aaaaaa", width=1.5)
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_color=node_colors,
+                           node_size=node_sizes)
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=9,
+                            font_color="white", font_weight="bold")
+
+    # Legend
+    from matplotlib.patches import Patch
+    legend = [
+        Patch(facecolor="#e05c5c", label="Root (grid interface)"),
+        Patch(facecolor="#5c8de0", label="Prosumer"),
+    ]
+    ax.legend(handles=legend, loc="upper right", fontsize=9)
+
+    # Stats
+    n_edges = G.number_of_edges()
+    max_possible = N * (N - 1) // 2
+    sparsity = 1.0 - n_edges / max_possible if max_possible > 0 else 0.0
+    ax.set_title(
+        f"{title}\n"
+        f"N={N} nodes, {n_edges} edges, sparsity={sparsity:.2f}",
+        fontsize=11,
+    )
+    ax.axis("off")
+    plt.tight_layout()
+
+    if save_path is not None:
+        import os
+        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Graph saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
 
 
 def initN3():
