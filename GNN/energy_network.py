@@ -187,6 +187,122 @@ class EnergyNetwork:
     # ------------------------------------------------------------------
     # Projection onto the feasible set
     # ------------------------------------------------------------------
+    def project_differentiable(self):
+        """
+        Differentiable projection via qpth (OptNet).
+        Identical to project_exact in the forward pass:
+            min  0.5 * ||x - x0||^2
+            s.t. D_min <= D <= D_max
+                G_min <= G <= G_max
+                Q[i]  <= k_edge[i]              (no lower bound, as in project_exact)
+                D[n] = G[n] + G_res[n] + sum_m q_{mn}   (balance equality)
+                q_{mn} + q_{nm} <= 0            (reciprocity)
+
+        Forward  : QPFunction solves the QP exactly
+        Backward : OptNet implicit differentiation (KKT)
+        """
+        from qpth.qp import QPFunction
+
+        N       = self.N
+        E       = len(self.edge_list)
+        dim     = 2 * N + E
+        idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
+        dev     = self.device
+
+        x0 = self.flatten()   # (dim,) — preserves grad_fn
+
+        # ----------------------------------------------------------------
+        # Objective: min 0.5 ||x - x0||^2  ≡  min 0.5 x^T I x - x0^T x
+        # ----------------------------------------------------------------
+        Q_mat = torch.eye(dim, device=dev)          # (dim, dim)
+        p     = -x0.unsqueeze(0)                    # (1, dim)
+
+        # ----------------------------------------------------------------
+        # Equality constraints: A_eq @ x = b_eq
+        # Identical to project_exact:
+        #   D[n] - G[n] - sum_m q_{mn} = G_res[n]
+        # ----------------------------------------------------------------
+        A_eq = torch.zeros(N, dim, device=dev)
+        b_eq = self.G_res.clone()
+
+        for n in range(N):
+            A_eq[n, n]     =  1.0           # D[n]
+            A_eq[n, N + n] = -1.0           # -G[n]
+            for m in self.neighbors[n]:
+                A_eq[n, 2*N + idx_map[(m, n)]] = -1.0  # -q_{mn}
+
+        A_eq = A_eq.unsqueeze(0)            # (1, N, dim)
+        b_eq = b_eq.unsqueeze(0)            # (1, N)
+
+        # ----------------------------------------------------------------
+        # Inequality constraints: G_ineq @ x <= h
+        # Identical to project_exact bounds + reciprocity:
+        #
+        #   -D[n] <= -D_min[n]       (D lower bound)
+        #    D[n] <=  D_max[n]       (D upper bound)
+        #   -G[n] <= -G_min[n]       (G lower bound)
+        #    G[n] <=  G_max[n]       (G upper bound)
+        #    Q[i] <=  k_edge[i]      (capacity, NO lower bound as in project_exact)
+        #    q_{mn} + q_{nm} <= 0    (reciprocity)
+        # ----------------------------------------------------------------
+        visited     = set()
+        recip_pairs = []
+        for (m, n) in self.edge_list:
+            if (m, n) not in visited:
+                visited.add((m, n))
+                visited.add((n, m))
+                recip_pairs.append((idx_map[(m, n)], idx_map[(n, m)]))
+
+        n_ineq = 4*N + E + len(recip_pairs)
+        G_mat  = torch.zeros(n_ineq, dim, device=dev)
+        h_vec  = torch.zeros(n_ineq,      device=dev)
+
+        row = 0
+        # D lower bound: -D[n] <= -D_min[n]
+        for n in range(N):
+            G_mat[row, n] = -1.0
+            h_vec[row]    = -self.D_min[n]
+            row += 1
+        # D upper bound: D[n] <= D_max[n]
+        for n in range(N):
+            G_mat[row, n] =  1.0
+            h_vec[row]    =  self.D_max[n]
+            row += 1
+        # G lower bound: -G[n] <= -G_min[n]
+        for n in range(N):
+            G_mat[row, N+n] = -1.0
+            h_vec[row]      = -self.G_min[n]
+            row += 1
+        # G upper bound: G[n] <= G_max[n]
+        for n in range(N):
+            G_mat[row, N+n] =  1.0
+            h_vec[row]      =  self.G_max[n]
+            row += 1
+        # Capacity: Q[i] <= k_edge[i]  — NO lower bound, identical to project_exact
+        for i in range(E):
+            G_mat[row, 2*N+i] =  1.0
+            h_vec[row]        =  self.k_edge[i]
+            row += 1
+        # Reciprocity: q_{mn} + q_{nm} <= 0
+        for (i_mn, i_nm) in recip_pairs:
+            G_mat[row, 2*N+i_mn] = 1.0
+            G_mat[row, 2*N+i_nm] = 1.0
+            h_vec[row]            = 0.0
+            row += 1
+
+        G_mat = G_mat.unsqueeze(0)          # (1, n_ineq, dim)
+        h_vec = h_vec.unsqueeze(0)          # (1, n_ineq)
+
+        # ----------------------------------------------------------------
+        # Solve — QPFunction handles both forward (QP solve) and
+        # backward (implicit differentiation via KKT conditions)
+        # ----------------------------------------------------------------
+        qp     = QPFunction(verbose=False, eps=1e-12, maxIter=10000)
+        x_proj = qp(Q_mat, p, G_mat, h_vec, A_eq, b_eq).squeeze(0)  # (dim,)
+
+        self.D = x_proj[:N]
+        self.G = x_proj[N:2*N]
+        self.Q = x_proj[2*N:]
 
     def project_exact(self):
         """
@@ -426,11 +542,28 @@ class EnergyNetwork:
         v_edge_n : torch.Tensor (k,)  — perturbations for Q[incoming_idx[n]],
                                         i.e. q_{mn} for each m in Omega_n (sorted)
         """
+
+        D_new = self.D.clone()
+        G_new = self.G.clone()
+        Q_new = self.Q.clone()
+
+        D_new[n] = self.D[n] + v_node_n[0]
+        G_new[n] = self.G[n] + v_node_n[1]
+
+        for local_i, global_i in enumerate(self.incoming_idx[n]):
+            Q_new[global_i] = self.Q[global_i] + v_edge_n[local_i]
+
+        self.D = D_new
+        self.G = G_new
+        self.Q = Q_new
+
+        """
         self.D[n] = self.D[n] + v_node_n[0]
         self.G[n] = self.G[n] + v_node_n[1]
 
         for local_i, global_i in enumerate(self.incoming_idx[n]):
             self.Q[global_i] = self.Q[global_i] + v_edge_n[local_i]
+        """
 
     # ------------------------------------------------------------------
     # Monitoring

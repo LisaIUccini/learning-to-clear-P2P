@@ -24,8 +24,10 @@ import numpy as np
 import init_parameters
 from energy_network import EnergyNetwork
 from model import GNNUpdate
-from train import meta_train, learned_FB_step
-from inference import pure_FB_step, run_comparison, plot_results, plot_results_std
+from train import meta_train
+from fb import learned_FB_step, pure_FB_step
+from dataset import EnergyDataset
+from inference import run_comparison, plot_results, plot_results_std
 
 
 def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
@@ -52,12 +54,12 @@ def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 50
+    num_samples = 30
     batch_size  = 1
     T           = 15       # unrolling steps
-    epochs      = 50
+    epochs      = 30
     lr          = 2e-3
-    alpha       = 0.95     # discount factor in loss
+    alpha       = 0.95    # discount factor in loss
     d_h         = 12#len(net_template.flatten())  # GNN hidden dimension
     rho         = 0.5      # summability decay
 
@@ -152,7 +154,7 @@ def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
         #D_star, a_tilde, a, b, c, k) = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.8,  seed=42, n_test=i) #generate new 
         D_star, a_tilde, a, b, c, k) = init_fn[N_choice]()
         
-        init_parameters.plot_graph(neighbors=neighbors, save_path=f"figures/N{N}_graph_{i+1}.png")
+        #init_parameters.plot_graph(neighbors=neighbors, save_path=f"figures/N{N}_graph_{i+1}.png")
 
         # ------------------------------------------------------------------
         # Build network template
@@ -203,7 +205,7 @@ def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
 
     avg_results = {
         key: pad_and_mean(key)
-        for key in ["residuals_pure", "residuals_learned"]
+        for key in ["residuals_pure", "residuals_learned", "residuals_primal", "residuals_dual"]
     }
 
     def pad_and_stack(key):
@@ -235,14 +237,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB")
 
     parser.add_argument(
-        "--N", type=int, default=30, choices=[3, 10, 30],
+        "--N", type=int, default=3, choices=[3, 10, 30],
         help="Network size for standard mode (default: 3)"
     )
     parser.add_argument(
         "--N_train", type=int, default=3, choices=[3, 10, 30],
         help="Network size to train on in generalization mode (default: 3)"
     )
-    parser.add_argument("--load", action="store_true", default=True,
+    parser.add_argument("--load", action="store_true", default=False,
                         help="Load pre-trained model instead of training")
     args = parser.parse_args()
 

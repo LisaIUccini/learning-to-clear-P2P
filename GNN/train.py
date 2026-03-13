@@ -7,6 +7,7 @@ from energy_network import EnergyNetwork
 from model import GNNUpdate
 from dataset import EnergyDataset
 from fb import learned_FB_step, pure_FB_step
+import admm
 
 
 
@@ -67,32 +68,48 @@ def meta_train(
 
         for batch in dataloader:
             x0_batch     = batch["x0"].to(device)      # (batch_size, dim)
-            x_star_batch = batch["x_star"].to(device)  # (batch_size, dim)
-
+            
             optimizer.zero_grad()
             batch_loss = torch.tensor(0.0, device=device)
 
             for b in range(x0_batch.shape[0]):
                 x0     = x0_batch[b]      # (dim,)
-                x_star = x_star_batch[b]  # (dim,)
-
+                
                 # Initialize network from x0
                 net = net_template.clone()
                 net.unflatten(x0)
+                state, rho = admm.admm_init(net)
 
                 sample_loss = torch.tensor(0.0, device=device)
 
+                z_old = state.z.clone()
                 for t in range(T):
-                    net = learned_FB_step(net, model, t, gamma, training=True)
+                    #net = learned_FB_step(net, model, t, gamma, training=True)
+                    """ADMM"""
+                    
+                    net, state, rho  = admm.learned_admm_step(net, state, rho, model, t, training=True, z_old=z_old)
+                    z_old = state.z.clone()
+                    z_p_old = state.z.clone()
+                    net_pure,_,_ = admm.admm_step(net, state, rho=rho, training=False, z_old=z_p_old)
+                    
+                    # Primal residual: ||Q - z||^2
+                    r_p = torch.sum((net.Q - state.z) ** 2).item()
+        
+                    # Dual residual: rho^2 * ||z_new - z_old||^2
+                    r_d = (rho ** 2) * torch.sum((state.z - z_old) ** 2).item()
+
 
                     # Discounted squared distance to GNE
                     x_t = net.flatten()
-                    sample_loss = sample_loss + torch.sum(
-                        (x_t - pure_FB_step(net, gamma).flatten()) ** 2
-                    )
+                    x_pure = net_pure.flatten().detach()
+                    weight = alpha ** (T - t)
+                    sample_loss = sample_loss + weight*torch.sum(
+                        (x_t - x_pure) ** 2
+                    ) #+ weight*(r_p + r_d) 
+
                     """
-                    sample_loss = sample_loss + (alpha ** (T - t)) * torch.sum(
-                        (x_t - x_star) ** 2
+                    sample_loss = sample_loss + torch.sum(
+                        (x_t - pure_FB_step(net, gamma).flatten().detach()) ** 2
                     )
                     """
 

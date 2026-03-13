@@ -53,11 +53,15 @@ def learned_FB_step(
     
     if training:
         net_new.project_approx(create_graph=training)
+        #net_new.project_differentiable()
     else:
+        
+        
         x_proj, success = net_new.project_exact()
         if success:
             net_new.unflatten(x_proj)
-
+        
+        #net_new.project_differentiable()
 
     # --- Distributed GNN perturbation (parallel execution) ---
     # All nodes read from the same frozen snapshot of the state,
@@ -82,11 +86,16 @@ def learned_FB_step(
 
     # Re-project after perturbation
     if training:
-        net_new.project_approx()
+        #net_new.project_approx(create_graph=training)
+        net_new.project_differentiable()
     else:
+        
+        
         x_proj, success = net_new.project_exact()
         if success:
             net_new.unflatten(x_proj)
+        
+        #net_new.project_differentiable()
 
     return net_new
 
@@ -109,10 +118,12 @@ def pure_FB_step(net: EnergyNetwork, gamma: float) -> EnergyNetwork:
     net_new : EnergyNetwork with updated state
     """
     net_new = net.forward_step(gamma)
-    #net_new.project_exact()
+    
+    
     x_proj, success = net_new.project_exact()
     if success:
         net_new.unflatten(x_proj)
     
+    #net_new.project_differentiable()
     return net_new
 

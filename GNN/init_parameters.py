@@ -139,7 +139,7 @@ def init_parameters_graph(
     # --- Solver parameters ---
     gamma    = 0.1
     max_iter = 50
-    tol      = 1e-6
+    tol      = 1e-5
 
     # --- Node parameters ---
     D_min   = torch.zeros(N, dtype=torch.float32)
@@ -296,7 +296,7 @@ def initN3():
     N        = 3
     gamma    = 0.1
     max_iter = 100
-    tol      = 1e-6
+    tol      = 1e-5
 
     neighbors = {
         0: [1, 2],
@@ -341,7 +341,7 @@ def initN10():
     N        = 10
     gamma    = 0.1
     max_iter = 100
-    tol      = 1e-6
+    tol      = 1e-5
 
     neighbors = {
         0: [1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -408,7 +408,7 @@ def initN30():
     N        = 30
     gamma    = 0.1
     max_iter = 300
-    tol      = 1e-6
+    tol      = 1e-5
 
     neighbors = {
         0:  [1, 2],

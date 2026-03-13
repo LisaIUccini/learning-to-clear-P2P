@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 
-from energy_network import EnergyNetwork, compute_gne
+from energy_network import EnergyNetwork
 import init_parameters
 import random
 
@@ -45,7 +45,6 @@ class EnergyDataset(Dataset):
         self.dim         = net_template.dim
 
         self.x0_list     = []
-        self.x_star_list = []
 
         print(f"Generating {num_samples} dataset samples (GNE computed offline)...")
 
@@ -58,16 +57,11 @@ class EnergyDataset(Dataset):
 
             x0 = net.flatten().detach().clone()
 
-            print(f"  Sample {i+1}/{num_samples}: computing GNE...")
-            x_star = compute_gne(net, gamma, gne_max_iter, gne_tol).flatten().detach()
-
             self.x0_list.append(x0)
-            self.x_star_list.append(x_star)
 
         # Stack into tensors for efficient batch access
         self.x0_data     = torch.stack(self.x0_list).to(device)      # (num_samples, dim)
-        self.x_star_data = torch.stack(self.x_star_list).to(device)  # (num_samples, dim)
-
+        
         print("Dataset generation complete.")
 
     def __len__(self):
@@ -83,5 +77,4 @@ class EnergyDataset(Dataset):
         """
         return {
             "x0":     self.x0_data[idx],
-            "x_star": self.x_star_data[idx],
         }
