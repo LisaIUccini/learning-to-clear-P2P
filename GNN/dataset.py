@@ -2,30 +2,28 @@ import torch
 from torch.utils.data import Dataset
 
 from energy_network import EnergyNetwork
-import init_parameters
-import random
 
 
 class EnergyDataset(Dataset):
     """
-    Dataset of EnergyNetwork instances for meta-training the GNNUpdate model.
+    Dataset of initial states for meta-training the GNNUpdate model.
 
     Each sample is a dict with:
-        'x0'     : torch.Tensor (dim,)  — initial flattened state (random)
-        'x_star' : torch.Tensor (dim,)  — GNE computed offline via pure FB
+        'x0' : torch.Tensor (dim,) — flattened initial state, randomised
 
-    The GNE computation happens once at construction time and is cached.
-    During training, each sample provides a starting point x0 and the
-    corresponding target x_star for the loss function.
+    The graph structure and parameters are fixed (shared from net_template).
+    Only the decision variables D, G, q are re-randomised for each sample.
+
+    During training, each sample provides a starting point x0. The network
+    is reconstructed via net_template.clone() + unflatten(x0), and the loss
+    is the fixed-point residual accumulated over T unrolled FB steps — no
+    ground-truth GNE is needed.
 
     Parameters
     ----------
     num_samples  : number of problem instances to generate
-    net_template : EnergyNetwork instance used as template (parameters are shared,
-                   state is re-randomized for each sample)
-    gamma        : FB step size used for GNE computation
-    gne_max_iter : max iterations for offline GNE solver
-    gne_tol      : convergence tolerance for GNE solver
+    net_template : EnergyNetwork used as template — graph and parameters
+                   are shared (read-only); state is re-randomised per sample
     device       : torch.device
     """
 
@@ -33,9 +31,6 @@ class EnergyDataset(Dataset):
         self,
         num_samples: int,
         net_template: EnergyNetwork,
-        gamma: float,
-        gne_max_iter: int = 200,
-        gne_tol: float = 1e-6,
         device: torch.device = torch.device("cpu"),
     ):
         super().__init__()
@@ -44,24 +39,24 @@ class EnergyDataset(Dataset):
         self.device      = device
         self.dim         = net_template.dim
 
-        self.x0_list     = []
+        print(f"Generating {num_samples} dataset samples...")
 
-        print(f"Generating {num_samples} dataset samples (GNE computed offline)...")
-
+        x0_list = []
         for i in range(num_samples):
-            
-            # Re-randomize state (parameters are fixed, only D, G, Q change)
+            # Clone template (shares parameters), then re-randomise state
             net = net_template.clone()
-            
-            net.D, net.G, net.Q = net._init_state()
+            net._init_state()
 
+            # Detach: x0 is a fixed starting point, not part of any compute graph
             x0 = net.flatten().detach().clone()
+            x0_list.append(x0)
 
-            self.x0_list.append(x0)
+            if (i + 1) % 10 == 0 or (i + 1) == num_samples:
+                print(f"  {i+1}/{num_samples} samples generated")
 
-        # Stack into tensors for efficient batch access
-        self.x0_data     = torch.stack(self.x0_list).to(device)      # (num_samples, dim)
-        
+        # Stack into a single tensor for efficient batch indexing
+        self.x0_data = torch.stack(x0_list).to(device)  # (num_samples, dim)
+
         print("Dataset generation complete.")
 
     def __len__(self):
@@ -72,9 +67,6 @@ class EnergyDataset(Dataset):
         Returns
         -------
         dict with:
-            'x0'     : torch.Tensor (dim,)
-            'x_star' : torch.Tensor (dim,)
+            'x0' : torch.Tensor (dim,) — initial flattened state for this sample
         """
-        return {
-            "x0":     self.x0_data[idx],
-        }
+        return {"x0": self.x0_data[idx]}

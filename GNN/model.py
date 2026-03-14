@@ -188,7 +188,7 @@ class GNNUpdate(nn.Module):
 
     def forward(self, data, t: int):
         """
-        Compute perturbations for FB iteration t.
+        Compute perturbations for iteration t.
 
         Works on both the global graph (all N nodes) and local subgraphs
         (ego node + neighbors) — same weights, different graph sizes.
@@ -196,37 +196,36 @@ class GNNUpdate(nn.Module):
         Parameters
         ----------
         data : torch_geometric.data.Data
-            .x          : (num_nodes, 2)    node features [D, G]
-            .edge_index : (2, num_edges)
-            .edge_attr  : (num_edges, 1)    edge features [q_{nm}]
-        t    : current FB iteration index (int >= 0)
+            FB:
+                .x         : (num_nodes, 2)  — [D, G]
+                .edge_attr : (num_edges, 1)  — [q]
+            ADMM:
+                .x         : (num_nodes, 3)  — [D, G, u_avg]
+                .edge_attr : (num_edges, 2)  — [q, z]
+            In both cases z and u are used as context for the GNN
+            but are NOT perturbed — only D, G, q are safe to perturb.
+        t    : current iteration index (int >= 0)
 
         Returns
         -------
-        v_nodes : (num_nodes, 2)    perturbations for D and G
-        v_edges : (num_edges, 1)    perturbations for Q
+        v_nodes : (num_nodes, 2)  — perturbations for [D, G]
+        v_edges : (num_edges, 1)  — perturbations for [q]
         """
-        x          = data.x           # (num_nodes, 2)
-        edge_index = data.edge_index   # (2, num_edges)
-        edge_attr  = data.edge_attr    # (num_edges, 1)
+        x          = data.x
+        edge_index = data.edge_index
+        edge_attr  = data.edge_attr
 
-        # Message passing: h_new[n] aggregates neighbor messages
         h_new = self.gnn_layer(x, edge_index, edge_attr)  # (num_nodes, d_h)
 
-        # Node-level perturbation direction
         delta_nodes = self.phi_node(h_new)  # (num_nodes, 2)
 
-        # Edge-level perturbation direction
-        # For edge i = (m->n): use h_new[n] (destination = owner of q_{mn})
-        dst = edge_index[1]  # (num_edges,)
-        edge_input = torch.cat([h_new[dst], edge_attr], dim=-1)  # (num_edges, d_h+1)
+        dst = edge_index[1]
+        edge_input  = torch.cat([h_new[dst], edge_attr], dim=-1)
         delta_edges = self.phi_edge(edge_input)  # (num_edges, 1)
 
-        # Summable scaling: m_t = phi_m * rho^t
         phi_m = F.softplus(self.phi_m_raw)
         m_t   = phi_m * (self.rho ** t)
 
-        # Final perturbation: bounded direction * decaying amplitude
         v_nodes = m_t * torch.tanh(delta_nodes)  # (num_nodes, 2)
         v_edges = m_t * torch.tanh(delta_edges)  # (num_edges, 1)
 

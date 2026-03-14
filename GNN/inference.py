@@ -4,231 +4,250 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from energy_network import EnergyNetwork
-
 from model import GNNUpdate
-import init_parameters
-import admm
+from fb   import pure_FB_step,   learned_FB_step
+from admm import pure_ADMM_step, learned_ADMM_step
 
 
 # ------------------------------------------------------------------
-# Run FB pure vs FB+GNN on a single instance
+# Run pure vs learned on a single instance
 # ------------------------------------------------------------------
 
 def run_comparison(
     net_init: EnergyNetwork,
     model: GNNUpdate,
-    gamma: float,
     max_iter: int,
     tol: float,
     device: torch.device,
-):
-    from fb import learned_FB_step, pure_FB_step
+    algorithm: str = "fb",
+    gamma: float = None,
+    rho: float = None,
+) -> dict:
     """
-    Run pure FB and learned FB+GNN from the same initial state,
-    tracking residuals and distance to GNE at each iteration.
+    Run pure and learned algorithms from the same initial state,
+    tracking the residual at each iteration.
+
+    Supports two algorithms selected via `algorithm`:
+
+    algorithm="fb"
+        Uses pure_FB_step and learned_FB_step.
+        Requires: gamma (FB step size).
+        Residual pure    : || x^{t+1} - x^t ||^2
+        Residual learned : || x^{t+1}_learned - T(x^t_learned) ||^2
+                           where T is the unperturbed FB operator.
+
+    algorithm="admm"
+        Uses pure_ADMM_step and learned_ADMM_step.
+        Requires: rho (ADMM penalty parameter).
+        Residual pure    : sum_{(m,n)} (q_{mn} - z_{mn})^2  (primal residual)
+        Residual learned : same definition on the learned run.
+        z and u are reset to zero before each run via net.admm_reset().
+
+    Both runs start from net_init (cloned independently).
+    The learned run uses distributed inference (training=False).
+    Stopping criterion: pure algorithm converged (res_pure < tol).
 
     Parameters
     ----------
-    net_init : initial EnergyNetwork state (same for both runs)
-    x_star   : GNE flattened state vector (dim,)
-    model    : trained GNNUpdate
-    gamma    : FB step size
-    max_iter : maximum iterations
-    tol      : convergence tolerance on ||x_{t+1} - x_t||^2
-    device   : torch.device
+    net_init  : EnergyNetwork — initial state (not modified)
+    model     : trained GNNUpdate
+    max_iter  : maximum number of iterations
+    tol       : convergence tolerance on res_pure
+    device    : torch.device
+    algorithm : "fb" or "admm"
+    gamma     : FB step size (required if algorithm="fb")
+    rho       : ADMM penalty parameter (required if algorithm="admm")
 
     Returns
     -------
-    results : dict with keys:
-        'residuals_pure'   : list of ||x_{t+1} - x_t||^2  (pure FB)
-        'residuals_learned': list of ||x_{t+1} - x_t||^2  (learned FB)
-        'dist_pure'        : list of ||x_t - x*||^2       (pure FB)
-        'dist_learned'     : list of ||x_t - x*||^2       (learned FB)
+    dict with keys:
+        'residuals_pure'    : list[float]
+        'residuals_learned' : list[float]
+        'pure'              : EnergyNetwork — final state of pure run
+        'learned'           : EnergyNetwork — final state of learned run
     """
+    if algorithm not in ("fb", "admm"):
+        raise ValueError(f"algorithm must be 'fb' or 'admm', got '{algorithm}'")
+    if algorithm == "fb" and gamma is None:
+        raise ValueError("gamma is required when algorithm='fb'")
+    if algorithm == "admm" and rho is None:
+        raise ValueError("rho is required when algorithm='admm'")
+
     model.eval()
 
     net_pure    = net_init.clone()
     net_learned = net_init.clone()
 
-    #state, rho = admm.admm_init(net_init)
-    #z_pureold = state.z.clone()
-    #z_learnedold = state.z.clone()
-    #rho_pure = rho
-    #rho_learned = rho
-    state_pure, rho_pure = admm.admm_init(net_init)
-    state_learned, rho_learned = admm.admm_init(net_init)
-    z_pureold = state_pure.z.clone()
-    z_learnedold = state_learned.z.clone()
-    
-    print(f"  ADMM initial rho = {rho_pure:.4f}")
-    
-    residuals_primal    = []
-    residuals_dual = []
+    # Reset ADMM duals before starting
+    if algorithm == "admm":
+        net_pure.admm_reset()
+        net_learned.admm_reset()
 
     residuals_pure    = []
     residuals_learned = []
 
-
     with torch.no_grad():
         for it in range(max_iter):
 
-            # --- Pure FB ---
-            """
-            net_pure_new = pure_FB_step(net_pure, gamma)
+            if algorithm == "fb":
+                # ----------------------------------------------------------
+                # FB: pure step
+                # ----------------------------------------------------------
+                net_pure_new = pure_FB_step(net_pure, gamma)
 
-            res_pure = torch.sum((net_pure_new.flatten() - net_pure.flatten()) ** 2).item()
+                res_pure = torch.sum(
+                    (net_pure_new.flatten() - net_pure.flatten()) ** 2
+                ).item()
+
+                # ----------------------------------------------------------
+                # FB: learned step + fixed-point residual
+                # ----------------------------------------------------------
+                net_learned_new = learned_FB_step(
+                    net_learned, model, it, gamma, training=False
+                )
+                res_learned = torch.sum(
+                    (net_learned_new.flatten()
+                     - pure_FB_step(net_learned_new, gamma).flatten()) ** 2
+                ).item()
+
+            else:  # admm
+                """
+                # ----------------------------------------------------------
+                # ADMM: pure step
+                # ----------------------------------------------------------
+                net_pure_new = pure_ADMM_step(net_pure, rho)
+
+                # Primal residual: sum_{(m,n)} (q_{mn} - z_{mn})^2
+                res_pure = torch.sum(
+                    (net_pure_new.flatten() - net_pure.flatten()) ** 2
+                ).item()
+                
+
+                # ----------------------------------------------------------
+                # ADMM: learned step + primal residual
+                # ----------------------------------------------------------
+                net_learned_new = learned_ADMM_step(
+                    net_learned, model, it, rho, training=False
+                )
+                res_learned = torch.sum(
+                    (net_learned_new.flatten()
+                        - pure_ADMM_step(net_learned_new, rho).flatten()) ** 2
+                ).item()
+                """
+                # ----------------------------------------------------------
+                # ADMM: pure step
+                # res = primal + dual  (identical to train loss)
+                # ----------------------------------------------------------
+                z_prev_pure = {
+                    n: {m: net_pure.prosumers[n].z[m].clone()
+                        for m in net_pure.prosumers[n].neighbors}
+                    for n in range(net_pure.N)
+                }
+                net_pure_new = pure_ADMM_step(net_pure, rho)
+ 
+                r_pure = sum(
+                    (p.q[m] - p.z[m]) ** 2
+                    for p in net_pure_new.prosumers
+                    for m in p.neighbors
+                )
+                s_pure = rho ** 2 * sum(
+                    (net_pure_new.prosumers[n].z[m] - z_prev_pure[n][m]) ** 2
+                    for n in range(net_pure_new.N)
+                    for m in net_pure_new.prosumers[n].neighbors
+                )
+                res_pure = float(r_pure + s_pure)
+ 
+                # ----------------------------------------------------------
+                # ADMM: learned step
+                # res = primal + dual  (identical to train loss)
+                # ----------------------------------------------------------
+                z_prev_learned = {
+                    n: {m: net_learned.prosumers[n].z[m].clone()
+                        for m in net_learned.prosumers[n].neighbors}
+                    for n in range(net_learned.N)
+                }
+                net_learned_new = learned_ADMM_step(
+                    net_learned, model, it, rho, training=False
+                )
+ 
+                r_learned = sum(
+                    (p.q[m] - p.z[m]) ** 2
+                    for p in net_learned_new.prosumers
+                    for m in p.neighbors
+                )
+                s_learned = rho ** 2 * sum(
+                    (net_learned_new.prosumers[n].z[m] - z_prev_learned[n][m]) ** 2
+                    for n in range(net_learned_new.N)
+                    for m in net_learned_new.prosumers[n].neighbors
+                )
+                res_learned = float(r_learned + s_learned)
+                
 
             residuals_pure.append(res_pure)
-            """
-            
- 
-            net_pure_new, state_pure, rho_pure = admm.admm_step(net_pure, state_pure, rho_pure, training=False, z_old=z_pureold)
- 
-            # Primal residual: ||Q - z||^2
-            r_p = torch.sum((net_pure_new.Q - state_pure.z) ** 2).item()
- 
-            # Dual residual: rho^2 * ||z_new - z_old||^2
-            r_d = (rho_pure ** 2) * torch.sum((state_pure.z - z_pureold) ** 2).item()
-
-            residuals_primal.append(r_p)
-            residuals_dual.append(r_d)
-            res_pure = torch.sum((net_pure_new.flatten() - net_pure.flatten()) ** 2).item()
-            #res_pure = r_p + r_d
-            residuals_pure.append(res_pure)
-
-
-            # --- Learned FB+GNN ---
-            """
-            net_learned_new = learned_FB_step(
-                net_learned, model, it, gamma, training=False
-            )
-            """
-            net_learned_new, state_learned, rho_learned  = admm.learned_admm_step(net_learned, state_learned, rho_learned, model, it, training=False, z_old=z_learnedold)
-
-            #residual l2admm
-            # Primal residual: ||Q - z||^2
-            r_p = torch.sum((net_learned_new.Q - state_learned.z) ** 2).item()
- 
-            # Dual residual: rho^2 * ||z_new - z_old||^2
-            r_d = (rho_learned ** 2) * torch.sum((state_learned.z - z_learnedold) ** 2).item()
-
-            net_compared, _, _ = admm.admm_step(net_learned_new, state_learned, rho_learned, training=False, z_old=state_learned.z)
-            res_learned = torch.sum(
-                (net_learned_new.flatten() - net_compared.flatten()) ** 2
-            ).item()
-            #res_learned = r_p + r_d
-
-             # Update states
-            z_pureold = state_pure.z.clone()
-            net_pure    = net_pure_new
-            z_learnedold=state_learned.z.clone()
-            net_learned = net_learned_new
-
-            
             residuals_learned.append(res_learned)
 
-            # Check convergence of pure FB (used as stopping criterion)
-            if res_pure<tol: #r_d < tol or r_p<tol:# or res_learned < tol:
-                print(f" Pure Converged at iteration {it+1}")
+            # Advance states
+            net_pure    = net_pure_new
+            net_learned = net_learned_new
+
+            # Stopping: pure algorithm converged
+            if res_pure < tol:
+                algo_name = "FB" if algorithm == "fb" else "ADMM"
+                print(f"  Pure {algo_name} converged at iteration {it + 1}")
                 break
 
-    net_pure.Q = state_pure.z.clone()
-    
-    x_proj, success = net_pure.project_exact()
-    if success:
-        net_pure.unflatten(x_proj)
 
     return {
-        "residuals_primal":    residuals_primal,
-        "residuals_dual": residuals_dual,
         "residuals_pure":    residuals_pure,
         "residuals_learned": residuals_learned,
-        "pure": net_pure,
+        "pure":    net_pure,
         "learned": net_learned,
     }
 
 
-# ------------------------------------------------------------------
-# Plotting
-# ------------------------------------------------------------------
 
-def plot_results(results: dict, save_path: str = None):
     """
-    Plot residuals and distance to GNE for pure FB vs learned FB+GNN.
+    if algorithm == "fb":
+    # ----------------------------------------------------------
+    # FB: pure step
+    # ----------------------------------------------------------
+    net_pure_new = pure_FB_step(net_pure, gamma)
 
-    Parameters
-    ----------
-    results   : output of run_comparison
-    save_path : if given, save figure here; otherwise show interactively
-    """
-    plt.style.use("seaborn-v0_8-pastel")
-    fig, axes = plt.subplots(figsize=(12, 5))
+    res_pure = torch.sum(
+        (net_pure_new.flatten() - net_pure.flatten()) ** 2
+    ).item()
 
-    iters = range(0, len(results["residuals_pure"]) )
+    # ----------------------------------------------------------
+    # FB: learned step + fixed-point residual
+    # ----------------------------------------------------------
+    net_learned_new = learned_FB_step(
+        net_learned, model, it, gamma, training=False
+    )
+    res_learned = torch.sum(
+        (net_learned_new.flatten()
+            - pure_FB_step(net_learned_new, gamma).flatten()) ** 2
+    ).item()
 
-    # --- Left: residuals ||x_{t+1} - x_t||^2 ---
+else:  # admm
+    # ----------------------------------------------------------
+    # ADMM: pure step
+    # ----------------------------------------------------------
+    net_pure_new = pure_ADMM_step(net_pure, rho)
+
+    # Primal residual: sum_{(m,n)} (q_{mn} - z_{mn})^2
+    res_pure = torch.sum(
+        (net_pure_new.flatten() - net_pure.flatten()) ** 2
+    ).item()
     
 
-    axes.semilogy(iters, results["residuals_pure"],   marker="o", label="Pure ADMM")
-    axes.semilogy(iters, results["residuals_learned"], marker="*", label="FB + GNN")
-    #axes.semilogy(iters, results["residuals_primal"],   marker="o", label="Primal ADMM")
-    #axes.semilogy(iters, results["residuals_dual"], marker="*", label="Dual ADMM")
-    
-    'Residual VI ||x - Pi_X(x - γF(x))||'
-
-    axes.set_xlabel("Iteration")
-    axes.set_ylabel('Residual VI ||x - Pi_X(x - γF(x))||')
-    axes.set_title("Residuals")
-    axes.legend()
-    
-    plt.xticks(range(len(results["residuals_pure"])))
-    axes.grid(True, which="both", alpha=0.3)
-
-    
-    plt.tight_layout()
-
-    if save_path is not None:
-        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Figure saved to {save_path}")
-    else:
-        plt.show()
-
-    plt.close()
-
-
-
-def plot_results_std(results: dict, std: dict = None, save_path: str = None):
-    fig, ax = plt.subplots(figsize=(7, 5))
-
-    iters = np.arange(1, len(results["residuals_pure"]) + 1)
-
-    def _plot(mean_key, color, label):
-        mean = np.array(results[mean_key])
-        ax.semilogy(iters, mean, label=label, color=color)
-        if std is not None:
-            s = np.array(std[mean_key])
-            lo = np.clip(mean - s, 1e-12, None)
-            hi = mean + s
-            ax.fill_between(iters, lo, hi, alpha=0.2, color=color)
-
-    _plot("residuals_pure",    "steelblue",  "Pure FB")
-    _plot("residuals_learned", "darkorange", "FB + GNN")
-
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel(r"$\|x^{t+1} - x^t\|^2$")
-    ax.set_title("Residuals")
-    ax.legend()
-    ax.grid(True, which="both", alpha=0.3)
-
-    plt.tight_layout()
-
-    if save_path is not None:
-        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Figure saved to {save_path}")
-    else:
-        plt.show()
-
-    plt.close()
-
+    # ----------------------------------------------------------
+    # ADMM: learned step + primal residual
+    # ----------------------------------------------------------
+    net_learned_new = learned_ADMM_step(
+        net_learned, model, it, rho, training=False
+    )
+    res_learned = torch.sum(
+        (net_learned_new.flatten()
+            - pure_ADMM_step(net_learned_new, rho).flatten()) ** 2
+    ).item()
+                """
