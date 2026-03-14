@@ -54,10 +54,10 @@ def main(N_choice: int = 10, N_train: int = 3, load: bool = True):
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 30
+    num_samples = 50
     batch_size  = 1
     T           = 15       # unrolling steps
-    epochs      = 30
+    epochs      = 50
     lr          = 2e-3
     alpha       = 0.95    # discount factor in loss
     d_h         = 12#len(net_template.flatten())  # GNN hidden dimension

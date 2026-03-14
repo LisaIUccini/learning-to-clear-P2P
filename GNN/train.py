@@ -103,7 +103,7 @@ def meta_train(
                     x_t = net.flatten()
                     x_pure = net_pure.flatten().detach()
                     weight = alpha ** (T - t)
-                    sample_loss = sample_loss + weight*torch.sum(
+                    sample_loss = sample_loss + torch.sum(
                         (x_t - x_pure) ** 2
                     ) #+ weight*(r_p + r_d) 
 

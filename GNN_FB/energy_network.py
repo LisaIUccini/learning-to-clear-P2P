@@ -4,95 +4,67 @@ import numpy as np
 from scipy.optimize import minimize
 from torch_geometric.data import Data
 
+from prosumer import Prosumer
+
+
 class EnergyNetwork:
     """
-    Peer-to-peer energy market modeled as a Generalized Nash Equilibrium Problem.
+    Peer-to-peer energy market as a Generalized Nash Equilibrium Problem.
 
-    All state and parameters are represented as tensors — no per-agent objects.
+    Coordinates a list of Prosumer objects. Holds the shared graph structure
+    and provides global operations: flatten/unflatten, projection, pseudo-gradient,
+    PyG data construction, and monitoring.
 
-    State variables (decision variables):
-        D : torch.Tensor (N,)   — energy demand of each prosumer
-        G : torch.Tensor (N,)   — controllable flexibility of each prosumer
-        Q : torch.Tensor (|E|,) — bilateral trades, Q[i] = q_{mn} for edge i=(m,n)
-                                   q_{mn} is the decision of node n:
-                                   how much n buys (>0) or sells (<0) to m
+    All per-node logic (local cost, gradient, communication) lives in Prosumer.
 
-    Fixed parameters (node-level):
-        D_min, D_max : (N,)  demand bounds
-        G_min, G_max : (N,)  flexibility bounds
-        G_res        : (N,)  renewable generation (given, not optimized)
-        a_tilde      : (N,)  usage benefit coefficient
-        a, b         : (N,)  flexibility cost coefficients
-        D_star       : (N,)  target demand
-
-    Fixed parameters (edge-level, ordered as edge_list):
-        c_edge : (|E|,)  c_edge[i] = c_{nm} for edge i=(m,n)
-                         cost that node n assigns to trading with m
-        k_edge : (|E|,)  k_edge[i] = k_{mn} capacity on link (m,n)
-
-    Graph structure:
-        edge_list    : list of tuples (m, n), fixed ordering
-        edge_index   : torch.LongTensor (2, |E|)
-        inverse_edge : dict {(m,n): idx_of_(n,m)} for fast reverse-edge lookup
+    Attributes
+    ----------
+    prosumers   : list[Prosumer]   — one per node, indexed by node_id
+    N           : int              — number of prosumers
+    neighbors   : dict             — {n: list[int]}  graph adjacency
+    edge_list   : list[(m,n)]      — ordered directed edges
+    edge_index  : LongTensor (2,E) — PyG format
+    inverse_edge: dict             — {(m,n): idx of (n,m) in edge_list}
+    dim         : int              — total state dimension = 2N + |E|
     """
 
-    def __init__(
-        self,
-        N: int,
-        neighbors: dict,
-        D_min: torch.Tensor,
-        D_max: torch.Tensor,
-        G_min: torch.Tensor,
-        G_max: torch.Tensor,
-        G_res: torch.Tensor,
-        a_tilde: torch.Tensor,
-        a: torch.Tensor,
-        b: torch.Tensor,
-        D_star: torch.Tensor,
-        c: dict,
-        k: dict,
-        device: torch.device,
-    ):
-        self.N         = N
+    def __init__(self, prosumers: list, neighbors: dict, device: torch.device):
+        """
+        Parameters
+        ----------
+        prosumers : list[Prosumer]  — already constructed, one per node
+        neighbors : dict {n: list[int]}
+        device    : torch.device
+        """
+        self.prosumers = prosumers
         self.neighbors = neighbors
+        self.N         = len(prosumers)
         self.device    = device
 
-        # Node-level fixed parameters
-        self.D_min   = D_min.to(device)
-        self.D_max   = D_max.to(device)
-        self.G_min   = G_min.to(device)
-        self.G_max   = G_max.to(device)
-        self.G_res   = G_res.to(device)
-        self.a_tilde = a_tilde.to(device)
-        self.a       = a.to(device)
-        self.b       = b.to(device)
-        self.D_star  = D_star.to(device)
-
-        # Graph structure (built once, never changes)
+        # Graph structure (built once)
         self.edge_list    = self._build_edge_list()
         self.edge_index   = self._build_edge_index()
         self.inverse_edge = self._build_inverse_edge()
 
-        # Edge-level fixed parameters (ordered as edge_list)
-        self.c_edge = torch.tensor(
-            [c[(m, n)].item() for (m, n) in self.edge_list],
-            dtype=torch.float32, device=device
-        )
-        self.k_edge = torch.tensor(
-            [k[(m, n)].item() for (m, n) in self.edge_list],
-            dtype=torch.float32, device=device
-        )
-
-        # Precompute incoming edge indices for each node n:
-        # incoming_idx[n] = [i : edge_list[i] = (m, n)]
+        # edge_list index for each incoming edge of node n
+        # incoming_idx[n] = list of edge_list indices i such that edge_list[i] = (m, n)
         idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
         self.incoming_idx = {
             n: [idx_map[(m, n)] for m in self.neighbors[n] if (m, n) in idx_map]
             for n in range(self.N)
         }
 
-        self.dim = 2 * N + len(self.edge_list)
-        self.D, self.G, self.Q = self._init_state()
+        # Precompute edge-level parameter tensors (for projection and monitoring)
+        self.c_edge = torch.tensor(
+            [prosumers[n].c[m].item() for (m, n) in self.edge_list],
+            dtype=torch.float32, device=device
+        )
+        self.k_edge = torch.tensor(
+            [prosumers[n].k[m].item() for (m, n) in self.edge_list],
+            dtype=torch.float32, device=device
+        )
+
+        self.dim = 2 * self.N + len(self.edge_list)
 
     # ------------------------------------------------------------------
     # Graph construction
@@ -100,9 +72,8 @@ class EnergyNetwork:
 
     def _build_edge_list(self):
         """
-        Ordered list of directed edges (m, n) where m in neighbors[n].
-        Ordering: outer loop on n (sorted), inner loop on m (sorted).
-        Edge (m, n) carries q_{mn} = decision of node n.
+        Ordered directed edge list: (m, n) means q_{mn} is n's decision.
+        Outer loop on n (sorted), inner loop on m (sorted).
         """
         edge_list = []
         for n in sorted(self.neighbors.keys()):
@@ -111,77 +82,71 @@ class EnergyNetwork:
         return edge_list
 
     def _build_edge_index(self):
-        """
-        PyG edge_index tensor of shape (2, |E|).
-        edge_index[0, i] = source m, edge_index[1, i] = destination n.
-        """
         src = [m for (m, n) in self.edge_list]
         dst = [n for (m, n) in self.edge_list]
         return torch.tensor([src, dst], dtype=torch.long, device=self.device)
 
     def _build_inverse_edge(self):
-        """
-        inverse_edge[(m, n)] = index of (n, m) in edge_list.
-        Used in get_pyg_data() to fetch q_{nm} as the feature of edge (m->n).
-        """
         idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
         return {(m, n): idx_map[(n, m)] for (m, n) in self.edge_list}
 
     # ------------------------------------------------------------------
-    # State initialization
+    # Flatten / unflatten  (global state vector x = [D, G, Q])
     # ------------------------------------------------------------------
 
-    def _init_state(self):
-        D = self.D_min + (self.D_max - self.D_min) * torch.rand(self.N, device=self.device)
-        G = self.G_min + (self.G_max - self.G_min) * torch.rand(self.N, device=self.device)
-        Q = torch.rand(len(self.edge_list), device=self.device) * self.k_edge
-        return D, G, Q
+    def flatten(self) -> torch.Tensor:
+        """
+        Returns x = [D_0,...,D_{N-1}, G_0,...,G_{N-1}, Q_0,...,Q_{|E|-1}]
+        shape (dim,).
 
-    # ------------------------------------------------------------------
-    # Flatten / unflatten
-    # ------------------------------------------------------------------
-
-    def flatten(self):
-        """Returns x = [D, G, Q] of shape (dim,)."""
-        return torch.cat([self.D, self.G, self.Q])
+        Q is ordered as edge_list: Q[i] = q_{mn} for edge_list[i] = (m, n),
+        which is prosumer n's trade decision w.r.t. neighbor m.
+        """
+        D = torch.stack([p.D for p in self.prosumers])
+        G = torch.stack([p.G for p in self.prosumers])
+        Q = torch.stack([self.prosumers[n].q[m] for (m, n) in self.edge_list])
+        return torch.cat([D, G, Q])
 
     def unflatten(self, x: torch.Tensor):
-        """Sets D, G, Q from x of shape (dim,)."""
-        self.D = x[:self.N]
-        self.G = x[self.N: 2 * self.N]
-        self.Q = x[2 * self.N:]
+        """
+        Writes D, G, q back to each Prosumer from global vector x of shape (dim,).
+        """
+        for n in range(self.N):
+            self.prosumers[n].D = x[n]
+            self.prosumers[n].G = x[self.N + n]
+
+        for i, (m, n) in enumerate(self.edge_list):
+            self.prosumers[n].q[m] = x[2 * self.N + i]
 
     # ------------------------------------------------------------------
-    # Global pseudo-gradient F(x)
+    # Communication round
     # ------------------------------------------------------------------
 
-    def F(self):
+    def communicate(self):
         """
-        grad_D[n] = 2 * a_tilde[n] * (D[n] - D_star[n])
-        grad_G[n] = a[n] * G[n] + b[n]
-        grad_Q[i] = c_edge[i]   (constant w.r.t. Q)
+        Each prosumer sends its q decisions to all neighbors.
+        After this call, prosumer[n].q_received[m] = prosumer[m].q[n]
+        for all (m, n) edges.
 
-        Returns (N,), (N,), (|E|,)
+        This is the distributed communication step that precedes each
+        FB iteration.
         """
-        grad_D = 2.0 * self.a_tilde * (self.D - self.D_star)
-        grad_G = self.a * self.G + self.b
-        grad_Q = self.c_edge
-        return grad_D, grad_G, grad_Q
+        for (m, n) in self.edge_list:
+            # prosumer m sends q[n] to prosumer n's receive buffer
+            self.prosumers[m].send_q_to(self.prosumers[n])
 
     # ------------------------------------------------------------------
-    # Forward step
+    # Forward step  (y = x - gamma * F(x))
     # ------------------------------------------------------------------
 
-    def forward_step(self, gamma: float):
+    def forward_step(self, gamma: float) -> "EnergyNetwork":
         """
-        x_new = x - gamma * F(x).
-        Does not modify self. Returns a new EnergyNetwork.
+        Applies one gradient step on every prosumer without modifying self.
+        Returns a new EnergyNetwork with updated state.
         """
-        grad_D, grad_G, grad_Q = self.F()
-        new_net   = self.clone()
-        new_net.D = self.D - gamma * grad_D
-        new_net.G = self.G - gamma * grad_G
-        new_net.Q = self.Q - gamma * grad_Q
+        new_net = self.clone()
+        for n in range(self.N):
+            new_net.prosumers[n] = self.prosumers[n].forward_step(gamma)
         return new_net
 
     # ------------------------------------------------------------------
@@ -190,12 +155,11 @@ class EnergyNetwork:
 
     def project_exact(self):
         """
-        osqp, clarabel, prova altri solver
-        Exact projection via scipy SLSQP. Not differentiable.
-        Used during inference. Updates state in place.
+        Exact projection via scipy SLSQP (not differentiable).
+        Used during inference. Returns (x_proj, success) without modifying self.
         """
-        x0      = self.flatten()
-        x_orig  = x0.detach().clone()
+        x0     = self.flatten()
+        x_orig = x0.detach().clone()
         idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
 
         def objective(x):
@@ -206,6 +170,7 @@ class EnergyNetwork:
             x_t = torch.tensor(x, dtype=torch.float32)
             return (x_t - x_orig).numpy().astype(float)
 
+        # Balance equality constraints: D[n] = G[n] + G_res[n] + sum_m q_{mn}
         eq_constraints = []
         for n in range(self.N):
             q_idxs = [2 * self.N + idx_map[(m, n)] for m in self.neighbors[n]]
@@ -214,12 +179,13 @@ class EnergyNetwork:
                     return (
                         float(x[n_])
                         - float(x[self.N + n_])
-                        - float(self.G_res[n_])
+                        - float(self.prosumers[n_].G_res.item())
                         - sum(float(x[i]) for i in q_idxs_)
                     )
                 return eq_fn
             eq_constraints.append({"type": "eq", "fun": make_eq(n, q_idxs)})
 
+        # Reciprocity inequality constraints: q_{mn} + q_{nm} <= 0
         ineq_constraints = []
         visited = set()
         for (m, n) in self.edge_list:
@@ -236,9 +202,9 @@ class EnergyNetwork:
             ineq_constraints.append({"type": "ineq", "fun": make_ineq(i_mn, i_nm)})
 
         bounds = (
-            [(float(self.D_min[n]), float(self.D_max[n])) for n in range(self.N)]
-            + [(float(self.G_min[n]), float(self.G_max[n])) for n in range(self.N)]
-            + [(float("-inf"), float(self.k_edge[i])) for i in range(len(self.edge_list))]
+            [(float(p.D_min.item()), float(p.D_max.item())) for p in self.prosumers]
+            + [(float(p.G_min.item()), float(p.G_max.item())) for p in self.prosumers]
+            + [(float("-inf"), float(self.k_edge[i].item())) for i in range(len(self.edge_list))]
         )
 
         result = minimize(
@@ -252,35 +218,33 @@ class EnergyNetwork:
         )
 
         if not result.success:
-            #raise ValueError(f"Exact projection failed: {result.message}")
-            print(f"Warning: Exact projection failed")
+            print(f"Warning: Exact projection failed — {result.message}")
 
         x_proj = torch.tensor(result.x, dtype=torch.float32, device=self.device)
-        #self.unflatten(x_proj)
         return x_proj, result.success
-    
 
     def project_approx(self, n_iter: int = 30, lr: float = 0.1,
                        create_graph: bool = False):
         """
-        Approximate differentiable projection. Updates state in place.
+        Differentiable approximate projection. Updates prosumers in-place.
+        Used during training (create_graph=True enables backprop).
 
-        Parameters
-        ----------
-        n_iter       : number of gradient correction steps
-        lr           : step size for the correction
-        create_graph : keep computational graph for backprop through projection.
-                       Set True during training, False during inference.
+        Clamps D and G to their box constraints, then iteratively corrects
+        Q to satisfy the balance equality.
         """
-        self.D = torch.clamp(self.D, self.D_min, self.D_max)
-        self.G = torch.clamp(self.G, self.G_min, self.G_max)
+        # Clamp D and G locally for each prosumer
+        for p in self.prosumers:
+            p.D = torch.clamp(p.D, p.D_min, p.D_max)
+            p.G = torch.clamp(p.G, p.G_min, p.G_max)
 
-        Q = self.Q.detach().clone()
+        # Collect Q as a single tensor for differentiable correction
+        Q = torch.stack([self.prosumers[n].q[m] for (m, n) in self.edge_list])
+        Q = Q.detach().clone()
         Q.requires_grad_(True)
 
-        # D and G are detached — they are fixed during Q correction
-        D = self.D.detach()
-        G = self.G.detach()
+        D = torch.stack([p.D.detach() for p in self.prosumers])
+        G = torch.stack([p.G.detach() for p in self.prosumers])
+        G_res = torch.stack([p.G_res for p in self.prosumers])
 
         for _ in range(n_iter):
             eq_loss = torch.tensor(0.0, device=self.device)
@@ -289,39 +253,38 @@ class EnergyNetwork:
                     q_sum = Q[self.incoming_idx[n]].sum()
                 else:
                     q_sum = torch.tensor(0.0, device=self.device)
-                eq_loss = eq_loss + (
-                    D[n] - G[n] - self.G_res[n] - q_sum
-                ) ** 2
+                eq_loss = eq_loss + (D[n] - G[n] - G_res[n] - q_sum) ** 2
 
             if create_graph:
                 grads = torch.autograd.grad(eq_loss, Q)[0]
                 Q = Q - lr * grads
                 Q = torch.clamp(Q, -self.k_edge, self.k_edge)
 
-        self.Q = Q
-
+        # Write corrected Q back into each prosumer
+        for i, (m, n) in enumerate(self.edge_list):
+            self.prosumers[n].q[m] = Q[i]
 
     # ------------------------------------------------------------------
-    # PyG Data object for the GNN
+    # Global PyG Data (for centralised training)
     # ------------------------------------------------------------------
 
-    def get_pyg_data(self):
+    def get_pyg_data(self) -> Data:
         """
-        Build a PyG Data object with the current state.
+        Build a global PyG Data object with the full network state.
+        Used during centralised training where all node/edge data is available.
 
-        Node features x : (N, 2)  —  x[n] = [D_n, G_n]
-
-        Edge features edge_attr : (|E|, 1)
-            For edge i = (m->n): feature is Q[inverse_edge[(m,n)]] = q_{nm}
-            i.e. the trade decision of node m w.r.t. n, communicated by m to n.
+        Node features x : (N, 2)   — x[n] = [D_n, G_n]
+        Edge features   : (|E|, 1) — for edge (m->n): q_{nm} (m's decision sent to n)
+                                      = prosumers[m].q[n]
         """
-        x_node = torch.stack([self.D, self.G], dim=1)  # (N, 2)
+        x_node = torch.stack(
+            [torch.stack([p.D, p.G]) for p in self.prosumers]
+        )  # (N, 2)
 
-        inv_idx = torch.tensor(
-            [self.inverse_edge[(m, n)] for (m, n) in self.edge_list],
-            dtype=torch.long, device=self.device
-        )
-        edge_attr = self.Q[inv_idx].unsqueeze(1)  # (|E|, 1)
+        # For edge (m->n): feature is q_{nm} = prosumer m's trade w.r.t. n
+        edge_attr = torch.stack(
+            [self.prosumers[m].q[n].reshape(1) for (m, n) in self.edge_list]
+        )  # (|E|, 1)
 
         return Data(
             x=x_node,
@@ -329,186 +292,72 @@ class EnergyNetwork:
             edge_attr=edge_attr,
         )
 
-    def get_local_pyg_data(self, n: int):
-        """
-        Build a PyG Data object for node n and its local neighborhood only.
-
-        Used for distributed execution: node n uses only its own state
-        and the messages from neighbors to compute its perturbation.
-
-        Local graph re-indexing:
-            node 0       : prosumer n  (ego node)
-            node 1..k    : neighbors m1, m2, ... (sorted)
-
-        Node features x : (1+k, 2)
-            x[0]   = [D_n, G_n]
-            x[1+i] = [D_mi, G_mi]
-
-        Edge features edge_attr : (k, 1)
-            edge_attr[i] = q_{nm_i} = Q[inverse_edge[(m_i, n)]]
-            i.e. trade decision of neighbor m_i communicated to n.
-
-        Edge index: all edges point toward ego node 0.
-            edge_index = [[1, 2, ..., k],
-                          [0, 0, ..., 0]]
-
-        Returns
-        -------
-        data                  : torch_geometric.data.Data
-        local_edge_global_idx : list[int]  global edge_list indices of incoming
-                                edges (m->n), same order as edge_attr rows.
-                                Used to write back v_edges into the global Q.
-        """
-        neighbors_n = sorted(self.neighbors[n])
-        k = len(neighbors_n)
-
-        # Node features: ego + neighbors
-        ego_feat = torch.stack([self.D[n], self.G[n]]).unsqueeze(0)  # (1, 2)
-        if k > 0:
-            nbr_feat = torch.stack(
-                [torch.stack([self.D[m], self.G[m]]) for m in neighbors_n]
-            )  # (k, 2)
-            x_local = torch.cat([ego_feat, nbr_feat], dim=0)  # (1+k, 2)
-        else:
-            x_local = ego_feat
-
-        # Edge index: neighbors -> ego
-        if k > 0:
-            src_local = torch.arange(1, k + 1, dtype=torch.long, device=self.device)
-            dst_local = torch.zeros(k, dtype=torch.long, device=self.device)
-            edge_index_local = torch.stack([src_local, dst_local], dim=0)  # (2, k)
-        else:
-            edge_index_local = torch.zeros(2, 0, dtype=torch.long, device=self.device)
-
-        # Edge features: q_{nm} for each neighbor m
-        # local_edge_global_idx[i] = index of (n, m_i) in edge_list (inverse edge)
-        # The feature of edge (m_i -> n) is Q[inverse_edge[(m_i, n)]] = q_{n,m_i}
-        local_edge_global_idx = [
-            self.inverse_edge[(m, n)] for m in neighbors_n
-        ]
-
-        if k > 0:
-            # Q[inv_i] is a scalar tensor — reshape to (1,) then stack to (k, 1)
-            edge_attr_local = torch.stack(
-                [self.Q[inv_i].reshape(1) for inv_i in local_edge_global_idx]
-            )  # (k, 1)
-        else:
-            edge_attr_local = torch.zeros(0, 1, device=self.device)
-
-        data = Data(
-            x=x_local,
-            edge_index=edge_index_local,
-            edge_attr=edge_attr_local,
-            num_nodes=1 + k,
-        )
-        return data, local_edge_global_idx
-
-    # ------------------------------------------------------------------
-    # Apply GNN perturbation
-    # ------------------------------------------------------------------
-
-    def apply_perturbation_node(
-        self,
-        n: int,
-        v_node_n: torch.Tensor,
-        v_edge_n: torch.Tensor,
-    ):
-        """
-        Apply perturbations produced by node n to its own local state.
-
-        Called inside the distributed loop — each node n updates only
-        its own D[n], G[n], and Q[incoming edges of n].
-
-        Parameters
-        ----------
-        n        : node index
-        v_node_n : torch.Tensor (2,)  — [v_D_n, v_G_n]
-        v_edge_n : torch.Tensor (k,)  — perturbations for Q[incoming_idx[n]],
-                                        i.e. q_{mn} for each m in Omega_n (sorted)
-        """
-        self.D[n] = self.D[n] + v_node_n[0]
-        self.G[n] = self.G[n] + v_node_n[1]
-
-        for local_i, global_i in enumerate(self.incoming_idx[n]):
-            self.Q[global_i] = self.Q[global_i] + v_edge_n[local_i]
-
     # ------------------------------------------------------------------
     # Monitoring
     # ------------------------------------------------------------------
 
-    def cost(self):
-        """Global cost = sum of all local costs J_n(x_n)."""
-        node_cost = (
-            self.a_tilde * (self.D - self.D_star) ** 2
-            + 0.5 * self.a * self.G ** 2
-            + self.b * self.G
-        ).sum()
-        edge_cost = (self.c_edge * self.Q).sum()
-        return node_cost + edge_cost
+    def cost(self) -> torch.Tensor:
+        """Global cost = sum of all local costs J_n."""
+        return sum(p.local_cost() for p in self.prosumers)
 
-    def net_imports(self):
+    def net_imports(self) -> torch.Tensor:
         """Q_n = sum_{m in Omega_n} q_{mn} for each node. Returns (N,)."""
-        net_Q = torch.zeros(self.N, device=self.device)
-        for n in range(self.N):
-            if self.incoming_idx[n]:
-                idxs = torch.tensor(self.incoming_idx[n], device=self.device)
-                net_Q[n] = self.Q[idxs].sum()
-        return net_Q
+        return torch.stack([p.net_import() for p in self.prosumers])
 
-    def balance_violation(self):
-        """D[n] - G[n] - G_res[n] - net_imports[n]. Should be 0 at feasibility."""
-        return self.D - self.G - self.G_res - self.net_imports()
-    
+    def balance_violation(self) -> torch.Tensor:
+        """D[n] - G[n] - G_res[n] - net_import[n]. Should be 0 at feasibility."""
+        return torch.stack([p.balance_violation() for p in self.prosumers])
+
     def constraint_violation(self, tol: float = 1e-4) -> bool:
         """
-        Returns True if any constraint is violated beyond tol, False otherwise.
+        Returns True if any constraint is violated beyond tol.
 
-        Constraints checked:
-            1. D bounds     : D_min[n] <= D[n] <= D_max[n]
-            2. G bounds     : G_min[n] <= G[n] <= G_max[n]
-            3. Q capacity   : Q[i] <= k_edge[i]
-            4. Balance      : D[n] = G[n] + G_res[n] + sum_{m} q_{mn}
-            5. Reciprocity  : Q[idx(m,n)] + Q[idx(n,m)] <= 0
+        Checks: D/G bounds, Q capacity, balance equality, reciprocity.
         """
         idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
+        Q = self.flatten()[2 * self.N:]
 
-        # D and G bounds
-        if (self.D < self.D_min - tol).any(): return True
-        if (self.D > self.D_max + tol).any(): return True
-        if (self.G < self.G_min - tol).any(): return True
-        if (self.G > self.G_max + tol).any(): return True
+        for p in self.prosumers:
+            if p.D < p.D_min - tol or p.D > p.D_max + tol:
+                return True
+            if p.G < p.G_min - tol or p.G > p.G_max + tol:
+                return True
 
-        # Q capacity
-        if (self.Q > self.k_edge + tol).any(): return True
+        if (Q > self.k_edge + tol).any():
+            return True
 
-        # Balance equality
-        if (self.balance_violation().abs() > tol).any(): return True
+        if (self.balance_violation().abs() > tol).any():
+            return True
 
-        # Reciprocity
         visited = set()
         for (m, n) in self.edge_list:
             if (m, n) in visited or (n, m) not in idx_map:
                 continue
             visited.add((m, n))
             visited.add((n, m))
-            if float(self.Q[idx_map[(m,n)]]) + float(self.Q[idx_map[(n,m)]]) > tol:
+            q_mn = float(self.prosumers[n].q[m])
+            q_nm = float(self.prosumers[m].q[n])
+            if q_mn + q_nm > tol:
                 return True
 
         return False
+
+    def _init_state(self):
+        """Re-randomize state of all prosumers."""
+        for p in self.prosumers:
+            p._init_state()
 
     # ------------------------------------------------------------------
     # Clone
     # ------------------------------------------------------------------
 
-    def clone(self):
+    def clone(self) -> "EnergyNetwork":
         """
-        Copy with independent state (D, G, Q).
-        Fixed parameters and graph structure are shared (read-only).
+        Returns a new EnergyNetwork with independently cloned prosumers.
+        Graph structure and edge tensors are shared (read-only).
         """
-        new_net   = copy.copy(self)
-        new_net.D = self.D.clone()
-        new_net.G = self.G.clone()
-        new_net.Q = self.Q.clone()
+        new_net           = copy.copy(self)
+        new_net.prosumers = [p.clone() for p in self.prosumers]
         return new_net
 
     def __repr__(self):

@@ -1,13 +1,11 @@
 import os
 import torch
-import numpy as np
 from torch.utils.data import DataLoader
 
 from energy_network import EnergyNetwork
 from model import GNNUpdate
 from dataset import EnergyDataset
 from fb import learned_FB_step, pure_FB_step
-
 
 
 # ------------------------------------------------------------------
@@ -26,34 +24,40 @@ def meta_train(
     batch_size: int,
     device: torch.device,
     save_path: str = None,
-) -> GNNUpdate:
+) -> tuple:
     """
     Meta-train the GNNUpdate model by unrolling T steps of the learned
-    FB algorithm and minimizing the discounted distance to the GNE.
+    FB algorithm and minimising the fixed-point residual at each step.
 
-    Loss for one sample d:
+    Training is centralised: the GNN receives the full graph state at
+    every unrolled iteration (see learned_FB_step with training=True).
 
-        L_d = sum_{t=1}^{T}  alpha^{T-t} * ||x^t_d - x*_d||^2
+    Loss for one sample:
 
-    Total loss = mean over batch.
+        L = sum_{t=1}^{T}  || x^t - T(x^t) ||^2
+
+    where T(x) = proj(x - gamma * F(x)) is the unperturbed FB operator.
+    This drives each iterate toward the v-GNE without requiring x* explicitly.
 
     Parameters
     ----------
     model        : GNNUpdate to train
-    dataset      : EnergyDataset with (x0, x_star) pairs
-    net_template : EnergyNetwork used to reconstruct state from x0
+    dataset      : EnergyDataset (provides x0 tensors)
+    net_template : EnergyNetwork used to reconstruct network state from x0.
+                   Its graph structure and parameters are reused for every sample;
+                   only D, G, q are overwritten via unflatten(x0).
     gamma        : FB step size
-    T            : number of unrolled FB steps
+    T            : number of unrolled FB steps per sample
     epochs       : number of training epochs
     lr           : Adam learning rate
-    alpha        : discount factor in (0,1) for the loss
-    batch_size   : samples per gradient step
+    alpha        : discount factor (kept for API compatibility; loss is undiscounted)
+    batch_size   : number of samples per gradient update
     device       : torch.device
     save_path    : if given, save model weights here after training
 
     Returns
     -------
-    model : trained GNNUpdate
+    (model, loss_history)
     """
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer  = torch.optim.Adam(model.parameters(), lr=lr)
@@ -66,35 +70,31 @@ def meta_train(
         n_batches  = 0
 
         for batch in dataloader:
-            x0_batch     = batch["x0"].to(device)      # (batch_size, dim)
-            x_star_batch = batch["x_star"].to(device)  # (batch_size, dim)
+            x0_batch = batch["x0"].to(device)   # (batch_size, dim)
 
             optimizer.zero_grad()
-            batch_loss = torch.tensor(0.0, device=device)
+            batch_loss = torch.zeros(1, device=device)
 
             for b in range(x0_batch.shape[0]):
-                x0     = x0_batch[b]      # (dim,)
-                x_star = x_star_batch[b]  # (dim,)
+                x0 = x0_batch[b]   # (dim,)
 
-                # Initialize network from x0
+                # Reconstruct network state from x0.
+                # net_template provides the fixed graph and parameters;
+                # unflatten overwrites D, G, q for this sample.
                 net = net_template.clone()
                 net.unflatten(x0)
 
-                sample_loss = torch.tensor(0.0, device=device)
+                sample_loss = torch.zeros(1, device=device)
 
                 for t in range(T):
+                    # One learned FB step (centralised, differentiable projection)
                     net = learned_FB_step(net, model, t, gamma, training=True)
 
-                    # Discounted squared distance to GNE
-                    x_t = net.flatten()
-                    sample_loss = sample_loss + torch.sum(
-                        (x_t - pure_FB_step(net, gamma).flatten()) ** 2
-                    )
-                    """
-                    sample_loss = sample_loss + (alpha ** (T - t)) * torch.sum(
-                        (x_t - x_star) ** 2
-                    )
-                    """
+                    # Fixed-point residual: || x^t - T(x^t) ||^2
+                    # T(x^t) = pure FB step from the current iterate (no grad needed)
+                    x_t    = net.flatten()
+                    Tx_t   = pure_FB_step(net, gamma).flatten()
+                    sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
 
                 batch_loss = batch_loss + sample_loss
 
@@ -109,16 +109,16 @@ def meta_train(
             epoch_loss += batch_loss.item()
             n_batches  += 1
 
-        avg_loss = epoch_loss / n_batches
+        avg_loss = epoch_loss / max(n_batches, 1)
         loss_history.append(avg_loss)
-
         print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}")
 
-    # Save model if path provided
     if save_path is not None:
-        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
+        os.makedirs(
+            os.path.dirname(save_path) if os.path.dirname(save_path) else ".",
+            exist_ok=True
+        )
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
 
     return model, loss_history
-
