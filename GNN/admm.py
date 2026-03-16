@@ -100,17 +100,12 @@ def learned_ADMM_step(
     """
     One iteration of learned ADMM with GNN perturbation.
 
-    The GNN perturbation is applied AFTER the full ADMM iteration
-    (x-update → communicate → z-update → u-update), so that at the
-    moment of perturbation q and z are fully consistent. The perturbed
-    q is then seen by the x-update of the next iteration.
-
-    This avoids the coupling constraint violation that arises when
-    perturbing q before z-update: in that case q - z != 0 at convergence
-    due to the balance constraint in the x-update, causing q_{mn}+q_{nm}>0.
-
     Structure:
-        x-update → communicate → z-update → u-update → GNN(D,G,q,z,u) → perturb
+        x-update → communicate → GNN perturba (D,G,q) → communicate → z-update → u-update
+
+    The GNN sees [D, G, u_avg] as node features and [q, z] as edge features
+    (rich context on ADMM state), but only perturbs D, G, q — leaving z and u
+    to be managed by ADMM to preserve constraint feasibility.
 
     Training mode (training=True):
         - x-update: differentiable gradient step (admm_x_update_approx)
@@ -136,11 +131,6 @@ def learned_ADMM_step(
     net_new = net.clone()
 
     # ------------------------------------------------------------------
-    # Step 2 — communicate
-    # ------------------------------------------------------------------
-    _admm_communicate(net_new)
-    
-    # ------------------------------------------------------------------
     # Step 1 — x-update
     # ------------------------------------------------------------------
     if training:
@@ -150,36 +140,19 @@ def learned_ADMM_step(
         for p in net_new.prosumers:
             p.admm_x_update(rho)
 
-    
-
     # ------------------------------------------------------------------
-    # Step 3 — z-update
-    # ------------------------------------------------------------------
-    for p in net_new.prosumers:
-        p.admm_z_update()
-
-    # ------------------------------------------------------------------
-    # Step 4 — u-update
-    # ------------------------------------------------------------------
-    for p in net_new.prosumers:
-        p.admm_u_update()
-
-    # ------------------------------------------------------------------
-    # Step 5 — GNN perturbation (after full ADMM iteration)
-    # Snapshot pattern: perturbations computed from frozen post-update
-    # state, written to net_new — all nodes act simultaneously.
-    # Communicate first so q_received, z_received, u_received are
-    # up to date for the GNN input features.
+    # Step 2 — communicate, then GNN perturbation (snapshot pattern)
+    # q_received, z_received, u_received up to date for GNN input
     # ------------------------------------------------------------------
     _admm_communicate(net_new)
     snapshot = net_new.clone()
-
+    
+    """
     if training:
         data = snapshot.get_pyg_data(algorithm="admm")
         v_nodes, v_edges = model(data, t)
         # v_nodes: (N, 2)   — [v_D, v_G]
         # v_edges: (|E|, 1) — [v_q]
-        # z and u are used as GNN input context but not perturbed
 
         for n in range(net_new.N):
             v_D = v_nodes[n, 0]
@@ -189,15 +162,32 @@ def learned_ADMM_step(
             net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
 
     else:
-        for n in range(net_new.N):
-            data_n = snapshot.prosumers[n].get_local_pyg_data(algorithm="admm")
-            v_nodes_n, v_edges_n = model(data_n, t)
-            # v_nodes_n: (1+k, 2), v_edges_n: (k, 1)
+    """
+    for n in range(net_new.N):
+        data_n = snapshot.prosumers[n].get_local_pyg_data(algorithm="admm")
+        v_nodes_n, v_edges_n = model(data_n, t)
 
-            v_D = v_nodes_n[0, 0]
-            v_G = v_nodes_n[0, 1]
-            neighbors_n = sorted(net_new.neighbors[n])
-            v_q = {m: v_edges_n[i, 0] for i, m in enumerate(neighbors_n)}
-            net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
+        v_D = v_nodes_n[0, 0]
+        v_G = v_nodes_n[0, 1]
+        neighbors_n = sorted(net_new.neighbors[n])
+        v_q = {m: v_edges_n[i, 0] for i, m in enumerate(neighbors_n)}
+        net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
+
+    # ------------------------------------------------------------------
+    # Step 3 — communicate after perturbation
+    # ------------------------------------------------------------------
+    _admm_communicate(net_new)
+
+    # ------------------------------------------------------------------
+    # Step 4 — z-update
+    # ------------------------------------------------------------------
+    for p in net_new.prosumers:
+        p.admm_z_update()
+
+    # ------------------------------------------------------------------
+    # Step 5 — u-update
+    # ------------------------------------------------------------------
+    for p in net_new.prosumers:
+        p.admm_u_update()
 
     return net_new

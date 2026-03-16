@@ -78,7 +78,9 @@ def learned_FB_step(
     # ------------------------------------------------------------------
     snapshot = net_new.clone()
 
+    """
     if training:
+        snapshot.communicate()
         # --------------------------------------------------------------
         # Centralised: GNN sees the full graph at once.
         # Perturbations are then sliced back to each prosumer.
@@ -103,36 +105,39 @@ def learned_FB_step(
                 for i, m in zip(net_new.incoming_idx[n], neighbors_n)
             }
             net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
+        net_new.communicate()
 
     else:
-        # --------------------------------------------------------------
-        # Distributed: each prosumer queries the GNN with its local data.
-        # Before building local data, run the communication round so that
-        # each prosumer's q_received buffer is up to date.
-        # --------------------------------------------------------------
-        snapshot.communicate()
+    """
+    # --------------------------------------------------------------
+    # Distributed: each prosumer queries the GNN with its local data.
+    # Before building local data, run the communication round so that
+    # each prosumer's q_received buffer is up to date.
+    # --------------------------------------------------------------
+    snapshot.communicate()
 
-        for n in range(net_new.N):
-            # Node n builds its local subgraph from its own state and the
-            # q values received from neighbors — no global data required.
-            data_n = snapshot.prosumers[n].get_local_pyg_data()
+    for n in range(net_new.N):
+        # Node n builds its local subgraph from its own state and the
+        # q values received from neighbors — no global data required.
+        data_n = snapshot.prosumers[n].get_local_pyg_data()
 
-            # GNN returns perturbations for the local subgraph:
-            #   v_nodes : (1+k, 2) — v_nodes[0] = (v_D_n, v_G_n) for ego node
-            #   v_edges : (k,   1) — v_edges[i] = perturbation for q[neighbors_n[i]]
-            v_nodes_n, v_edges_n = model(data_n, t)
+        # GNN returns perturbations for the local subgraph:
+        #   v_nodes : (1+k, 2) — v_nodes[0] = (v_D_n, v_G_n) for ego node
+        #   v_edges : (k,   1) — v_edges[i] = perturbation for q[neighbors_n[i]]
+        v_nodes_n, v_edges_n = model(data_n, t)
 
-            v_D = v_nodes_n[0, 0]
-            v_G = v_nodes_n[0, 1]
+        v_D = v_nodes_n[0, 0]
+        v_G = v_nodes_n[0, 1]
 
-            neighbors_n = sorted(net_new.neighbors[n])
-            v_q = {
-                m: v_edges_n[i, 0]
-                for i, m in enumerate(neighbors_n)
-            }
+        neighbors_n = sorted(net_new.neighbors[n])
+        v_q = {
+            m: v_edges_n[i, 0]
+            for i, m in enumerate(neighbors_n)
+        }
 
-            # Write perturbation to net_new (not to snapshot)
-            net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
+        # Write perturbation to net_new (not to snapshot)
+        net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
+    net_new.communicate()
 
     # ------------------------------------------------------------------
     # Re-project after perturbation

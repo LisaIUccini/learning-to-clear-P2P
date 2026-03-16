@@ -3,6 +3,7 @@ import torch
 import cvxpy as cp
 
 
+
 class Prosumer:
     """
     Single prosumer in a peer-to-peer energy market.
@@ -376,7 +377,7 @@ class Prosumer:
         for m in self.neighbors:
             self.q[m] = torch.clamp(
                 self.q[m] - step_q * grad_q[m],
-                -self.k[m], self.k[m]
+                max= self.k[m]
             )
         return self
 
@@ -401,10 +402,7 @@ class Prosumer:
             a = self.q[m]          + self.u[m]
             b = self.q_received[m] + self.u_received[m]
             s = a + b
-            if s <= 0:
-                self.z[m] = a.clone()
-            else:
-                self.z[m] = a - s / 2.0
+            self.z[m] = a - torch.clamp(s, min=0.0) / 2.0
 
     def admm_u_update(self):
         """

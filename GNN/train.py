@@ -80,6 +80,7 @@ def meta_train(
 
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer  = torch.optim.Adam(model.parameters(), lr=lr)
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-5)
 
     model.train()
     loss_history = []
@@ -105,6 +106,7 @@ def meta_train(
                     net.admm_reset()
 
                 sample_loss = torch.zeros(1, device=device)
+                
 
                 for t in range(T):
 
@@ -126,6 +128,7 @@ def meta_train(
                             for n in range(net.N)
                         }
 
+                        """
                         # Learned ADMM step (centralised, differentiable)
                         net = learned_ADMM_step(net, model, t, rho, training=True)
 
@@ -145,16 +148,17 @@ def meta_train(
                             for m in net.prosumers[n].neighbors
                         )
 
-                        sample_loss = sample_loss + r + s
+                        sample_loss = sample_loss + (r + s)
                         """
+                        
                         # Learned ADMM step (centralised, differentiable)
                         net = learned_ADMM_step(net, model, t, rho, training=True)
 
                         # Fixed-point residual: || x^t - T(x^t) ||^2
                         x_t  = net.flatten()
-                        Tx_t = pure_ADMM_step(net, rho).flatten()
+                        Tx_t = pure_ADMM_step(net, rho).flatten().detach()
                         sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
-                        """
+                        
 
                 batch_loss = batch_loss + sample_loss
 
@@ -169,8 +173,10 @@ def meta_train(
 
         avg_loss = epoch_loss / max(n_batches, 1)
         loss_history.append(avg_loss)
-        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}")
-
+        #scheduler.step(avg_loss)
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  lr: {current_lr:.2e}")
+        
     if save_path is not None:
         os.makedirs(
             os.path.dirname(save_path) if os.path.dirname(save_path) else ".",

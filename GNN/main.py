@@ -27,7 +27,7 @@ from model import GNNUpdate
 from dataset import EnergyDataset
 from train import meta_train
 from inference import run_comparison
-from plot import plot_results, plot_results_std, plot_fig
+from plot import plot_results, plot_results_std, plot_fig, plot_loss
 
 
 def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
@@ -56,20 +56,20 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         10: init_parameters.initN10,
         30: init_parameters.initN30,
     }
-    if N_choice not in init_fn:
-        raise ValueError(f"N must be 3, 10, or 30. Got {N_choice}.")
+    #if N_choice not in init_fn:
+        #raise ValueError(f"N must be 3, 10, or 30. Got {N_choice}.")
 
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 200
+    num_samples = 50
     batch_size  = 1
-    T           = 30        # unrolling steps
+    T           = 20        # unrolling steps
     epochs      = 50
     lr          = 1e-3
     alpha       = 0.95      # kept for API compatibility
-    d_h         = 12        # GNN hidden dimension
-    rho_gnn     = 0.7       # GNN summability decay (rho in GNNUpdate)
+    d_h         = 32        # GNN hidden dimension
+    rho_gnn     = 0.7     # GNN summability decay (rho in GNNUpdate)
     rho_admm    = 5      # ADMM penalty parameter
 
     # Build network for training (needed before model construction)
@@ -135,6 +135,13 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
             **algo_kwargs,
         )
 
+        save_path_loss_h = (
+        f"checkpoints/{algorithm}_N{N_train}_T{T}_e{epochs}"
+        f"_s{num_samples}_loss_history_rho{rho_gnn}_lr{lr}.png"
+        )
+        plot_loss(loss_history, save_path_loss_h)
+    
+
     # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
@@ -151,11 +158,13 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         print(f"\nTest instance {i+1}/{n_test}:")
 
         net_test, gamma_test, max_iter_test, tol_test = init_fn[N_choice](device=device)
-
+        #net_test, gamma_test, max_iter_test, tol_test = init_parameters.init_parameters_graph(N_choice, topology="star", sparsity=0.2, seed=42, device=device)
+        """
         init_parameters.plot_graph(
             neighbors = net_test.neighbors,
             save_path = f"figures/N{net_test.N}_graph_{i+1}.png",
         )
+        """
 
         net_init = net_test.clone()
         net_init._init_state()
@@ -186,8 +195,8 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
               f"{results['pure'].constraint_violation()}")
         print(f"{algorithm.upper()} + GNN    — constraint violation: "
               f"{results['learned'].constraint_violation()}")
-        plot_fig(results['pure'], save_path=f"figures/{algorithm}_N{N_choice}_graph_result_pure_{i+1}.png")
-        plot_fig(results['learned'], save_path=f"figures/{algorithm}_N{N_choice}_graph_result_learned_{i+1}.png")
+        #plot_fig(results['pure'], save_path=f"figures/{algorithm}_N{N_choice}_graph_result_pure_{i+1}.png")
+        #plot_fig(results['learned'], save_path=f"figures/{algorithm}_N{N_choice}_graph_result_learned_{i+1}.png")
         
     # ------------------------------------------------------------------
     # Aggregate plot
@@ -245,15 +254,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB/ADMM")
 
     parser.add_argument(
-        "--N", type=int, default=3, choices=[3, 10, 30],
+        "--N", type=int, default=10, choices=[3, 10, 30],
         help="Network size for inference (default: 3)"
     )
     parser.add_argument(
-        "--N_train", type=int, default=3, choices=[3, 10, 30],
+        "--N_train", type=int, default=10, choices=[3, 10, 30],
         help="Network size for training (default: 3)"
     )
     parser.add_argument(
-        "--load", action="store_true", default=False,
+        "--load", action="store_true", default=True,
         help="Load pre-trained model instead of training"
     )
     parser.add_argument(

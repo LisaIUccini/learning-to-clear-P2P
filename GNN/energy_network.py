@@ -66,6 +66,12 @@ class EnergyNetwork:
 
         self.dim = 2 * self.N + len(self.edge_list)
 
+        """
+        for (m, n) in self.edge_list:
+            self.prosumers[m].send_q_to(self.prosumers[n])
+            self.prosumers[m].send_z_to(self.prosumers[n])
+            self.prosumers[m].send_u_to(self.prosumers[n])
+        """
     # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------

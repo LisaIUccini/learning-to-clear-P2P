@@ -7,6 +7,45 @@ import matplotlib.patheffects as pe
  
 from energy_network import EnergyNetwork
 
+
+def plot_loss(loss_history: dict, save_path: str = None):
+    """
+    Plot residuals for pure vs learned algorithm.
+
+    Parameters
+    ----------
+    results   : output of run_comparison (or averaged results dict)
+    save_path : if given, save figure here; otherwise show interactively
+    """
+    plt.style.use("seaborn-v0_8-pastel")
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    iters = range(len(loss_history))
+
+    ax.semilogy(iters, loss_history,    marker="o", label="loss history")
+    
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Residual")
+    ax.set_title("Loss History Training")
+    ax.legend()
+
+    plt.xticks(range(len(loss_history)))
+    ax.grid(True, which="both", alpha=0.3)
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        os.makedirs(
+            os.path.dirname(save_path) if os.path.dirname(save_path) else ".",
+            exist_ok=True
+        )
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
+
 # ------------------------------------------------------------------
 # Plotting
 # ------------------------------------------------------------------
