@@ -85,6 +85,43 @@ def meta_train(
     model.train()
     loss_history = []
 
+    # ------------------------------------------------------------------
+    # Baseline: compute the same loss with pure algorithm (no GNN)
+    # This gives the expected loss if perturbations were zero.
+    # Training loss should go BELOW this value to confirm the GNN helps.
+    # ------------------------------------------------------------------
+    with torch.no_grad():
+        baseline_total = 0.0
+        n_baseline = 0
+        for batch in dataloader:
+            x0_batch = batch["x0"].to(device)
+            for b in range(x0_batch.shape[0]):
+                x0 = x0_batch[b]
+                net_b = net_template.clone()
+                net_b.unflatten(x0)
+                if algorithm == "admm":
+                    net_b.admm_reset()
+ 
+                sample_baseline = 0.0
+                for t in range(T):
+                    if algorithm == "fb":
+                        x_t  = net_b.flatten()
+                        Tx_t = pure_FB_step(net_b, gamma).flatten()
+                        sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
+                        net_b = pure_FB_step(net_b, gamma)
+                    else:  # admm
+                        x_t  = net_b.flatten()
+                        Tx_t = pure_ADMM_step(net_b, rho).flatten()
+                        sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
+                        net_b = pure_ADMM_step(net_b, rho)
+ 
+                baseline_total += sample_baseline
+                n_baseline += 1
+ 
+        baseline_avg = baseline_total / max(n_baseline, 1)
+        print(f"\nBaseline loss (pure {algorithm.upper()}, no GNN): {baseline_avg:.6f}")
+        print(f"Training loss should go BELOW this value.\n")
+
     for epoch in range(epochs):
         epoch_loss = 0.0
         n_batches  = 0
@@ -120,7 +157,7 @@ def meta_train(
                         sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
 
                     else:  # admm
-                        
+                        """
                         # Save z before the step for dual residual computation
                         z_prev = {
                             n: {m: net.prosumers[n].z[m].clone().detach()
@@ -128,7 +165,7 @@ def meta_train(
                             for n in range(net.N)
                         }
 
-                        """
+                        
                         # Learned ADMM step (centralised, differentiable)
                         net = learned_ADMM_step(net, model, t, rho, training=True)
 

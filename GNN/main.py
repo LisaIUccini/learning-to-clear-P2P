@@ -62,15 +62,15 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 50
+    num_samples = 100
     batch_size  = 1
-    T           = 20        # unrolling steps
-    epochs      = 50
+    T           = 15        # unrolling steps
+    epochs      = 150
     lr          = 1e-3
     alpha       = 0.95      # kept for API compatibility
-    d_h         = 32        # GNN hidden dimension
-    rho_gnn     = 0.7     # GNN summability decay (rho in GNNUpdate)
-    rho_admm    = 5      # ADMM penalty parameter
+    d_h         = 12        # GNN hidden dimension
+    rho_gnn     = 0.3     # GNN summability decay (rho in GNNUpdate)
+    rho_admm    = 5     # ADMM penalty parameter
 
     # Build network for training (needed before model construction)
     net_train, gamma, max_iter, tol = init_fn[N_train](device=device)
@@ -158,7 +158,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         print(f"\nTest instance {i+1}/{n_test}:")
 
         net_test, gamma_test, max_iter_test, tol_test = init_fn[N_choice](device=device)
-        #net_test, gamma_test, max_iter_test, tol_test = init_parameters.init_parameters_graph(N_choice, topology="star", sparsity=0.2, seed=42, device=device)
+        #net_test, gamma_test, max_iter_test, tol_test = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.7, seed=42, device=device)
         """
         init_parameters.plot_graph(
             neighbors = net_test.neighbors,

@@ -8,7 +8,7 @@ from model import GNNUpdate
 # ADMM communication round
 # ------------------------------------------------------------------
 
-def _admm_communicate(net: EnergyNetwork):
+def _admm_communicate(net: EnergyNetwork, training: bool = False):
     """
     Communication round for ADMM: each prosumer sends q, z, u to each neighbor.
 
@@ -19,11 +19,13 @@ def _admm_communicate(net: EnergyNetwork):
 
     q_received and u_received are needed for the z-update.
     z_received is kept for monitoring / convergence checking.
+
+    If training=True, preserves gradient flow between nodes.
     """
     for (m, n) in net.edge_list:
-        net.prosumers[m].send_q_to(net.prosumers[n])
-        net.prosumers[m].send_z_to(net.prosumers[n])
-        net.prosumers[m].send_u_to(net.prosumers[n])
+        net.prosumers[m].send_q_to(net.prosumers[n], training=training)
+        net.prosumers[m].send_z_to(net.prosumers[n], training=training)
+        net.prosumers[m].send_u_to(net.prosumers[n], training=training)
 
 
 # ------------------------------------------------------------------
@@ -70,7 +72,8 @@ def pure_ADMM_step(net: EnergyNetwork, rho: float) -> EnergyNetwork:
 
     # Step 1 — x-update (local QP, parallel)
     for p in net_new.prosumers:
-        p.admm_x_update(rho)
+        #p.admm_x_update(rho)
+        p.admm_x_update_diff(rho)
 
     # Step 2 — communicate q, z, u to neighbors
     _admm_communicate(net_new)
@@ -135,16 +138,18 @@ def learned_ADMM_step(
     # ------------------------------------------------------------------
     if training:
         for p in net_new.prosumers:
-            p.admm_x_update_approx(rho)
+            #p.admm_x_update_approx(rho)
+            p.admm_x_update_diff(rho)
     else:
         for p in net_new.prosumers:
-            p.admm_x_update(rho)
+            #p.admm_x_update(rho)
+            p.admm_x_update_diff(rho)
 
     # ------------------------------------------------------------------
     # Step 2 — communicate, then GNN perturbation (snapshot pattern)
     # q_received, z_received, u_received up to date for GNN input
     # ------------------------------------------------------------------
-    _admm_communicate(net_new)
+    _admm_communicate(net_new, training=training)
     snapshot = net_new.clone()
     
     """
@@ -176,7 +181,7 @@ def learned_ADMM_step(
     # ------------------------------------------------------------------
     # Step 3 — communicate after perturbation
     # ------------------------------------------------------------------
-    _admm_communicate(net_new)
+    _admm_communicate(net_new, training=training)
 
     # ------------------------------------------------------------------
     # Step 4 — z-update

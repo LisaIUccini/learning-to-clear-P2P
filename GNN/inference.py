@@ -111,7 +111,7 @@ def run_comparison(
                 ).item()
 
             else:  # admm
-                """
+                
                 # ----------------------------------------------------------
                 # ADMM: pure step
                 # ----------------------------------------------------------
@@ -181,7 +181,7 @@ def run_comparison(
                     for m in net_learned_new.prosumers[n].neighbors
                 )
                 res_learned = float(r_learned + s_learned)
-                
+                """
 
             residuals_pure.append(res_pure)
             residuals_learned.append(res_learned)
