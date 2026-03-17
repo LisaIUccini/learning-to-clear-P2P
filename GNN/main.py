@@ -62,15 +62,15 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 100
+    num_samples = 50
     batch_size  = 1
-    T           = 15        # unrolling steps
-    epochs      = 150
-    lr          = 1e-3
+    T           = 30        # unrolling steps
+    epochs      = 20
+    lr          = 1e-4
     alpha       = 0.95      # kept for API compatibility
     d_h         = 12        # GNN hidden dimension
-    rho_gnn     = 0.3     # GNN summability decay (rho in GNNUpdate)
-    rho_admm    = 5     # ADMM penalty parameter
+    rho_gnn     = 0.5     # GNN summability decay (rho in GNNUpdate)
+    rho_admm    = 3     # ADMM penalty parameter
 
     # Build network for training (needed before model construction)
     net_train, gamma, max_iter, tol = init_fn[N_train](device=device)
@@ -254,15 +254,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB/ADMM")
 
     parser.add_argument(
-        "--N", type=int, default=10, choices=[3, 10, 30],
+        "--N", type=int, default=3, choices=[3, 10, 30],
         help="Network size for inference (default: 3)"
     )
     parser.add_argument(
-        "--N_train", type=int, default=10, choices=[3, 10, 30],
+        "--N_train", type=int, default=3, choices=[3, 10, 30],
         help="Network size for training (default: 3)"
     )
     parser.add_argument(
-        "--load", action="store_true", default=True,
+        "--load", action="store_true", default=False,
         help="Load pre-trained model instead of training"
     )
     parser.add_argument(

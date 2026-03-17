@@ -105,15 +105,42 @@ def meta_train(
                 sample_baseline = 0.0
                 for t in range(T):
                     if algorithm == "fb":
+                        net = learned_FB_step(net, model, t, gamma, training=True)
                         x_t  = net_b.flatten()
                         Tx_t = pure_FB_step(net_b, gamma).flatten()
                         sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
-                        net_b = pure_FB_step(net_b, gamma)
+                        #net_b = pure_FB_step(net_b, gamma)
                     else:  # admm
+                        """
+                        net_b = pure_ADMM_step(net_b, rho)
                         x_t  = net_b.flatten()
                         Tx_t = pure_ADMM_step(net_b, rho).flatten()
                         sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
+                        #net_b = pure_ADMM_step(net_b, rho)
+                        """
+                        # Save z before step for dual residual
+                        z_prev_b = {
+                            n: {m: net_b.prosumers[n].z[m].clone()
+                                for m in net_b.prosumers[n].neighbors}
+                            for n in range(net_b.N)
+                        }
+ 
+                        # Advance state
                         net_b = pure_ADMM_step(net_b, rho)
+ 
+                        # Primal residual: r = sum (q - z)^2
+                        r_b = sum(
+                            (p.q[m] - p.z[m]) ** 2
+                            for p in net_b.prosumers
+                            for m in p.neighbors
+                        )
+                        # Dual residual: s = rho^2 * sum (z^t - z^{t-1})^2
+                        s_b = rho ** 2 * sum(
+                            (net_b.prosumers[n].z[m] - z_prev_b[n][m]) ** 2
+                            for n in range(net_b.N)
+                            for m in net_b.prosumers[n].neighbors
+                        )
+                        sample_baseline += float(r_b + s_b)
  
                 baseline_total += sample_baseline
                 n_baseline += 1
@@ -157,7 +184,7 @@ def meta_train(
                         sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
 
                     else:  # admm
-                        """
+                        
                         # Save z before the step for dual residual computation
                         z_prev = {
                             n: {m: net.prosumers[n].z[m].clone().detach()
@@ -195,7 +222,7 @@ def meta_train(
                         x_t  = net.flatten()
                         Tx_t = pure_ADMM_step(net, rho).flatten().detach()
                         sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
-                        
+                        """
 
                 batch_loss = batch_loss + sample_loss
 

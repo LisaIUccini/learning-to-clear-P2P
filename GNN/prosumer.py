@@ -1,7 +1,6 @@
 import copy
 import torch
 import cvxpy as cp
-
 from cvxpylayers.torch import CvxpyLayer
 
 
@@ -382,33 +381,33 @@ class Prosumer:
                 max= self.k[m]
             )
         return self
-    
+
     # ------------------------------------------------------------------
     # ADMM x-update (differentiable, exact via cvxpylayers)
     # ------------------------------------------------------------------
- 
+    
     def _build_cvxpy_layer(self, rho_val: float):
         """
         Build a CvxpyLayer for the ADMM x-update QP.
         Called once and cached — the problem structure is fixed,
         only the parameter values change between calls.
- 
+
         The QP solves:
             min  J_n(D,G,q) + (rho/2) sum_m ||q[m] - target[m]||^2
             s.t. D_min <= D <= D_max
                  G_min <= G <= G_max
                  q[m] <= k[m]  for all m
                  D - G - G_res - sum(q) = 0
- 
+
         Parameters (differentiable):
             target : (k,) — z[m] - u[m] for each neighbor m
- 
+
         The solution x* is differentiable w.r.t. target via implicit
         differentiation of the KKT conditions (handled by cvxpylayers).
         """
         k = len(self.neighbors)
         dim = 2 + k
- 
+
         # Fixed scalar values
         D_min_val   = float(self.D_min.item())
         D_max_val   = float(self.D_max.item())
@@ -421,30 +420,30 @@ class Prosumer:
         D_star_val  = float(self.D_star.item())
         c_vals      = [float(self.c[m].item()) for m in self.neighbors]
         k_caps      = [float(self.k[m].item()) for m in self.neighbors]
- 
+
         # cvxpy variable and parameter
         x = cp.Variable(dim)
         target = cp.Parameter(k)  # z[m] - u[m], differentiable
- 
+
         D = x[0]
         G = x[1]
- 
+
         # Objective: J_n + ADMM penalty
         node_cost  = a_tilde_val * cp.square(D - D_star_val) + \
                      0.5 * a_val * cp.square(G) + b_val * G
         trade_cost = cp.sum([c_vals[i] * x[2 + i] for i in range(k)]) \
                      if k > 0 else 0
         J_n = node_cost + trade_cost
- 
+
         if k > 0:
             penalty = (rho_val / 2.0) * cp.sum(
                 [cp.square(x[2 + i] - target[i]) for i in range(k)]
             )
         else:
             penalty = 0
- 
+
         objective = cp.Minimize(J_n + penalty)
- 
+
         # Constraints
         constraints = []
         constraints += [D >= D_min_val, D <= D_max_val]
@@ -455,45 +454,48 @@ class Prosumer:
             constraints.append(D - G - G_res_val - cp.sum(x[2:]) == 0)
         else:
             constraints.append(D - G == G_res_val)
- 
+
         problem = cp.Problem(objective, constraints)
- 
+
         # Build CvxpyLayer: target is the differentiable parameter
         self._cvxpy_layer = CvxpyLayer(
             problem, parameters=[target], variables=[x]
         )
         self._cvxpy_layer_rho = rho_val
- 
+
     def admm_x_update_diff(self, rho: float) -> "Prosumer":
         """
         ADMM x-update: exact QP solution, differentiable via cvxpylayers.
- 
+
         Solves the same QP as admm_x_update but gradients flow through
         the solution w.r.t. the ADMM target (z[m] - u[m]).
- 
+
         The CvxpyLayer is built once and cached. If rho changes,
         the layer is rebuilt.
         """
         k = len(self.neighbors)
- 
+
         # Build/rebuild layer if needed
         if not hasattr(self, '_cvxpy_layer') or self._cvxpy_layer_rho != rho:
             self._build_cvxpy_layer(rho)
- 
+
         # Construct the differentiable parameter: target[i] = z[m_i] - u[m_i]
         target_vals = torch.stack([
             self.z[m] - self.u[m] for m in self.neighbors
-        ]) if k > 0 else torch.zeros(0, device=self.device)
- 
+        ]).double() if k > 0 else torch.zeros(0, dtype=torch.float64, device=self.device)
+
         # Solve — output is differentiable w.r.t. target_vals
         sol, = self._cvxpy_layer(target_vals, solver_args={'solve_method': 'SCS'})
- 
+
+        # cvxpylayers returns float64, convert back to float32
+        sol = sol.float()
+
         # Unpack solution back into prosumer state
         self.D = sol[0]
         self.G = sol[1]
         for i, m in enumerate(self.neighbors):
             self.q[m] = sol[2 + i]
- 
+
         return self
 
     def admm_z_update(self):
