@@ -1,7 +1,9 @@
 import torch
 from torch.utils.data import Dataset
-
+import numpy as np
 from energy_network import EnergyNetwork
+from init_parameters import init_parameters_graph
+
 
 
 class EnergyDataset(Dataset):
@@ -70,3 +72,94 @@ class EnergyDataset(Dataset):
             'x0' : torch.Tensor (dim,) — initial flattened state for this sample
         """
         return {"x0": self.x0_data[idx]}
+    
+
+ 
+class MultiTopologyDataset(Dataset):
+    """
+    Dataset with diverse graph topologies for robust GNN training.
+ 
+    Each sample is a different problem instance with its own graph
+    topology and parameters. This forces the GNN to learn perturbations
+    that generalise across graph structures.
+ 
+    Topologies are drawn uniformly from the provided list.
+    Each sample stores its own net_template (graph + parameters) and x0.
+ 
+    Parameters
+    ----------
+    num_samples    : total number of problem instances
+    N              : number of prosumers per instance
+    topologies     : list of topologies to sample from
+    sparsity_range : (min, max) sparsity for "sparse" topology
+    device         : torch.device
+    seed           : random seed for reproducibility
+    """
+ 
+    def __init__(
+        self,
+        num_samples: int,
+        N: int = 5,
+        topologies: list = None,
+        sparsity_range: tuple = (0.2, 0.8),
+        device: torch.device = torch.device("cpu"),
+        seed: int = 42,
+    ):
+        super().__init__()
+ 
+        if topologies is None:
+            topologies = ["complete", "tree", "sparse"]
+ 
+        self.num_samples = num_samples
+        self.device      = device
+        self.N           = N
+ 
+        rng = np.random.default_rng(seed)
+ 
+        self.samples = []  # list of (net_template, x0)
+ 
+        print(f"Generating {num_samples} multi-topology samples (N={N})...")
+ 
+        topo_counts = {t: 0 for t in topologies}
+ 
+        for i in range(num_samples):
+            topo = topologies[rng.integers(len(topologies))]
+            topo_counts[topo] += 1
+ 
+            sparsity = float(rng.uniform(*sparsity_range)) if topo == "sparse" else 0.5
+ 
+            sample_seed = int(rng.integers(1_000_000))
+            net, _, _, _, rho_admm = init_parameters_graph(
+                N=N,
+                topology=topo,
+                seed=sample_seed,
+                sparsity=sparsity,
+                device=device,
+            )
+ 
+            # Randomise initial state
+            net._init_state()
+            x0 = net.flatten().detach().clone()
+ 
+            self.samples.append((net, x0, rho_admm))
+ 
+            if (i + 1) % 10 == 0 or (i + 1) == num_samples:
+                print(f"  {i+1}/{num_samples} samples generated")
+ 
+        print(f"Dataset generation complete.")
+        print(f"  Topology distribution: {topo_counts}")
+ 
+    def __len__(self):
+        return self.num_samples
+ 
+    def __getitem__(self, idx):
+        """
+        Returns
+        -------
+        dict with:
+            'net_template' : EnergyNetwork — graph + parameters for this sample
+            'x0'           : torch.Tensor  — initial flattened state
+            'rho_admm'     : float         — ADMM penalty for this topology
+        """
+        net, x0, rho_admm = self.samples[idx]
+        return {"net_template": net, "x0": x0, "rho_admm": rho_admm}

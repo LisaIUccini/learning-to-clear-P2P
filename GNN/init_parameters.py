@@ -6,6 +6,7 @@ from prosumer import Prosumer
 from energy_network import EnergyNetwork
 
 tol = 1e-6
+max_iter = 350
 # ------------------------------------------------------------------
 # Graph builder  (invariato)
 # ------------------------------------------------------------------
@@ -205,7 +206,7 @@ def initN3(device: torch.device = torch.device("cpu")) -> tuple:
 
     net = build_network(N, neighbors, D_min, D_max, G_min, G_max, G_res,
                         a_tilde, a, b, D_star, c, k, device)
-    return net, 0.1, 100, tol
+    return net, 0.1, 100, tol, 3.0  # rho_admm=3 for N=3 complete
 
 
 def initN10(device: torch.device = torch.device("cpu")) -> tuple:
@@ -243,7 +244,7 @@ def initN10(device: torch.device = torch.device("cpu")) -> tuple:
 
     net = build_network(N, neighbors, D_min, D_max, G_min, G_max, G_res,
                         a_tilde, a, b, D_star, c, k, device)
-    return net, 0.1, 100, tol
+    return net, 0.1, 100, tol, 5.0  # rho_admm=5 for N=10 star-like
 
 
 def initN30(device: torch.device = torch.device("cpu")) -> tuple:
@@ -316,7 +317,41 @@ def initN30(device: torch.device = torch.device("cpu")) -> tuple:
 
     net = build_network(N, neighbors, D_min, D_max, G_min, G_max, G_res,
                         a_tilde, a, b, D_star, c, k, device)
-    return net, 0.1, 300, tol
+    return net, 0.1, 300, tol, 12.0  # rho_admm=12 for N=30 tree
+
+
+# ------------------------------------------------------------------
+# ADMM penalty heuristic
+# ------------------------------------------------------------------
+
+def compute_rho_admm(neighbors: dict, base: float = 2.0, rho_min: float = 2.0) -> float:
+    """
+    Compute a reasonable ADMM penalty parameter based on graph structure.
+
+    Heuristic: rho = base * sqrt(avg_degree), clamped to [rho_min, inf).
+
+    Typical values (base=2.0):
+        - tree     (avg_degree ~ 2)  : rho ~ 2.8
+        - sparse   (avg_degree ~ 3-4): rho ~ 3.5 - 4.0
+        - complete N=3  (avg_degree=2): rho ~ 2.8
+        - complete N=5  (avg_degree=4): rho ~ 4.0
+        - complete N=10 (avg_degree=9): rho ~ 6.0
+
+    Parameters
+    ----------
+    neighbors : dict {n: list[int]} — graph adjacency
+    base      : scaling coefficient (increase if ADMM converges too slowly)
+    rho_min   : minimum rho value
+
+    Returns
+    -------
+    rho_admm : float
+    """
+    N = len(neighbors)
+    total_degree = sum(len(nbrs) for nbrs in neighbors.values())
+    avg_degree   = total_degree / N
+    rho = round(base * float(np.sqrt(avg_degree)), 1)
+    return max(rho, rho_min)
 
 
 # ------------------------------------------------------------------
@@ -335,7 +370,7 @@ def init_parameters_graph(
 
     Returns
     -------
-    (net, gamma, max_iter, tol)
+    (net, gamma, max_iter, tol, rho_admm)
     """
     rng       = np.random.default_rng(seed)
     neighbors = build_graph(N, topology, seed, sparsity)
@@ -372,7 +407,10 @@ def init_parameters_graph(
 
     net = build_network(N, neighbors, D_min, D_max, G_min, G_max, G_res,
                         a_tilde, a, b, D_star, c, k, device)
-    return net, 0.1, 50, tol
+
+    rho_admm = compute_rho_admm(neighbors)
+
+    return net, 0.1, max_iter, tol, rho_admm
 
 
 # ------------------------------------------------------------------

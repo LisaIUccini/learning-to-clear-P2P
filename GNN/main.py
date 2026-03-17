@@ -24,8 +24,8 @@ import numpy as np
 
 import init_parameters
 from model import GNNUpdate
-from dataset import EnergyDataset
-from train import meta_train
+from dataset import EnergyDataset, MultiTopologyDataset
+from train import meta_train, meta_train_multi
 from inference import run_comparison
 from plot import plot_results, plot_results_std, plot_fig, plot_loss
 
@@ -65,21 +65,29 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     num_samples = 50
     batch_size  = 1
     T           = 30        # unrolling steps
-    epochs      = 20
+    epochs      = 30
     lr          = 2e-3
     alpha       = 0.95      # kept for API compatibility
     d_h         = 12        # GNN hidden dimension
     rho_gnn     = 0.5     # GNN summability decay (rho in GNNUpdate)
     rho_admm    = 3     # ADMM penalty parameter
+    multi_topo  = False      # multi-topology training
 
-    # Build network for training (needed before model construction)
-    net_train, gamma, max_iter, tol = init_fn[N_train](device=device)
+    train_topologies = ["complete", "tree", "sparse"]
+    sparsity_range   = (0.2, 0.8)
 
-    # Algorithm-specific parameter passed to training and inference
-    algo_kwargs = {"gamma": gamma} if algorithm == "fb" else {"rho": rho_admm}
+    # Build network for training (needed for single-topology fallback)
+    if N_train in init_fn:
+        net_train, gamma, max_iter, tol, rho_admm_train = init_fn[N_train](device=device)
+    else:
+        net_train, gamma, max_iter, tol, rho_admm_train = init_parameters.init_parameters_graph(
+            N_train, topology="tree", device=device)
 
+    
+
+    tag = f"multitopo_N{N_train}" if multi_topo else f"N{N_train}"
     save_path = (
-        f"checkpoints/{algorithm}_N{N_train}_T{T}_e{epochs}"
+        f"checkpoints/{algorithm}_{tag}_T{T}_e{epochs}"
         f"_s{num_samples}_learned_update_rho{rho_gnn}_lr{lr}.pt"
     )
     print(f"\nCheckpoint path: {save_path}")
@@ -88,7 +96,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     # Model  (feat sizes depend on algorithm)
     # ------------------------------------------------------------------
     # FB:   node_feat_size=2 [D, G],        edge_feat_size=1 [q]
-    # ADMM: node_feat_size=3 [D, G, u_avg], edge_feat_size=2 [q, z]
+    # ADMM: node_feat_size=3 [D, G, u_avg], edge_feat_size=2 [q, z, u]
     node_feat_size = 3 if algorithm == "admm" else 2
     edge_feat_size = 3 if algorithm == "admm" else 1
 
@@ -112,32 +120,57 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         if load:
             print(f"Warning: model not found at {save_path}. Training from scratch.")
 
-        print(f"\n--- Dataset generation (N={N_train}) ---")
-        dataset = EnergyDataset(
-            num_samples  = num_samples,
-            net_template = net_train,
-            device       = device,
-        )
-
-        print(f"\n--- Meta-training ({algorithm.upper()}) ---")
-        model, loss_history = meta_train(
-            model        = model,
-            dataset      = dataset,
-            net_template = net_train,
-            T            = T,
-            epochs       = epochs,
-            lr           = lr,
-            alpha        = alpha,
-            batch_size   = batch_size,
-            device       = device,
-            save_path    = save_path,
-            algorithm    = algorithm,
-            **algo_kwargs,
-        )
-
+        if multi_topo and algorithm == "admm":
+            # Multi-topology training
+            print(f"\n--- Dataset generation (multi-topology, N={N_train}) ---")
+            dataset = MultiTopologyDataset(
+                num_samples    = num_samples,
+                N              = N_train,
+                topologies     = train_topologies,
+                sparsity_range = sparsity_range,
+                device         = device,
+            )
+ 
+            print(f"\n--- Meta-training (ADMM, multi-topology) ---")
+            model, loss_history = meta_train_multi(
+                model     = model,
+                dataset   = dataset,
+                T         = T,
+                epochs    = epochs,
+                lr        = lr,
+                device    = device,
+                save_path = save_path,
+            )
+        else:
+            # Single-topology training (original)
+            print(f"\n--- Dataset generation (N={N_train}) ---")
+            dataset = EnergyDataset(
+                num_samples  = num_samples,
+                net_template = net_train,
+                device       = device,
+            )
+ 
+            print(f"\n--- Meta-training ({algorithm.upper()}) ---")
+            # Algorithm-specific parameter passed to training and inference
+            algo_kwargs_train = {"gamma": gamma} if algorithm == "fb" else {"rho": rho_admm}
+            model, loss_history = meta_train(
+                model        = model,
+                dataset      = dataset,
+                net_template = net_train,
+                T            = T,
+                epochs       = epochs,
+                lr           = lr,
+                alpha        = alpha,
+                batch_size   = batch_size,
+                device       = device,
+                save_path    = save_path,
+                algorithm    = algorithm,
+                **algo_kwargs_train,
+            )
+ 
         save_path_loss_h = (
-        f"checkpoints/{algorithm}_N{N_train}_T{T}_e{epochs}"
-        f"_s{num_samples}_loss_history_rho{rho_gnn}_lr{lr}.png"
+            f"checkpoints/{algorithm}_{tag}_T{T}_e{epochs}"
+            f"_s{num_samples}_loss_history_rho{rho_gnn}_lr{lr}.png"
         )
         plot_loss(loss_history, save_path_loss_h)
     
@@ -157,8 +190,8 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     for i in range(n_test):
         print(f"\nTest instance {i+1}/{n_test}:")
 
-        net_test, gamma_test, max_iter_test, tol_test = init_fn[N_choice](device=device)
-        #net_test, gamma_test, max_iter_test, tol_test = init_parameters.init_parameters_graph(N_choice, topology="sparse", sparsity=0.7, seed=42, device=device)
+        #net_test, gamma_test, max_iter_test, tol_test = init_fn[N_choice](device=device)
+        net_test, gamma_test, max_iter_test, tol_test, rho_test = init_parameters.init_parameters_graph(N_choice, topology="tree", sparsity=0.7, seed=42, device=device)
         """
         init_parameters.plot_graph(
             neighbors = net_test.neighbors,
