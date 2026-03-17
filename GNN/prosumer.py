@@ -385,7 +385,7 @@ class Prosumer:
     # ------------------------------------------------------------------
     # ADMM x-update (differentiable, exact via cvxpylayers)
     # ------------------------------------------------------------------
-    
+
     def _build_cvxpy_layer(self, rho_val: float):
         """
         Build a CvxpyLayer for the ADMM x-update QP.
@@ -485,7 +485,11 @@ class Prosumer:
         ]).double() if k > 0 else torch.zeros(0, dtype=torch.float64, device=self.device)
 
         # Solve — output is differentiable w.r.t. target_vals
-        sol, = self._cvxpy_layer(target_vals, solver_args={'solve_method': 'SCS'})
+        sol, = self._cvxpy_layer(target_vals, solver_args={
+            'solve_method': 'SCS',
+            'eps': 1e-9,
+            'max_iters': 10000,
+        })
 
         # cvxpylayers returns float64, convert back to float32
         sol = sol.float()
@@ -596,8 +600,9 @@ class Prosumer:
             Node features x : (1+k, 3) — [D, G, u_avg] for ego; zeros for neighbors
                               u_avg = mean(u[m]) over neighbors (own dual state)
                               Neighbor node features: zeros (not available locally)
-            Edge features   : (k,   2) — [q_received[m], z_received[m]]
+            Edge features   : (k,   3) — [q_received[m], z_received[m], u_received[m]]
                               z_received[m] = neighbor m's consensus copy (communicated)
+                              u_received[m] = neighbor m's dual variable (communicated)
 
         Edge index: all edges point to ego node (local index 0).
         """
@@ -633,13 +638,14 @@ class Prosumer:
                     torch.stack([
                         self.q_received[m].reshape(1),
                         self.z_received[m].reshape(1),
+                        self.u_received[m].reshape(1),
                     ], dim=-1).squeeze(0)
                     for m in self.neighbors
-                ])  # (k, 2)
+                ])  # (k, 3)
         else:
             x_local    = ego_feat
             edge_index = torch.zeros(2, 0, dtype=torch.long, device=self.device)
-            edge_attr  = torch.zeros(0, 1 if algorithm == "fb" else 2,
+            edge_attr  = torch.zeros(0, 1 if algorithm == "fb" else 3,
                                      device=self.device)
 
         return Data(
@@ -653,23 +659,36 @@ class Prosumer:
     # Apply GNN perturbation (distributed, local write)
     # ------------------------------------------------------------------
 
-    def apply_perturbation(self, v_D: torch.Tensor, v_G: torch.Tensor, v_q: dict):
+    def apply_perturbation(self, v_D: torch.Tensor, v_G: torch.Tensor,
+                           v_q: dict, v_z: dict = None, v_u: dict = None):
         """
         Add perturbations to local decision variables (in-place).
 
-        Only D, G, q are perturbed — z and u are managed by ADMM and must
-        not be perturbed directly to preserve constraint feasibility.
+        D, G, q are always perturbed. z and u are perturbed only if
+        v_z / v_u are provided (ADMM mode).
+
+        The perturbations on z and u are applied BEFORE the z-update and
+        u-update, so the ADMM projection steps will re-establish feasibility
+        (z-update projects onto coupling constraint, u-update is unconstrained).
 
         Parameters
         ----------
         v_D  : scalar tensor  — perturbation for D
         v_G  : scalar tensor  — perturbation for G
         v_q  : dict {m: scalar tensor}  — perturbations for q[m]
+        v_z  : dict {m: scalar tensor} or None — perturbations for z[m]
+        v_u  : dict {m: scalar tensor} or None — perturbations for u[m]
         """
         self.D = self.D + v_D
         self.G = self.G + v_G
         for m in self.neighbors:
             self.q[m] = self.q[m] + v_q[m]
+        if v_z is not None:
+            for m in self.neighbors:
+                self.z[m] = self.z[m] + v_z[m]
+        if v_u is not None:
+            for m in self.neighbors:
+                self.u[m] = self.u[m] + v_u[m]
 
     # ------------------------------------------------------------------
     # Flatten / unflatten (local state vector)

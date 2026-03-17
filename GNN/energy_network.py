@@ -294,9 +294,9 @@ class EnergyNetwork:
         algorithm="admm":
             Node features x : (N, 3)   — [D_n, G_n, u_avg_n]
                               u_avg_n = mean(u[m]) over neighbors m
-                              (average scaled dual — captures consensus pressure)
-            Edge features   : (|E|, 2) — [q_{nm}, z_{nm}]
+            Edge features   : (|E|, 3) — [q_{nm}, z_{nm}, u_{nm}]
                               z_{nm} = prosumer m's consensus copy of q_{nm}
+                              u_{nm} = prosumer m's dual variable for q_{nm}
         """
         if algorithm == "fb":
             x_node = torch.stack(
@@ -320,9 +320,10 @@ class EnergyNetwork:
                 torch.stack([
                     self.prosumers[m].q[n].reshape(1),
                     self.prosumers[m].z[n].reshape(1),
+                    self.prosumers[m].u[n].reshape(1),
                 ], dim=-1).squeeze(0)
                 for (m, n) in self.edge_list
-            ])  # (|E|, 2)
+            ])  # (|E|, 3)
 
         return Data(
             x=x_node,

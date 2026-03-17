@@ -66,7 +66,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     batch_size  = 1
     T           = 30        # unrolling steps
     epochs      = 20
-    lr          = 1e-4
+    lr          = 2e-3
     alpha       = 0.95      # kept for API compatibility
     d_h         = 12        # GNN hidden dimension
     rho_gnn     = 0.5     # GNN summability decay (rho in GNNUpdate)
@@ -90,7 +90,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     # FB:   node_feat_size=2 [D, G],        edge_feat_size=1 [q]
     # ADMM: node_feat_size=3 [D, G, u_avg], edge_feat_size=2 [q, z]
     node_feat_size = 3 if algorithm == "admm" else 2
-    edge_feat_size = 2 if algorithm == "admm" else 1
+    edge_feat_size = 3 if algorithm == "admm" else 1
 
     model = GNNUpdate(
         d_h            = d_h,

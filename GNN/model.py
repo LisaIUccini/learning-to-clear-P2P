@@ -160,7 +160,7 @@ class GNNUpdate(nn.Module):
     Architecture:
         GNNLayer  : phi_msg (edge_feat -> d_h) + phi_upd ([node_feat, d_h] -> d_h)
         phi_node  : MLP (d_h -> 2)
-        phi_edge  : MLP (d_h + edge_feat -> 1)
+        phi_edge  : MLP (d_h + edge_feat -> 3)
     """
 
     def __init__(
@@ -188,13 +188,13 @@ class GNNUpdate(nn.Module):
             output_size=2,
         )
 
-        # Edge-level output: (h_new[n], edge_attr) -> v_q
+        # Edge-level output: (h_new[n], edge_attr) -> (v_q, v_z, v_u)
         # Only uses h_new[n] — the node that owns q_{mn} — which already
         # aggregates all neighbor messages. Fully local, no need for h_new[m].
         self.phi_edge = MLP(
             input_size=d_h + edge_feat_size,
             hidden_size=d_h,
-            output_size=1,
+            output_size=3,
         )
 
         # Learnable amplitude, kept positive via softplus
@@ -223,7 +223,7 @@ class GNNUpdate(nn.Module):
         Returns
         -------
         v_nodes : (num_nodes, 2)  — perturbations for [D, G]
-        v_edges : (num_edges, 1)  — perturbations for [q]
+        v_edges : (num_edges, 3)  — perturbations for [q, z, u]
         """
         x          = data.x
         edge_index = data.edge_index
@@ -241,6 +241,6 @@ class GNNUpdate(nn.Module):
         m_t   = phi_m * (self.rho ** t)
 
         v_nodes = m_t * torch.tanh(delta_nodes)  # (num_nodes, 2)
-        v_edges = m_t * torch.tanh(delta_edges)  # (num_edges, 1)
+        v_edges = m_t * torch.tanh(delta_edges)  # (num_edges, 3)
 
         return v_nodes, v_edges

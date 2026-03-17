@@ -72,8 +72,7 @@ def pure_ADMM_step(net: EnergyNetwork, rho: float) -> EnergyNetwork:
 
     # Step 1 — x-update (local QP, parallel)
     for p in net_new.prosumers:
-        #p.admm_x_update(rho)
-        p.admm_x_update_diff(rho)
+        p.admm_x_update(rho)
 
     # Step 2 — communicate q, z, u to neighbors
     _admm_communicate(net_new)
@@ -138,12 +137,10 @@ def learned_ADMM_step(
     # ------------------------------------------------------------------
     if training:
         for p in net_new.prosumers:
-            #p.admm_x_update_approx(rho)
             p.admm_x_update_diff(rho)
     else:
         for p in net_new.prosumers:
-            #p.admm_x_update(rho)
-            p.admm_x_update_diff(rho)
+            p.admm_x_update(rho)
 
     # ------------------------------------------------------------------
     # Step 2 — communicate, then GNN perturbation (snapshot pattern)
@@ -176,7 +173,9 @@ def learned_ADMM_step(
         v_G = v_nodes_n[0, 1]
         neighbors_n = sorted(net_new.neighbors[n])
         v_q = {m: v_edges_n[i, 0] for i, m in enumerate(neighbors_n)}
-        net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q)
+        v_z = {m: v_edges_n[i, 1] for i, m in enumerate(neighbors_n)}
+        v_u = {m: v_edges_n[i, 2] for i, m in enumerate(neighbors_n)}
+        net_new.prosumers[n].apply_perturbation(v_D, v_G, v_q, v_z, v_u)
 
     # ------------------------------------------------------------------
     # Step 3 — communicate after perturbation
