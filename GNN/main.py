@@ -65,12 +65,12 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     num_samples = 50
     batch_size  = 1
     T           = 30        # unrolling steps
-    epochs      = 30
+    epochs      = 20
     lr          = 2e-3
     alpha       = 0.95      # kept for API compatibility
     d_h         = 12        # GNN hidden dimension
     rho_gnn     = 0.5     # GNN summability decay (rho in GNNUpdate)
-    rho_admm    = 3     # ADMM penalty parameter
+    rho_admm    = 5     # ADMM penalty parameter
     multi_topo  = False      # multi-topology training
 
     train_topologies = ["complete", "tree", "sparse"]
@@ -287,11 +287,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB/ADMM")
 
     parser.add_argument(
-        "--N", type=int, default=3, choices=[3, 10, 30],
+        "--N", type=int, default=10, choices=[3, 10, 30],
         help="Network size for inference (default: 3)"
     )
     parser.add_argument(
-        "--N_train", type=int, default=3, choices=[3, 10, 30],
+        "--N_train", type=int, default=10, choices=[3, 10, 30],
         help="Network size for training (default: 3)"
     )
     parser.add_argument(

@@ -72,7 +72,7 @@ def pure_ADMM_step(net: EnergyNetwork, rho: float) -> EnergyNetwork:
 
     # Step 1 — x-update (local QP, parallel)
     for p in net_new.prosumers:
-        p.admm_x_update(rho)
+        p.admm_x_update_diff(rho)
 
     # Step 2 — communicate q, z, u to neighbors
     _admm_communicate(net_new)
@@ -140,7 +140,7 @@ def learned_ADMM_step(
             p.admm_x_update_diff(rho)
     else:
         for p in net_new.prosumers:
-            p.admm_x_update(rho)
+            p.admm_x_update_diff(rho)
 
     # ------------------------------------------------------------------
     # Step 2 — communicate, then GNN perturbation (snapshot pattern)
