@@ -6,7 +6,7 @@ from prosumer import Prosumer
 from energy_network import EnergyNetwork
 
 tol = 1e-6
-max_iter = 350
+max_iter = 60
 # ------------------------------------------------------------------
 # Graph builder  (invariato)
 # ------------------------------------------------------------------

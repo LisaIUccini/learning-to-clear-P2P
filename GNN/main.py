@@ -62,7 +62,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 50
+    num_samples = 60
     batch_size  = 1
     T           = 30        # unrolling steps
     epochs      = 20
@@ -71,10 +71,10 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     d_h         = 12        # GNN hidden dimension
     rho_gnn     = 0.5     # GNN summability decay (rho in GNNUpdate)
     rho_admm    = 5     # ADMM penalty parameter
-    multi_topo  = False      # multi-topology training
+    multi_topo  = True      # multi-topology training
 
-    train_topologies = ["complete", "tree", "sparse"]
-    sparsity_range   = (0.2, 0.8)
+    train_topologies = ["sparse"]
+    sparsity_range   = (0.2, 0.7)
 
     # Build network for training (needed for single-topology fallback)
     if N_train in init_fn:
@@ -187,17 +187,31 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     all_results = []
     os.makedirs("figures", exist_ok=True)
 
+    seed = 42
+    rng = np.random.default_rng(seed)
+
     for i in range(n_test):
         print(f"\nTest instance {i+1}/{n_test}:")
 
-        net_test, gamma_test, max_iter_test, tol_test, rho_test = init_fn[N_choice](device=device)
-        #net_test, gamma_test, max_iter_test, tol_test, rho_test = init_parameters.init_parameters_graph(N_choice, topology="tree", sparsity=0.7, seed=42, device=device)
-        """
+        #net_test, gamma_test, max_iter_test, tol_test, rho_test = init_fn[N_choice](device=device)
+        
+        topo = "sparse"
+        sparsity = float(rng.uniform(*sparsity_range)) 
+        sample_seed = int(rng.integers(1_000_000))
+        net_test, gamma_test, max_iter_test, tol_test, rho_test = init_parameters.init_parameters_graph(
+            N=N_choice,
+            topology="sparse",
+            seed=sample_seed,
+            sparsity=sparsity,
+            device=device,
+        )
+        
         init_parameters.plot_graph(
             neighbors = net_test.neighbors,
             save_path = f"figures/N{net_test.N}_graph_{i+1}.png",
         )
-        """
+        print(f"N{N_choice} topology {topo} with sparsity={sparsity} and rho_admm={rho_test}")
+        #print(f"N{N_choice} topology {topo} and rho_admm={rho_test}")
 
         net_init = net_test.clone()
         net_init._init_state()
@@ -206,7 +220,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         if algorithm == "fb":
             inf_kwargs = {"gamma": gamma_test}
         else:
-            inf_kwargs = {"rho": rho_admm}
+            inf_kwargs = {"rho": rho_test}
 
         results = run_comparison(
             net_init  = net_init,
@@ -267,7 +281,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
 
     plot_results(
         avg_results,
-        save_path=f"figures/{algorithm}_N{N_choice}_average.png"
+        save_path=f"figures/{algorithm}_N{N_choice}_average_trainingN{N_train}.png"
     )
 
     # ------------------------------------------------------------------
@@ -287,11 +301,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB/ADMM")
 
     parser.add_argument(
-        "--N", type=int, default=10, choices=[3, 10, 30],
+        "--N", type=int, default=5, choices=[3, 10, 30],
         help="Network size for inference (default: 3)"
     )
     parser.add_argument(
-        "--N_train", type=int, default=10, choices=[3, 10, 30],
+        "--N_train", type=int, default=5, choices=[3, 10, 30],
         help="Network size for training (default: 3)"
     )
     parser.add_argument(

@@ -111,28 +111,31 @@ def run_comparison(
                 ).item()
 
             else:  # admm
-                """
+                
                 # ----------------------------------------------------------
                 # ADMM: pure step
+                # Fixed-point residual: ||σ - T_ADMM(σ)||²
                 # ----------------------------------------------------------
                 net_pure_new = pure_ADMM_step(net_pure, rho)
-
-                # Primal residual: sum_{(m,n)} (q_{mn} - z_{mn})^2
+                sigma_pure = net_pure_new.flatten_admm()
+                T_sigma_pure = pure_ADMM_step(net_pure_new, rho).flatten_admm()
                 res_pure = torch.sum(
-                    (net_pure_new.flatten() - net_pure.flatten()) ** 2
+                    (sigma_pure - T_sigma_pure) ** 2
                 ).item()
-                
-
+ 
                 # ----------------------------------------------------------
-                # ADMM: learned step + primal residual
+                # ADMM: learned step
+                # Fixed-point residual: ||σ - T_ADMM(σ)||²
                 # ----------------------------------------------------------
                 net_learned_new = learned_ADMM_step(
                     net_learned, model, it, rho, training=False
                 )
+                sigma_learned = net_learned_new.flatten_admm()
+                T_sigma_learned = pure_ADMM_step(net_learned_new, rho).flatten_admm()
                 res_learned = torch.sum(
-                    (net_learned_new.flatten()
-                        - pure_ADMM_step(net_learned_new, rho).flatten()) ** 2
+                    (sigma_learned - T_sigma_learned) ** 2
                 ).item()
+                
                 """
                 # ----------------------------------------------------------
                 # ADMM: pure step
@@ -181,7 +184,7 @@ def run_comparison(
                     for m in net_learned_new.prosumers[n].neighbors
                 )
                 res_learned = float(r_learned + s_learned)
-                
+                """
 
             residuals_pure.append(res_pure)
             residuals_learned.append(res_learned)

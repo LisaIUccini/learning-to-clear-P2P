@@ -124,6 +124,23 @@ class EnergyNetwork:
         for i, (m, n) in enumerate(self.edge_list):
             self.prosumers[n].q[m] = x[2 * self.N + i]
 
+
+    def flatten_admm(self) -> torch.Tensor:
+        """
+        Returns full ADMM state sigma = [x, z, u] as a single vector.
+ 
+        sigma = [D_0,...,D_{N-1}, G_0,...,G_{N-1}, Q_0,...,Q_{|E|-1},
+                 Z_0,...,Z_{|E|-1}, U_0,...,U_{|E|-1}]
+ 
+        Z and U are ordered as edge_list: Z[i] = z_{mn} for edge_list[i] = (m,n).
+        """
+        D = torch.stack([p.D for p in self.prosumers])
+        G = torch.stack([p.G for p in self.prosumers])
+        Q = torch.stack([self.prosumers[n].q[m] for (m, n) in self.edge_list])
+        Z = torch.stack([self.prosumers[n].z[m] for (m, n) in self.edge_list])
+        U = torch.stack([self.prosumers[n].u[m] for (m, n) in self.edge_list])
+        return torch.cat([D, G, Q, Z, U])
+
     # ------------------------------------------------------------------
     # Communication round
     # ------------------------------------------------------------------

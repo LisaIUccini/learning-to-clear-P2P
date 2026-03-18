@@ -10,6 +10,82 @@ from fb   import learned_FB_step, pure_FB_step
 from admm import learned_ADMM_step, pure_ADMM_step
 
 
+def meta_loss_admm(model: GNNUpdate,t, rho, net):
+    """
+    # Save z before the step for dual residual computation
+    z_prev = {
+        n: {m: net.prosumers[n].z[m].clone().detach()
+            for m in net.prosumers[n].neighbors}
+        for n in range(net.N)
+    }
+
+    
+    # Learned ADMM step (centralised, differentiable)
+    net = learned_ADMM_step(net, model, t, rho, training=True)
+
+    # Primal residual: r^t = sum_{(m,n)} (q_{mn} - z_{mn})^2
+    # Measures consensus violation (reciprocity)
+    r = sum(
+        (p.q[m] - p.z[m]) ** 2
+        for p in net.prosumers
+        for m in p.neighbors
+    )
+
+    # Dual residual: s^t = rho^2 * sum_{(m,n)} (z^t - z^{t-1})^2
+    # Measures how much z is still moving (dual feasibility)
+    s = rho ** 2 * sum(
+        (net.prosumers[n].z[m] - z_prev[n][m]) ** 2
+        for n in range(net.N)
+        for m in net.prosumers[n].neighbors
+    )
+
+    sample_loss = sample_loss + (r + s)
+    """
+    
+    # Learned ADMM step (centralised, differentiable)
+    net = learned_ADMM_step(net, model, t, rho, training=True)
+
+    # Fixed-point residual: || x^t - T(x^t) ||^2
+    sigma_t  = net.flatten_admm()
+    Tsigma_t = pure_ADMM_step(net, rho).flatten_admm()
+    sl = torch.sum((sigma_t - Tsigma_t) ** 2)
+    return sl, net
+
+def meta_loss_admm_baseline(rho, net_b):
+    net_b = pure_ADMM_step(net_b, rho)
+    sigma_t  = net_b.flatten_admm()
+    Tsigma_t = pure_ADMM_step(net_b, rho).flatten_admm()
+    sl = torch.sum((sigma_t - Tsigma_t) ** 2).item()
+    #net_b = pure_ADMM_step(net_b, rho)
+    """
+    # Save z before step for dual residual
+    z_prev_b = {
+        n: {m: net_b.prosumers[n].z[m].clone()
+            for m in net_b.prosumers[n].neighbors}
+        for n in range(net_b.N)
+    }
+
+    # Advance state
+    net_b = pure_ADMM_step(net_b, rho)
+
+    # Primal residual: r = sum (q - z)^2
+    r_b = sum(
+        (p.q[m] - p.z[m]) ** 2
+        for p in net_b.prosumers
+        for m in p.neighbors
+    )
+    # Dual residual: s = rho^2 * sum (z^t - z^{t-1})^2
+    s_b = rho ** 2 * sum(
+        (net_b.prosumers[n].z[m] - z_prev_b[n][m]) ** 2
+        for n in range(net_b.N)
+        for m in net_b.prosumers[n].neighbors
+    )
+    sample_baseline += float(r_b + s_b)
+    """
+    return sl, net_b
+
+
+
 # ------------------------------------------------------------------
 # Meta-training loop
 # ------------------------------------------------------------------
@@ -112,36 +188,9 @@ def meta_train(
                         sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
                         #net_b = pure_FB_step(net_b, gamma)
                     else:  # admm
-                        """
-                        net_b = pure_ADMM_step(net_b, rho)
-                        x_t  = net_b.flatten()
-                        Tx_t = pure_ADMM_step(net_b, rho).flatten()
-                        sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
-                        #net_b = pure_ADMM_step(net_b, rho)
-                        """
-                        # Save z before step for dual residual
-                        z_prev_b = {
-                            n: {m: net_b.prosumers[n].z[m].clone()
-                                for m in net_b.prosumers[n].neighbors}
-                            for n in range(net_b.N)
-                        }
- 
-                        # Advance state
-                        net_b = pure_ADMM_step(net_b, rho)
- 
-                        # Primal residual: r = sum (q - z)^2
-                        r_b = sum(
-                            (p.q[m] - p.z[m]) ** 2
-                            for p in net_b.prosumers
-                            for m in p.neighbors
-                        )
-                        # Dual residual: s = rho^2 * sum (z^t - z^{t-1})^2
-                        s_b = rho ** 2 * sum(
-                            (net_b.prosumers[n].z[m] - z_prev_b[n][m]) ** 2
-                            for n in range(net_b.N)
-                            for m in net_b.prosumers[n].neighbors
-                        )
-                        sample_baseline += float(r_b + s_b)
+                        
+                        sl, net_b = meta_loss_admm_baseline(rho, net_b)
+                        sample_baseline += sl
  
                 baseline_total += sample_baseline
                 n_baseline += 1
@@ -185,45 +234,9 @@ def meta_train(
                         sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
 
                     else:  # admm
+                        sl, net = meta_loss_admm(model,t, rho, net)
+                        sample_loss += sl
                         
-                        # Save z before the step for dual residual computation
-                        z_prev = {
-                            n: {m: net.prosumers[n].z[m].clone().detach()
-                                for m in net.prosumers[n].neighbors}
-                            for n in range(net.N)
-                        }
-
-                        
-                        # Learned ADMM step (centralised, differentiable)
-                        net = learned_ADMM_step(net, model, t, rho, training=True)
-
-                        # Primal residual: r^t = sum_{(m,n)} (q_{mn} - z_{mn})^2
-                        # Measures consensus violation (reciprocity)
-                        r = sum(
-                            (p.q[m] - p.z[m]) ** 2
-                            for p in net.prosumers
-                            for m in p.neighbors
-                        )
-
-                        # Dual residual: s^t = rho^2 * sum_{(m,n)} (z^t - z^{t-1})^2
-                        # Measures how much z is still moving (dual feasibility)
-                        s = rho ** 2 * sum(
-                            (net.prosumers[n].z[m] - z_prev[n][m]) ** 2
-                            for n in range(net.N)
-                            for m in net.prosumers[n].neighbors
-                        )
-
-                        sample_loss = sample_loss + (r + s)
-                        """
-                        
-                        # Learned ADMM step (centralised, differentiable)
-                        net = learned_ADMM_step(net, model, t, rho, training=True)
-
-                        # Fixed-point residual: || x^t - T(x^t) ||^2
-                        x_t  = net.flatten()
-                        Tx_t = pure_ADMM_step(net, rho).flatten().detach()
-                        sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
-                        """
 
                 batch_loss = batch_loss + sample_loss
 
@@ -316,25 +329,8 @@ def meta_train_multi(
  
             sample_baseline = 0.0
             for t in range(T):
-                z_prev_b = {
-                    n: {m: net_b.prosumers[n].z[m].clone()
-                        for m in net_b.prosumers[n].neighbors}
-                    for n in range(net_b.N)
-                }
- 
-                net_b = pure_ADMM_step(net_b, rho)
- 
-                r_b = sum(
-                    (p.q[m] - p.z[m]) ** 2
-                    for p in net_b.prosumers
-                    for m in p.neighbors
-                )
-                s_b = rho ** 2 * sum(
-                    (net_b.prosumers[n].z[m] - z_prev_b[n][m]) ** 2
-                    for n in range(net_b.N)
-                    for m in net_b.prosumers[n].neighbors
-                )
-                sample_baseline += float(r_b + s_b)
+                sl, net_b = meta_loss_admm_baseline(rho, net_b)
+                sample_baseline += sl
  
             baseline_total += sample_baseline
  
@@ -364,30 +360,8 @@ def meta_train_multi(
             sample_loss = torch.zeros(1, device=device)
  
             for t in range(T):
-                # Save z before step for dual residual
-                z_prev = {
-                    n: {m: net.prosumers[n].z[m].detach().clone()
-                        for m in net.prosumers[n].neighbors}
-                    for n in range(net.N)
-                }
- 
-                # Learned ADMM step
-                net = learned_ADMM_step(net, model, t, rho, training=True)
- 
-                # Primal residual
-                r = sum(
-                    (p.q[m] - p.z[m]) ** 2
-                    for p in net.prosumers
-                    for m in p.neighbors
-                )
-                # Dual residual
-                s = rho ** 2 * sum(
-                    (net.prosumers[n].z[m] - z_prev[n][m]) ** 2
-                    for n in range(net.N)
-                    for m in net.prosumers[n].neighbors
-                )
- 
-                sample_loss = sample_loss + (r + s)
+                sl, net = meta_loss_admm(model,t, rho, net)
+                sample_loss += sl
  
             sample_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
