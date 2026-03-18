@@ -190,8 +190,8 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     for i in range(n_test):
         print(f"\nTest instance {i+1}/{n_test}:")
 
-        #net_test, gamma_test, max_iter_test, tol_test = init_fn[N_choice](device=device)
-        net_test, gamma_test, max_iter_test, tol_test, rho_test = init_parameters.init_parameters_graph(N_choice, topology="tree", sparsity=0.7, seed=42, device=device)
+        net_test, gamma_test, max_iter_test, tol_test, rho_test = init_fn[N_choice](device=device)
+        #net_test, gamma_test, max_iter_test, tol_test, rho_test = init_parameters.init_parameters_graph(N_choice, topology="tree", sparsity=0.7, seed=42, device=device)
         """
         init_parameters.plot_graph(
             neighbors = net_test.neighbors,
@@ -295,7 +295,7 @@ if __name__ == "__main__":
         help="Network size for training (default: 3)"
     )
     parser.add_argument(
-        "--load", action="store_true", default=False,
+        "--load", action="store_true", default=True,
         help="Load pre-trained model instead of training"
     )
     parser.add_argument(
