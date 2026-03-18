@@ -151,7 +151,7 @@ def learned_ADMM_step(
     # ------------------------------------------------------------------
     # Step 5 — communicate updated state (for GNN input)
     # ------------------------------------------------------------------
-    _admm_communicate(net_new, training=training)
+    #_admm_communicate(net_new, training=training)
  
     # ------------------------------------------------------------------
     # Step 6 — GNN perturbation (snapshot pattern)
@@ -174,6 +174,6 @@ def learned_ADMM_step(
     # ------------------------------------------------------------------
     # Step 7 — communicate perturbed values (ready for next iteration)
     # ------------------------------------------------------------------
-    _admm_communicate(net_new, training=training)
+    #_admm_communicate(net_new, training=training)
  
     return net_new
