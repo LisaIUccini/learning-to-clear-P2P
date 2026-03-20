@@ -10,7 +10,7 @@ from fb   import learned_FB_step, pure_FB_step
 from admm import learned_ADMM_step, pure_ADMM_step
 
 
-def meta_loss_admm(model: GNNUpdate,t, rho, net):
+def meta_loss_admm(model: GNNUpdate, t, rho, net):
     """
     # Save z before the step for dual residual computation
     z_prev = {
@@ -41,7 +41,7 @@ def meta_loss_admm(model: GNNUpdate,t, rho, net):
 
     sample_loss = sample_loss + (r + s)
     """
-    
+
     # Learned ADMM step (centralised, differentiable)
     net = learned_ADMM_step(net, model, t, rho, training=True)
 
@@ -50,6 +50,7 @@ def meta_loss_admm(model: GNNUpdate,t, rho, net):
     Tsigma_t = pure_ADMM_step(net, rho).flatten_admm()
     sl = torch.sum((sigma_t - Tsigma_t) ** 2)
     return sl, net
+
 
 def meta_loss_admm_baseline(rho, net_b):
     net_b = pure_ADMM_step(net_b, rho)
@@ -84,6 +85,11 @@ def meta_loss_admm_baseline(rho, net_b):
     """
     return sl, net_b
 
+
+def _ensure_dir(save_path):
+    """Create parent directory for save_path if it doesn't exist."""
+    dirname = os.path.dirname(save_path)
+    os.makedirs(dirname if dirname else ".", exist_ok=True)
 
 
 # ------------------------------------------------------------------
@@ -155,6 +161,8 @@ def meta_train(
     if algorithm == "admm" and rho is None:
         raise ValueError("rho is required when algorithm='admm'")
 
+    is_admm = (algorithm == "admm")
+
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer  = torch.optim.Adam(model.parameters(), lr=lr)
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-5)
@@ -176,25 +184,24 @@ def meta_train(
                 x0 = x0_batch[b]
                 net_b = net_template.clone()
                 net_b.unflatten(x0)
-                if algorithm == "admm":
+                if is_admm:
                     net_b.admm_reset()
- 
+
                 sample_baseline = 0.0
                 for t in range(T):
-                    if algorithm == "fb":
+                    if is_admm:
+                        sl, net_b = meta_loss_admm_baseline(rho, net_b)
+                        sample_baseline += sl
+                    else:
                         net = learned_FB_step(net, model, t, gamma, training=True)
                         x_t  = net_b.flatten()
                         Tx_t = pure_FB_step(net_b, gamma).flatten()
                         sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
                         #net_b = pure_FB_step(net_b, gamma)
-                    else:  # admm
-                        
-                        sl, net_b = meta_loss_admm_baseline(rho, net_b)
-                        sample_baseline += sl
- 
+
                 baseline_total += sample_baseline
                 n_baseline += 1
- 
+
         baseline_avg = baseline_total / max(n_baseline, 1)
         print(f"\nBaseline loss (pure {algorithm.upper()}, no GNN): {baseline_avg:.6f}")
         print(f"Training loss should go BELOW this value.\n")
@@ -205,26 +212,27 @@ def meta_train(
 
         for batch in dataloader:
             x0_batch = batch["x0"].to(device)
+            batch_size_actual = x0_batch.shape[0]
 
             optimizer.zero_grad()
             batch_loss = torch.zeros(1, device=device)
 
-            for b in range(x0_batch.shape[0]):
+            for b in range(batch_size_actual):
                 x0 = x0_batch[b]
 
                 net = net_template.clone()
                 net.unflatten(x0)
 
-                # Reset ADMM duals for this sample
-                if algorithm == "admm":
+                if is_admm:
                     net.admm_reset()
 
                 sample_loss = torch.zeros(1, device=device)
-                
 
                 for t in range(T):
-
-                    if algorithm == "fb":
+                    if is_admm:
+                        sl, net = meta_loss_admm(model, t, rho, net)
+                        sample_loss += sl
+                    else:
                         # Learned FB step (centralised, differentiable)
                         net = learned_FB_step(net, model, t, gamma, training=True)
 
@@ -233,14 +241,9 @@ def meta_train(
                         Tx_t = pure_FB_step(net, gamma).flatten()
                         sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
 
-                    else:  # admm
-                        sl, net = meta_loss_admm(model,t, rho, net)
-                        sample_loss += sl
-                        
-
                 batch_loss = batch_loss + sample_loss
 
-            batch_loss = batch_loss / x0_batch.shape[0]
+            batch_loss = batch_loss / batch_size_actual
             batch_loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -252,14 +255,10 @@ def meta_train(
         avg_loss = epoch_loss / max(n_batches, 1)
         loss_history.append(avg_loss)
         #scheduler.step(avg_loss)
-        current_lr = optimizer.param_groups[0]['lr']
-        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  lr: {current_lr:.2e}")
-        
+        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  lr: {optimizer.param_groups[0]['lr']:.2e}")
+
     if save_path is not None:
-        os.makedirs(
-            os.path.dirname(save_path) if os.path.dirname(save_path) else ".",
-            exist_ok=True
-        )
+        _ensure_dir(save_path)
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
 
@@ -306,12 +305,10 @@ def meta_train_multi(
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     model.train()
     loss_history = []
- 
+
     num_samples = len(dataset)
- 
-    # Indices for shuffling
     indices = list(range(num_samples))
- 
+
     # ------------------------------------------------------------------
     # Baseline: average pure ADMM loss over all samples
     # ------------------------------------------------------------------
@@ -322,66 +319,62 @@ def meta_train_multi(
             net_template = sample["net_template"]
             x0 = sample["x0"].to(device)
             rho = sample["rho_admm"]
- 
+
             net_b = net_template.clone()
             net_b.unflatten(x0)
             net_b.admm_reset()
- 
+
             sample_baseline = 0.0
             for t in range(T):
                 sl, net_b = meta_loss_admm_baseline(rho, net_b)
                 sample_baseline += sl
- 
+
             baseline_total += sample_baseline
- 
+
         baseline_avg = baseline_total / num_samples
         print(f"\nBaseline loss (pure ADMM, no GNN): {baseline_avg:.6f}")
         print(f"Training loss should go BELOW this value.\n")
- 
+
     # ------------------------------------------------------------------
     # Training loop
     # ------------------------------------------------------------------
     for epoch in range(epochs):
         epoch_loss = 0.0
         random.shuffle(indices)
- 
+
         for idx in indices:
             sample = dataset[idx]
             net_template = sample["net_template"]
             x0 = sample["x0"].to(device)
             rho = sample["rho_admm"]
- 
+
             optimizer.zero_grad()
- 
+
             net = net_template.clone()
             net.unflatten(x0)
             net.admm_reset()
- 
+
             sample_loss = torch.zeros(1, device=device)
- 
+
             for t in range(T):
-                sl, net = meta_loss_admm(model,t, rho, net)
+                sl, net = meta_loss_admm(model, t, rho, net)
                 sample_loss += sl
- 
+
             sample_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
- 
+
             epoch_loss += sample_loss.item()
- 
+
         avg_loss = epoch_loss / num_samples
         loss_history.append(avg_loss)
         ratio = avg_loss / baseline_avg if baseline_avg > 0 else float('inf')
-        current_lr = optimizer.param_groups[0]['lr']
         print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  "
-              f"baseline: {baseline_avg:.6f}  ratio: {ratio:.4f}  lr: {current_lr:.2e}")
- 
+              f"baseline: {baseline_avg:.6f}  ratio: {ratio:.4f}  lr: {optimizer.param_groups[0]['lr']:.2e}")
+
     if save_path is not None:
-        os.makedirs(
-            os.path.dirname(save_path) if os.path.dirname(save_path) else ".",
-            exist_ok=True
-        )
+        _ensure_dir(save_path)
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
- 
+
     return model, loss_history

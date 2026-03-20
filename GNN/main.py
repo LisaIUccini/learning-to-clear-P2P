@@ -17,28 +17,29 @@ Arguments:
     --algorithm : "fb" (default) or "admm"
 """
 
+
 import os
 import argparse
 import torch
 import numpy as np
-
+ 
 import init_parameters
 from model import GNNUpdate
 from dataset import EnergyDataset, MultiTopologyDataset
 from train import meta_train, meta_train_multi
 from inference import run_comparison
 from plot import plot_results, plot_results_std, plot_fig, plot_loss
-
-
+ 
+ 
 def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
          algorithm: str = "fb"):
-
+ 
     # ------------------------------------------------------------------
     # Validate algorithm choice
     # ------------------------------------------------------------------
     if algorithm not in ("fb", "admm"):
         raise ValueError(f"algorithm must be 'fb' or 'admm', got '{algorithm}'")
-
+ 
     # ------------------------------------------------------------------
     # Device and seeds
     # ------------------------------------------------------------------
@@ -47,7 +48,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     print(f"Algorithm: {algorithm.upper()}")
     torch.manual_seed(42)
     np.random.seed(42)
-
+ 
     # ------------------------------------------------------------------
     # Problem parameters
     # ------------------------------------------------------------------
@@ -58,69 +59,67 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     }
     #if N_choice not in init_fn:
         #raise ValueError(f"N must be 3, 10, or 30. Got {N_choice}.")
-
+ 
     # ------------------------------------------------------------------
     # Hyperparameters
     # ------------------------------------------------------------------
-    num_samples = 50
+    num_samples = 100
     batch_size  = 1
-    T           = 30        # unrolling steps
+    T           = 60        # unrolling steps
     epochs      = 30
     lr          = 2e-3
     alpha       = 0.95      # kept for API compatibility
     d_h         = 12        # GNN hidden dimension
-    rho_gnn     = 0.5     # GNN summability decay (rho in GNNUpdate)
-    rho_admm    = 3     # ADMM penalty parameter
-    multi_topo  = False      # multi-topology training
-
+    rho_gnn     = 0.8      # GNN summability decay (rho in GNNUpdate)
+    rho_admm    = 5        # ADMM penalty parameter
+    multi_topo  = True     # multi-topology training
+ 
     train_topologies = ["sparse"]
     sparsity_range   = (0.2, 0.9)
-
+ 
     # Build network for training (needed for single-topology fallback)
     if N_train in init_fn:
         net_train, gamma, max_iter, tol, rho_admm_train = init_fn[N_train](device=device)
     else:
         net_train, gamma, max_iter, tol, rho_admm_train = init_parameters.init_parameters_graph(
             N_train, topology="tree", device=device)
-
-    
-
+ 
+    is_admm = (algorithm == "admm")
     tag = f"multitopo_N{N_train}" if multi_topo else f"N{N_train}"
     save_path = (
         f"checkpoints/{algorithm}_{tag}_T{T}_e{epochs}"
         f"_s{num_samples}_learned_update_rho{rho_gnn}_lr{lr}.pt"
     )
     print(f"\nCheckpoint path: {save_path}")
-
+ 
     # ------------------------------------------------------------------
     # Model  (feat sizes depend on algorithm)
     # ------------------------------------------------------------------
     # FB:   node_feat_size=2 [D, G],        edge_feat_size=1 [q]
     # ADMM: node_feat_size=3 [D, G, u_avg], edge_feat_size=2 [q, z, u]
-    node_feat_size = 3 if algorithm == "admm" else 2
-    edge_feat_size = 3 if algorithm == "admm" else 1
-
+    node_feat_size = 3 if is_admm else 2
+    edge_feat_size = 3 if is_admm else 1
+ 
     model = GNNUpdate(
         d_h            = d_h,
         rho            = rho_gnn,
         node_feat_size = node_feat_size,
         edge_feat_size = edge_feat_size,
     ).to(device)
-    n_params = sum(p.numel() for p in model.parameters())
-    print(f"GNNUpdate — trainable parameters: {n_params}")
-
+    print(f"GNNUpdate — trainable parameters: {sum(p.numel() for p in model.parameters())}")
+ 
     # ------------------------------------------------------------------
     # Training
     # ------------------------------------------------------------------
     if load and os.path.exists(save_path):
         print(f"\nLoading pre-trained model from {save_path}")
         model.load_state_dict(torch.load(save_path, map_location=device))
-
+ 
     else:
         if load:
             print(f"Warning: model not found at {save_path}. Training from scratch.")
-
-        if multi_topo and algorithm == "admm":
+ 
+        if multi_topo and is_admm:
             # Multi-topology training
             print(f"\n--- Dataset generation (multi-topology, N={N_train}) ---")
             dataset = MultiTopologyDataset(
@@ -151,8 +150,7 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
             )
  
             print(f"\n--- Meta-training ({algorithm.upper()}) ---")
-            # Algorithm-specific parameter passed to training and inference
-            algo_kwargs_train = {"gamma": gamma} if algorithm == "fb" else {"rho": rho_admm}
+            algo_kwargs_train = {"rho": rho_admm} if is_admm else {"gamma": gamma}
             model, loss_history = meta_train(
                 model        = model,
                 dataset      = dataset,
@@ -173,28 +171,27 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
             f"_s{num_samples}_loss_history_rho{rho_gnn}_lr{lr}.png"
         )
         plot_loss(loss_history, save_path_loss_h)
-    
-
+ 
     # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
     print(f"\n--- Inference ({algorithm.upper()}) ---")
-
+ 
     torch.manual_seed(0)
     np.random.seed(0)
-
+ 
     n_test      = 5
     all_results = []
     os.makedirs("figures", exist_ok=True)
-
+ 
     seed = 42
     rng = np.random.default_rng(seed)
-
+ 
     for i in range(n_test):
         print(f"\nTest instance {i+1}/{n_test}:")
-
-        net_test, gamma_test, max_iter_test, tol_test, rho_test = init_fn[N_choice](device=device)
-        """
+ 
+        #net_test, gamma_test, max_iter_test, tol_test, rho_test = init_fn[N_choice](device=device)
+        
         topo = "sparse"
         sparsity = float(rng.uniform(*sparsity_range)) 
         sample_seed = int(rng.integers(1_000_000))
@@ -212,16 +209,12 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         )
         print(f"N{N_choice} topology {topo} with sparsity={sparsity} and rho_admm={rho_test}")
         #print(f"N{N_choice} topology {topo} and rho_admm={rho_test}")
-        """
+        
         net_init = net_test.clone()
         net_init._init_state()
-
-        # Inference algo_kwargs use test gamma/rho
-        if algorithm == "fb":
-            inf_kwargs = {"gamma": gamma_test}
-        else:
-            inf_kwargs = {"rho": rho_test}
-
+ 
+        inf_kwargs = {"rho": rho_test} if is_admm else {"gamma": gamma_test}
+ 
         results = run_comparison(
             net_init  = net_init,
             model     = model,
@@ -232,19 +225,19 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
             **inf_kwargs,
         )
         all_results.append(results)
-
+ 
         plot_results(
             results,
             save_path=f"figures/{algorithm}_N{N_choice}_test_istance_{i+1}.png"
         )
-
+ 
         print(f"Pure {algorithm.upper()}      — constraint violation: "
               f"{results['pure'].constraint_violation()}")
         print(f"{algorithm.upper()} + GNN    — constraint violation: "
               f"{results['learned'].constraint_violation()}")
         #plot_fig(results['pure'], save_path=f"figures/{algorithm}_N{N_choice}_graph_result_pure_{i+1}.png")
         #plot_fig(results['learned'], save_path=f"figures/{algorithm}_N{N_choice}_graph_result_learned_{i+1}.png")
-        
+ 
     # ------------------------------------------------------------------
     # Aggregate plot
     # ------------------------------------------------------------------
@@ -254,28 +247,26 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
         padded = []
         for r in all_results:
             seq = r[key]
-            pad = [seq[-1]] * (max_len - len(seq))
-            padded.append(seq + pad)
+            padded.append(seq + [seq[-1]] * (max_len - len(seq)))
         return np.array(padded).mean(axis=0).tolist()
 
     def pad_and_stack(key):
         padded = []
         for r in all_results:
             seq = r[key]
-            pad = [seq[-1]] * (max_len - len(seq))
-            padded.append(seq + pad)
+            padded.append(seq + [seq[-1]] * (max_len - len(seq)))
         return np.array(padded)
 
     avg_results = {
         key: pad_and_mean(key)
-        for key in ["residuals_pure", "residuals_learned"]
+        for key in ("residuals_pure", "residuals_learned")
     }
-
+ 
     plot_results(
         avg_results,
         save_path=f"figures/{algorithm}_N{N_choice}_average_trainingN{N_train}.png"
     )
-
+ 
     # ------------------------------------------------------------------
     # Final summary
     # ------------------------------------------------------------------
@@ -284,20 +275,19 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
           f"{avg_results['residuals_pure'][-1]:.6f}")
     print(f"{algorithm.upper()} + GNN — final avg residual: "
           f"{avg_results['residuals_learned'][-1]:.6f}")
-    
-    
+ 
     
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB/ADMM")
-
+ 
     parser.add_argument(
-        "--N", type=int, default=3, choices=[3, 10, 30],
+        "--N", type=int, default=6, choices=[3, 10, 30],
         help="Network size for inference (default: 3)"
     )
     parser.add_argument(
-        "--N_train", type=int, default=3, choices=[3, 10, 30],
+        "--N_train", type=int, default=6, choices=[3, 10, 30],
         help="Network size for training (default: 3)"
     )
     parser.add_argument(
@@ -309,7 +299,7 @@ if __name__ == "__main__":
         help="Algorithm to use: 'fb' (default) or 'admm'"
     )
     args = parser.parse_args()
-
+ 
     main(
         N_choice  = args.N,
         N_train   = args.N_train,

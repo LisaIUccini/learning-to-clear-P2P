@@ -44,13 +44,15 @@ class EnergyNetwork:
         # Graph structure (built once)
         self.edge_list    = self._build_edge_list()
         self.edge_index   = self._build_edge_index()
-        self.inverse_edge = self._build_inverse_edge()
+
+        # Single idx_map built once and reused everywhere
+        self._idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
+        self.inverse_edge = {(m, n): self._idx_map[(n, m)] for (m, n) in self.edge_list}
 
         # edge_list index for each incoming edge of node n
         # incoming_idx[n] = list of edge_list indices i such that edge_list[i] = (m, n)
-        idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
         self.incoming_idx = {
-            n: [idx_map[(m, n)] for m in self.neighbors[n] if (m, n) in idx_map]
+            n: [self._idx_map[(m, n)] for m in self.neighbors[n] if (m, n) in self._idx_map]
             for n in range(self.N)
         }
 
@@ -66,12 +68,27 @@ class EnergyNetwork:
 
         self.dim = 2 * self.N + len(self.edge_list)
 
-        """
+        # Pre-cached bounds for project_exact (avoid repeated .item() calls)
+        self._bounds_D = [(float(p.D_min.item()), float(p.D_max.item())) for p in self.prosumers]
+        self._bounds_G = [(float(p.G_min.item()), float(p.G_max.item())) for p in self.prosumers]
+        self._bounds_Q = [(float("-inf"), float(self.k_edge[i].item())) for i in range(len(self.edge_list))]
+        self._bounds = self._bounds_D + self._bounds_G + self._bounds_Q
+
+        # Pre-cached G_res float values for project_exact
+        self._G_res_vals = [float(p.G_res.item()) for p in self.prosumers]
+
+        # Pre-cached G_res tensor for project_approx
+        self._G_res_tensor = torch.stack([p.G_res for p in self.prosumers])
+
+        # Pre-cached unique edge pairs for reciprocity checks
+        self._unique_edge_pairs = []
+        visited = set()
         for (m, n) in self.edge_list:
-            self.prosumers[m].send_q_to(self.prosumers[n])
-            self.prosumers[m].send_z_to(self.prosumers[n])
-            self.prosumers[m].send_u_to(self.prosumers[n])
-        """
+            if (m, n) not in visited and (n, m) in self._idx_map:
+                visited.add((m, n))
+                visited.add((n, m))
+                self._unique_edge_pairs.append((m, n))
+
     # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------
@@ -88,13 +105,10 @@ class EnergyNetwork:
         return edge_list
 
     def _build_edge_index(self):
-        src = [m for (m, n) in self.edge_list]
-        dst = [n for (m, n) in self.edge_list]
+        if not self.edge_list:
+            return torch.zeros(2, 0, dtype=torch.long, device=self.device)
+        src, dst = zip(*self.edge_list)
         return torch.tensor([src, dst], dtype=torch.long, device=self.device)
-
-    def _build_inverse_edge(self):
-        idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
-        return {(m, n): idx_map[(n, m)] for (m, n) in self.edge_list}
 
     # ------------------------------------------------------------------
     # Flatten / unflatten  (global state vector x = [D, G, Q])
@@ -117,13 +131,14 @@ class EnergyNetwork:
         """
         Writes D, G, q back to each Prosumer from global vector x of shape (dim,).
         """
-        for n in range(self.N):
+        N = self.N
+        for n in range(N):
             self.prosumers[n].D = x[n]
-            self.prosumers[n].G = x[self.N + n]
+            self.prosumers[n].G = x[N + n]
 
+        base = 2 * N
         for i, (m, n) in enumerate(self.edge_list):
-            self.prosumers[n].q[m] = x[2 * self.N + i]
-
+            self.prosumers[n].q[m] = x[base + i]
 
     def flatten_admm(self) -> torch.Tensor:
         """
@@ -134,12 +149,11 @@ class EnergyNetwork:
  
         Z and U are ordered as edge_list: Z[i] = z_{mn} for edge_list[i] = (m,n).
         """
-        D = torch.stack([p.D for p in self.prosumers])
-        G = torch.stack([p.G for p in self.prosumers])
-        Q = torch.stack([self.prosumers[n].q[m] for (m, n) in self.edge_list])
-        Z = torch.stack([self.prosumers[n].z[m] for (m, n) in self.edge_list])
-        U = torch.stack([self.prosumers[n].u[m] for (m, n) in self.edge_list])
-        return torch.cat([D, G, Q, Z, U])
+        prosumers = self.prosumers
+        x = self.flatten()
+        Z = torch.stack([prosumers[n].z[m] for (m, n) in self.edge_list])
+        U = torch.stack([prosumers[n].u[m] for (m, n) in self.edge_list])
+        return torch.cat([x, Z, U])
 
     # ------------------------------------------------------------------
     # Communication round
@@ -191,7 +205,8 @@ class EnergyNetwork:
         """
         x0     = self.flatten()
         x_orig = x0.detach().clone()
-        idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
+        N      = self.N
+        idx_map = self._idx_map
 
         def objective(x):
             x_t = torch.tensor(x, dtype=torch.float32)
@@ -203,47 +218,38 @@ class EnergyNetwork:
 
         # Balance equality constraints: D[n] = G[n] + G_res[n] + sum_m q_{mn}
         eq_constraints = []
-        for n in range(self.N):
-            q_idxs = [2 * self.N + idx_map[(m, n)] for m in self.neighbors[n]]
-            def make_eq(n_, q_idxs_):
+        G_res_vals = self._G_res_vals
+        for n in range(N):
+            q_idxs = [2 * N + idx_map[(m, n)] for m in self.neighbors[n]]
+            def make_eq(n_, q_idxs_, g_res_):
                 def eq_fn(x):
                     return (
                         float(x[n_])
-                        - float(x[self.N + n_])
-                        - float(self.prosumers[n_].G_res.item())
+                        - float(x[N + n_])
+                        - g_res_
                         - sum(float(x[i]) for i in q_idxs_)
                     )
                 return eq_fn
-            eq_constraints.append({"type": "eq", "fun": make_eq(n, q_idxs)})
+            eq_constraints.append({"type": "eq", "fun": make_eq(n, q_idxs, G_res_vals[n])})
 
         # Reciprocity inequality constraints: q_{mn} + q_{nm} <= 0
         ineq_constraints = []
-        visited = set()
-        for (m, n) in self.edge_list:
-            if (m, n) in visited:
-                continue
-            visited.add((m, n))
-            visited.add((n, m))
-            i_mn = 2 * self.N + idx_map[(m, n)]
-            i_nm = 2 * self.N + idx_map[(n, m)]
+        base = 2 * N
+        for (m, n) in self._unique_edge_pairs:
+            i_mn = base + idx_map[(m, n)]
+            i_nm = base + idx_map[(n, m)]
             def make_ineq(a_, b_):
                 def ineq_fn(x):
                     return -(float(x[a_]) + float(x[b_]))
                 return ineq_fn
             ineq_constraints.append({"type": "ineq", "fun": make_ineq(i_mn, i_nm)})
 
-        bounds = (
-            [(float(p.D_min.item()), float(p.D_max.item())) for p in self.prosumers]
-            + [(float(p.G_min.item()), float(p.G_max.item())) for p in self.prosumers]
-            + [(float("-inf"), float(self.k_edge[i].item())) for i in range(len(self.edge_list))]
-        )
-
         result = minimize(
             objective,
             x0.detach().cpu().numpy(),
             jac=grad_objective,
             method="SLSQP",
-            bounds=bounds,
+            bounds=self._bounds,
             constraints=eq_constraints + ineq_constraints,
             options={"ftol": 1e-12, "maxiter": 2000},
         )
@@ -275,15 +281,14 @@ class EnergyNetwork:
 
         D = torch.stack([p.D.detach() for p in self.prosumers])
         G = torch.stack([p.G.detach() for p in self.prosumers])
-        G_res = torch.stack([p.G_res for p in self.prosumers])
+        G_res = self._G_res_tensor
 
+        # Precompute per-node q_sum using incoming_idx for vectorized balance
         for _ in range(n_iter):
             eq_loss = torch.tensor(0.0, device=self.device)
             for n in range(self.N):
-                if self.incoming_idx[n]:
-                    q_sum = Q[self.incoming_idx[n]].sum()
-                else:
-                    q_sum = torch.tensor(0.0, device=self.device)
+                idx = self.incoming_idx[n]
+                q_sum = Q[idx].sum() if idx else torch.tensor(0.0, device=self.device)
                 eq_loss = eq_loss + (D[n] - G[n] - G_res[n] - q_sum) ** 2
 
             if create_graph:
@@ -324,23 +329,27 @@ class EnergyNetwork:
             )  # (|E|, 1)
 
         else:  # admm
+            _zero = torch.tensor(0.0, device=self.device)
+            prosumers = self.prosumers
+
             def u_avg(p):
-                if len(p.neighbors) == 0:
-                    return torch.zeros(1, device=self.device).squeeze()
+                if not p.neighbors:
+                    return _zero
                 return torch.stack([p.u[m] for m in p.neighbors]).mean()
 
             x_node = torch.stack(
-                [torch.stack([p.D, p.G, u_avg(p)]) for p in self.prosumers]
+                [torch.stack([p.D, p.G, u_avg(p)]) for p in prosumers]
             )  # (N, 3)
 
+            # Build edge_attr as (|E|, 3) without per-edge torch.stack
+            q_vals = [prosumers[m].q[n] for (m, n) in self.edge_list]
+            z_vals = [prosumers[m].z[n] for (m, n) in self.edge_list]
+            u_vals = [prosumers[m].u[n] for (m, n) in self.edge_list]
             edge_attr = torch.stack([
-                torch.stack([
-                    self.prosumers[m].q[n].reshape(1),
-                    self.prosumers[m].z[n].reshape(1),
-                    self.prosumers[m].u[n].reshape(1),
-                ], dim=-1).squeeze(0)
-                for (m, n) in self.edge_list
-            ])  # (|E|, 3)
+                torch.stack(q_vals),
+                torch.stack(z_vals),
+                torch.stack(u_vals),
+            ], dim=1)  # (|E|, 3)
 
         return Data(
             x=x_node,
@@ -370,7 +379,6 @@ class EnergyNetwork:
 
         Checks: D/G bounds, Q capacity, balance equality, reciprocity.
         """
-        idx_map = {edge: i for i, edge in enumerate(self.edge_list)}
         Q = self.flatten()[2 * self.N:]
 
         for p in self.prosumers:
@@ -385,13 +393,7 @@ class EnergyNetwork:
         if (self.balance_violation().abs() > tol).any():
             return True
 
-        visited = set()
-        for (m, n) in self.edge_list:
-            if (m, n) in visited or (n, m) not in idx_map:
-                continue
-            visited.add((m, n))
-            visited.add((n, m))
-            
+        for (m, n) in self._unique_edge_pairs:
             q_mn = float(self.prosumers[n].q[m])
             q_nm = float(self.prosumers[m].q[n])
             if q_mn + q_nm > tol:

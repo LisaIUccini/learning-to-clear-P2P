@@ -1,7 +1,4 @@
-import os
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
 
 from energy_network import EnergyNetwork
 from model import GNNUpdate
@@ -73,13 +70,15 @@ def run_comparison(
     if algorithm == "admm" and rho is None:
         raise ValueError("rho is required when algorithm='admm'")
 
+    is_admm = (algorithm == "admm")
+
     model.eval()
 
     net_pure    = net_init.clone()
     net_learned = net_init.clone()
 
     # Reset ADMM duals before starting
-    if algorithm == "admm":
+    if is_admm:
         net_pure.admm_reset()
         net_learned.admm_reset()
 
@@ -89,7 +88,7 @@ def run_comparison(
     with torch.no_grad():
         for it in range(max_iter):
 
-            if algorithm == "fb":
+            if not is_admm:
                 # ----------------------------------------------------------
                 # FB: pure step
                 # ----------------------------------------------------------
@@ -111,7 +110,7 @@ def run_comparison(
                 ).item()
 
             else:  # admm
-                
+
                 # ----------------------------------------------------------
                 # ADMM: pure step
                 # Fixed-point residual: ||σ - T_ADMM(σ)||²
@@ -122,7 +121,7 @@ def run_comparison(
                 res_pure = torch.sum(
                     (sigma_pure - T_sigma_pure) ** 2
                 ).item()
- 
+
                 # ----------------------------------------------------------
                 # ADMM: learned step
                 # Fixed-point residual: ||σ - T_ADMM(σ)||²
@@ -135,7 +134,7 @@ def run_comparison(
                 res_learned = torch.sum(
                     (sigma_learned - T_sigma_learned) ** 2
                 ).item()
-                
+
                 """
                 # ----------------------------------------------------------
                 # ADMM: pure step
@@ -195,10 +194,8 @@ def run_comparison(
 
             # Stopping: pure algorithm converged
             if res_pure < tol:
-                algo_name = "FB" if algorithm == "fb" else "ADMM"
-                print(f"  Pure {algo_name} converged at iteration {it + 1}")
+                print(f"  Pure {'ADMM' if is_admm else 'FB'} converged at iteration {it + 1}")
                 break
-
 
     return {
         "residuals_pure":    residuals_pure,
@@ -211,46 +208,46 @@ def run_comparison(
 
     """
     if algorithm == "fb":
-    # ----------------------------------------------------------
-    # FB: pure step
-    # ----------------------------------------------------------
-    net_pure_new = pure_FB_step(net_pure, gamma)
+        # ----------------------------------------------------------
+        # FB: pure step
+        # ----------------------------------------------------------
+        net_pure_new = pure_FB_step(net_pure, gamma)
 
-    res_pure = torch.sum(
-        (net_pure_new.flatten() - net_pure.flatten()) ** 2
-    ).item()
+        res_pure = torch.sum(
+            (net_pure_new.flatten() - net_pure.flatten()) ** 2
+        ).item()
 
-    # ----------------------------------------------------------
-    # FB: learned step + fixed-point residual
-    # ----------------------------------------------------------
-    net_learned_new = learned_FB_step(
-        net_learned, model, it, gamma, training=False
-    )
-    res_learned = torch.sum(
-        (net_learned_new.flatten()
-            - pure_FB_step(net_learned_new, gamma).flatten()) ** 2
-    ).item()
+        # ----------------------------------------------------------
+        # FB: learned step + fixed-point residual
+        # ----------------------------------------------------------
+        net_learned_new = learned_FB_step(
+            net_learned, model, it, gamma, training=False
+        )
+        res_learned = torch.sum(
+            (net_learned_new.flatten()
+                - pure_FB_step(net_learned_new, gamma).flatten()) ** 2
+        ).item()
 
-else:  # admm
-    # ----------------------------------------------------------
-    # ADMM: pure step
-    # ----------------------------------------------------------
-    net_pure_new = pure_ADMM_step(net_pure, rho)
+    else:  # admm
+        # ----------------------------------------------------------
+        # ADMM: pure step
+        # ----------------------------------------------------------
+        net_pure_new = pure_ADMM_step(net_pure, rho)
 
-    # Primal residual: sum_{(m,n)} (q_{mn} - z_{mn})^2
-    res_pure = torch.sum(
-        (net_pure_new.flatten() - net_pure.flatten()) ** 2
-    ).item()
-    
+        # Primal residual: sum_{(m,n)} (q_{mn} - z_{mn})^2
+        res_pure = torch.sum(
+            (net_pure_new.flatten() - net_pure.flatten()) ** 2
+        ).item()
+        
 
-    # ----------------------------------------------------------
-    # ADMM: learned step + primal residual
-    # ----------------------------------------------------------
-    net_learned_new = learned_ADMM_step(
-        net_learned, model, it, rho, training=False
-    )
-    res_learned = torch.sum(
-        (net_learned_new.flatten()
-            - pure_ADMM_step(net_learned_new, rho).flatten()) ** 2
-    ).item()
-                """
+        # ----------------------------------------------------------
+        # ADMM: learned step + primal residual
+        # ----------------------------------------------------------
+        net_learned_new = learned_ADMM_step(
+            net_learned, model, it, rho, training=False
+        )
+        res_learned = torch.sum(
+            (net_learned_new.flatten()
+                - pure_ADMM_step(net_learned_new, rho).flatten()) ** 2
+        ).item()
+    """

@@ -43,21 +43,19 @@ class EnergyDataset(Dataset):
 
         print(f"Generating {num_samples} dataset samples...")
 
-        x0_list = []
+        # Pre-allocate tensor instead of building a list and stacking
+        self.x0_data = torch.empty(num_samples, self.dim, device=device)
+
         for i in range(num_samples):
             # Clone template (shares parameters), then re-randomise state
             net = net_template.clone()
             net._init_state()
 
             # Detach: x0 is a fixed starting point, not part of any compute graph
-            x0 = net.flatten().detach().clone()
-            x0_list.append(x0)
+            self.x0_data[i] = net.flatten().detach()
 
             if (i + 1) % 10 == 0 or (i + 1) == num_samples:
                 print(f"  {i+1}/{num_samples} samples generated")
-
-        # Stack into a single tensor for efficient batch indexing
-        self.x0_data = torch.stack(x0_list).to(device)  # (num_samples, dim)
 
         print("Dataset generation complete.")
 
@@ -72,9 +70,8 @@ class EnergyDataset(Dataset):
             'x0' : torch.Tensor (dim,) — initial flattened state for this sample
         """
         return {"x0": self.x0_data[idx]}
-    
 
- 
+
 class MultiTopologyDataset(Dataset):
     """
     Dataset with diverse graph topologies for robust GNN training.
@@ -95,7 +92,7 @@ class MultiTopologyDataset(Dataset):
     device         : torch.device
     seed           : random seed for reproducibility
     """
- 
+
     def __init__(
         self,
         num_samples: int,
@@ -106,28 +103,29 @@ class MultiTopologyDataset(Dataset):
         seed: int = 42,
     ):
         super().__init__()
- 
+
         if topologies is None:
             topologies = ["complete", "tree", "sparse"]
- 
+
         self.num_samples = num_samples
         self.device      = device
         self.N           = N
- 
+
         rng = np.random.default_rng(seed)
- 
-        self.samples = []  # list of (net_template, x0)
- 
+        n_topos = len(topologies)
+
+        self.samples = []  # list of (net_template, x0, rho_admm)
+
         print(f"Generating {num_samples} multi-topology samples (N={N})...")
- 
+
         topo_counts = {t: 0 for t in topologies}
- 
+
         for i in range(num_samples):
-            topo = topologies[rng.integers(len(topologies))]
+            topo = topologies[rng.integers(n_topos)]
             topo_counts[topo] += 1
- 
+
             sparsity = float(rng.uniform(*sparsity_range)) if topo == "sparse" else 0.5
- 
+
             sample_seed = int(rng.integers(1_000_000))
             net, _, _, _, rho_admm = init_parameters_graph(
                 N=N,
@@ -136,22 +134,22 @@ class MultiTopologyDataset(Dataset):
                 sparsity=sparsity,
                 device=device,
             )
- 
+
             # Randomise initial state
             net._init_state()
             x0 = net.flatten().detach().clone()
- 
+
             self.samples.append((net, x0, rho_admm))
- 
+
             if (i + 1) % 10 == 0 or (i + 1) == num_samples:
                 print(f"  {i+1}/{num_samples} samples generated")
- 
+
         print(f"Dataset generation complete.")
         print(f"  Topology distribution: {topo_counts}")
- 
+
     def __len__(self):
         return self.num_samples
- 
+
     def __getitem__(self, idx):
         """
         Returns

@@ -79,7 +79,7 @@ def build_graph(N: int, topology: str, seed: int = None,
             f"Choose from: complete, star, tree, cycle, path, sparse."
         )
 
-    return {n: sorted(list(G.neighbors(n))) for n in range(N)}
+    return {n: sorted(G.neighbors(n)) for n in range(N)}
 
 
 # ------------------------------------------------------------------
@@ -366,7 +366,22 @@ def init_parameters_graph(
     device: torch.device = torch.device("cpu"),
 ) -> tuple:
     """
-    Initialize a random EnergyNetwork for N prosumers.
+    Initialize a random EnergyNetwork for N prosumers with
+    physically realistic parameters and guaranteed feasibility.
+
+    Parameter design rationale (from analysis of initN3/N10/N30
+    and P2P energy market literature):
+
+    - G_max: 55-80% of non-root nodes are pure consumers (G_max=0).
+      Nodes with flexibility have G_max in [2, 8].
+    - G_res: every node has some renewable generation, U[0.5, 5].
+    - D_max: scales with position in network. Near-root nodes have
+      higher demand capacity. Clipped for feasibility.
+    - D_star: set as a fraction of D_max, typically 30-75%.
+    - a_tilde: demand sensitivity, U[5, 15] (from fixed instances).
+    - a: flexibility cost curvature, U[2, 6].
+    - c: trading cost — root links more expensive (grid fees).
+    - k: link capacity — root links 2-4x larger than peer links.
 
     Returns
     -------
@@ -375,35 +390,173 @@ def init_parameters_graph(
     rng       = np.random.default_rng(seed)
     neighbors = build_graph(N, topology, seed, sparsity)
 
-    D_min   = torch.zeros(N, dtype=torch.float32)
-    D_max   = torch.tensor(rng.uniform(5., 20., N),  dtype=torch.float32)
-    G_min   = torch.zeros(N, dtype=torch.float32)
-    G_max   = torch.tensor(rng.uniform(0.,  8., N),  dtype=torch.float32)
-    G_res   = torch.tensor(rng.uniform(0.,  4., N),  dtype=torch.float32)
-    D_star  = torch.tensor(rng.uniform(2., 14., N),  dtype=torch.float32)
-    a_tilde = torch.tensor(rng.uniform(8., 15., N),  dtype=torch.float32)
-    a       = torch.tensor(rng.uniform(2.,  6., N),  dtype=torch.float32)
-    b       = torch.zeros(N, dtype=torch.float32)
+    # ------------------------------------------------------------------
+    # Step 1: Flexibility (G_max) — sparse, like real microgrids
+    #
+    # In real P2P markets, most prosumers are pure consumers or have
+    # only solar panels (captured by G_res). Controllable flexibility
+    # (batteries, micro-CHP) is expensive and owned by ~20-40% of nodes.
+    # ------------------------------------------------------------------
+    G_min = torch.zeros(N, dtype=torch.float32)
+    G_max = torch.zeros(N, dtype=torch.float32)
 
-    # Root node (node 0): grid interface
-    D_max[0]   = 0.0
-    G_max[0]   = 50.0
-    a_tilde[0] = 0.0
-    D_star[0]  = 0.0
+    # Fraction of non-root nodes with controllable flexibility: 20-45%
+    flex_prob = float(rng.uniform(0.2, 0.45))
+    for n in range(1, N):
+        if rng.random() < flex_prob:
+            G_max[n] = float(rng.uniform(2., 8.))
+        # else G_max[n] = 0 (pure consumer)
 
+    # ------------------------------------------------------------------
+    # Step 2: Renewable generation (G_res) — every node has some
+    #
+    # In modern distribution networks, nearly all prosumers have
+    # rooftop solar or small wind. G_res=0 is unrealistic.
+    # Root node has G_res=0 (it's the grid interface, not a prosumer).
+    # ------------------------------------------------------------------
+    G_res = torch.tensor(
+        [0.0] + [float(rng.uniform(0.5, 5.0)) for _ in range(N - 1)],
+        dtype=torch.float32
+    )
+
+    # ------------------------------------------------------------------
+    # Step 3: Link capacities — root links larger (grid connection)
+    #
+    # Root-to-prosumer links represent the grid connection point,
+    # with higher capacity (15-25 kW). Peer-to-peer links are
+    # smaller (3-10 kW), representing local interconnections.
+    # Symmetry: k_mn = k_nm (same physical cable).
+    # ------------------------------------------------------------------
     c, k = {}, {}
     for n in range(N):
         for m in neighbors[n]:
+            # Trading cost: root links have grid fees
             if m == 0 or n == 0:
                 c_val = float(rng.uniform(0.3, 0.5))
-                k_val = float(rng.uniform(15., 20.))
+                k_val = float(rng.uniform(15., 25.))
             else:
-                c_val = float(rng.uniform(0.1, 0.3))
-                k_val = float(rng.uniform(5., 10.))
+                c_val = float(rng.uniform(0.05, 0.3))
+                k_val = float(rng.uniform(3., 10.))
             c[(n, m)] = torch.tensor(c_val, dtype=torch.float32)
             if (n, m) not in k:
                 k[(n, m)] = torch.tensor(k_val, dtype=torch.float32)
                 k[(m, n)] = torch.tensor(k_val, dtype=torch.float32)
+
+    # ------------------------------------------------------------------
+    # Step 4: Import capacity per node (needed for D_max feasibility)
+    # ------------------------------------------------------------------
+    max_import = torch.zeros(N, dtype=torch.float32)
+    for n in range(N):
+        max_import[n] = sum(float(k[(m, n)].item()) for m in neighbors[n])
+
+    # ------------------------------------------------------------------
+    # Step 5: Demand bounds (D_min, D_max)
+    #
+    # D_min = 0 for all nodes (can always choose not to consume).
+    # D_max reflects the maximum load the node can draw:
+    #   - Must satisfy: D_max >= G_res (can always self-consume RES)
+    #   - Must satisfy: D_max <= G_max + G_res + max_import (feasibility)
+    #   - In real networks, D_max correlates with connectivity
+    #     (well-connected nodes can import more, so can consume more).
+    # ------------------------------------------------------------------
+    D_min = torch.zeros(N, dtype=torch.float32)
+
+    # Base D_max: random, then clipped for feasibility
+    D_max_raw = torch.tensor(
+        [float(rng.uniform(4., 18.)) for _ in range(N)],
+        dtype=torch.float32
+    )
+
+    # Feasibility ceiling: can't consume more than total available supply
+    D_max_feasible = G_max + G_res + max_import
+    D_max = torch.minimum(D_max_raw, D_max_feasible)
+
+    # Feasibility floor: at least G_res (can self-consume renewables)
+    D_max = torch.maximum(D_max, G_res)
+
+    # Root: no demand
+    D_max[0] = 0.0
+    D_min[0] = 0.0
+
+    # ------------------------------------------------------------------
+    # Step 6: Target demand (D_star) — fraction of D_max
+    #
+    # D_star represents the prosumer's preferred consumption level.
+    # From fixed instances: D_star/D_max is typically 0.3-0.75.
+    # D_star MUST be in [D_min, D_max] for the cost function to
+    # have its minimum inside the feasible set.
+    # ------------------------------------------------------------------
+    D_star_ratio = torch.tensor(
+        [float(rng.uniform(0.3, 0.75)) for _ in range(N)],
+        dtype=torch.float32
+    )
+    D_star = D_star_ratio * D_max
+    D_star[0] = 0.0
+
+    # ------------------------------------------------------------------
+    # Step 7: Cost function parameters
+    #
+    # a_tilde: demand utility curvature. Higher = more sensitive to
+    #   deviating from D_star. Range [5, 15] from fixed instances.
+    #
+    # a: flexibility activation cost curvature. Higher = more expensive
+    #   to use controllable generation. Range [2, 6].
+    #   For nodes with G_max=0, 'a' doesn't matter (G is always 0),
+    #   but we set it anyway for consistency.
+    #
+    # b: linear flexibility cost. Set to 0 (as in all fixed instances).
+    #   The constraint -b/a >= G_min (from paper eq. 6) is automatically
+    #   satisfied since b=0 and G_min=0.
+    # ------------------------------------------------------------------
+    a_tilde = torch.tensor(
+        [0.0] + [float(rng.uniform(5., 15.)) for _ in range(N - 1)],
+        dtype=torch.float32
+    )
+    a = torch.tensor(
+        [1.0] + [float(rng.uniform(2., 6.)) for _ in range(N - 1)],
+        dtype=torch.float32
+    )
+    b = torch.zeros(N, dtype=torch.float32)
+
+    # ------------------------------------------------------------------
+    # Step 8: Root node — grid interface
+    #
+    # The root must be able to export enough to cover the network's
+    # net energy deficit. Its G_max must cover the total deficit
+    # of all non-root nodes, and its link capacities must allow
+    # transporting this energy.
+    # ------------------------------------------------------------------
+    # Total deficit: energy that non-root nodes cannot self-supply
+    total_deficit = 0.0
+    for n in range(1, N):
+        # Worst case: node needs D_star but can only self-generate G_res+G_max
+        local_gen = float(G_max[n]) + float(G_res[n])
+        deficit_n = max(0.0, float(D_star[n]) - local_gen)
+        total_deficit += deficit_n
+
+    # Root G_max: cover deficit with 50% margin
+    root_export_cap = sum(float(k[(0, m)].item()) for m in neighbors[0])
+    G_max[0] = max(50.0, total_deficit * 1.5)
+
+    # Ensure root can actually export its generation
+    if G_max[0] > root_export_cap:
+        scale = float(G_max[0]) / max(root_export_cap, 1.0)
+        for m in neighbors[0]:
+            new_val = float(k[(0, m)].item()) * scale
+            k[(0, m)] = torch.tensor(new_val, dtype=torch.float32)
+            k[(m, 0)] = torch.tensor(new_val, dtype=torch.float32)
+
+    # ------------------------------------------------------------------
+    # Step 9: Feasibility verification
+    # ------------------------------------------------------------------
+    for n in range(N):
+        local_supply_max = float(G_max[n]) + float(G_res[n]) + float(max_import[n])
+        assert float(D_min[n]) <= local_supply_max, (
+            f"Node {n}: D_min={D_min[n]:.2f} > max supply {local_supply_max:.2f}")
+        assert float(D_max[n]) >= float(G_res[n]), (
+            f"Node {n}: D_max={D_max[n]:.2f} < G_res={G_res[n]:.2f}")
+        assert float(D_star[n]) <= float(D_max[n]), (
+            f"Node {n}: D_star={D_star[n]:.2f} > D_max={D_max[n]:.2f}")
 
     net = build_network(N, neighbors, D_min, D_max, G_min, G_max, G_res,
                         a_tilde, a, b, D_star, c, k, device)
@@ -465,7 +618,8 @@ def plot_graph(neighbors: dict, title: str = "Energy Network Graph",
     plt.tight_layout()
 
     if save_path is not None:
-        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
+        dirname = os.path.dirname(save_path)
+        os.makedirs(dirname if dirname else ".", exist_ok=True)
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Graph saved to {save_path}")
     else:

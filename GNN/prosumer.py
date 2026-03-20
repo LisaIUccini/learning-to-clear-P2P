@@ -1,7 +1,9 @@
 import copy
+import warnings
 import torch
 import cvxpy as cp
 from cvxpylayers.torch import CvxpyLayer
+from torch_geometric.data import Data
 
 
 
@@ -73,6 +75,22 @@ class Prosumer:
         self.c = {m: c[m].to(device) for m in self.neighbors}
         self.k = {m: k[m].to(device) for m in self.neighbors}
 
+        # Pre-cached scalar float values (avoid repeated .item() in QP methods)
+        self._D_min_val   = float(self.D_min.item())
+        self._D_max_val   = float(self.D_max.item())
+        self._G_min_val   = float(self.G_min.item())
+        self._G_max_val   = float(self.G_max.item())
+        self._G_res_val   = float(self.G_res.item())
+        self._a_tilde_val = float(self.a_tilde.item())
+        self._a_val       = float(self.a.item())
+        self._b_val       = float(self.b.item())
+        self._D_star_val  = float(self.D_star.item())
+        self._c_vals      = [float(self.c[m].item()) for m in self.neighbors]
+        self._k_caps      = [float(self.k[m].item()) for m in self.neighbors]
+
+        # Cached zero scalar for reuse
+        self._zero = torch.tensor(0.0, device=device)
+
         # Decision variables — initialized randomly in _init_state
         self.D = None     # scalar tensor
         self.G = None     # scalar tensor
@@ -80,19 +98,19 @@ class Prosumer:
 
         # Receive buffer — filled by neighbors before each step
         # q_received[m] = q_{nm}, the trade decision of neighbor m w.r.t. this node
-        self.q_received = {m: torch.zeros(1, device=device) for m in self.neighbors}
+        self.q_received = {m: self._zero.clone() for m in self.neighbors}
 
         # ADMM auxiliary variables (reset before each run via admm_reset())
         # z[m] : consensus copy of q[m]           — updated via z_update()
         # u[m] : scaled dual variable (lambda/rho) — updated via u_update()
-        self.z = {m: torch.zeros(1, device=device).squeeze() for m in self.neighbors}
-        self.u = {m: torch.zeros(1, device=device).squeeze() for m in self.neighbors}
+        self.z = {m: self._zero.clone() for m in self.neighbors}
+        self.u = {m: self._zero.clone() for m in self.neighbors}
 
         # ADMM receive buffers — filled by neighbors during admm_communicate()
         # z_received[m] : z_{nm} held by neighbor m (needed for z_update)
         # q_received is reused for q_{nm} received from m
-        self.z_received = {m: torch.zeros(1, device=device).squeeze() for m in self.neighbors}
-        self.u_received = {m: torch.zeros(1, device=device).squeeze() for m in self.neighbors}
+        self.z_received = {m: self._zero.clone() for m in self.neighbors}
+        self.u_received = {m: self._zero.clone() for m in self.neighbors}
 
         self._init_state()
 
@@ -120,7 +138,7 @@ class Prosumer:
         Returns scalar tensor.
         """
         if not self.neighbors:
-            return torch.zeros(1, device=self.device).squeeze()
+            return self._zero
         return torch.stack([self.q[m] for m in self.neighbors]).sum()
 
     # ------------------------------------------------------------------
@@ -195,36 +213,31 @@ class Prosumer:
 
         # Reciprocity RHS: q_received from each neighbor
         if k > 0:
-            q_recv = [
-                float(self.q_received[m].item()) for m in self.neighbors
-            ]
+            q_recv = [self.q_received[m].item() for m in self.neighbors]
 
-        # Fixed bounds
-        D_min_val = float(self.D_min.item())
-        D_max_val = float(self.D_max.item())
-        G_min_val = float(self.G_min.item())
-        G_max_val = float(self.G_max.item())
-        G_res_val = float(self.G_res.item())
-        k_caps    = [float(self.k[m].item()) for m in self.neighbors]
+        # Use pre-cached scalar values
+        D_min_val = self._D_min_val
+        D_max_val = self._D_max_val
+        G_min_val = self._G_min_val
+        G_max_val = self._G_max_val
+        G_res_val = self._G_res_val
+        k_caps    = self._k_caps
 
         # CVXPY problem
         x = cp.Variable(dim)
 
         objective = cp.Minimize(0.5 * cp.sum_squares(x - x_hat))
 
-        constraints = []
+        constraints = [
+            x[0] >= D_min_val, x[0] <= D_max_val,
+            x[1] >= G_min_val, x[1] <= G_max_val,
+        ]
 
-        # 1. Box on D
-        constraints += [x[0] >= D_min_val, x[0] <= D_max_val]
-
-        # 2. Box on G
-        constraints += [x[1] >= G_min_val, x[1] <= G_max_val]
-
-        # 3. Capacity on each q
+        # Capacity on each q
         for i in range(k):
             constraints.append(x[2 + i] <= k_caps[i])
 
-        # 4. Balance equality
+        # Balance equality
         if k > 0:
             constraints.append(
                 x[0] - x[1] - G_res_val - cp.sum(x[2:]) == 0
@@ -232,7 +245,7 @@ class Prosumer:
         else:
             constraints.append(x[0] - x[1] == G_res_val)
 
-        # 5. Reciprocity
+        # Reciprocity
         for i in range(k):
             constraints.append(x[2 + i] <= -q_recv[i])
 
@@ -259,10 +272,10 @@ class Prosumer:
         Must be called on all prosumers before starting.
         """
         for m in self.neighbors:
-            self.z[m]          = torch.zeros(1, device=self.device).squeeze()
-            self.u[m]          = torch.zeros(1, device=self.device).squeeze()
-            self.z_received[m] = torch.zeros(1, device=self.device).squeeze()
-            self.u_received[m] = torch.zeros(1, device=self.device).squeeze()
+            self.z[m]          = self._zero.clone()
+            self.u[m]          = self._zero.clone()
+            self.z_received[m] = self._zero.clone()
+            self.u_received[m] = self._zero.clone()
 
     def admm_x_update(self, rho: float) -> "Prosumer":
         """
@@ -286,24 +299,24 @@ class Prosumer:
         k   = len(self.neighbors)
         dim = 2 + k
 
-        D_min_val = float(self.D_min.item())
-        D_max_val = float(self.D_max.item())
-        G_min_val = float(self.G_min.item())
-        G_max_val = float(self.G_max.item())
-        G_res_val = float(self.G_res.item())
-        k_caps    = [float(self.k[m].item()) for m in self.neighbors]
+        # Use pre-cached scalar values
+        D_min_val   = self._D_min_val
+        D_max_val   = self._D_max_val
+        G_min_val   = self._G_min_val
+        G_max_val   = self._G_max_val
+        G_res_val   = self._G_res_val
+        k_caps      = self._k_caps
+        a_tilde_val = self._a_tilde_val
+        a_val       = self._a_val
+        b_val       = self._b_val
+        D_star_val  = self._D_star_val
+        c_vals      = self._c_vals
 
         # z[m] - u[m] : the ADMM target for q[m]
         z_minus_u = [
-            float(self.z[m].item()) - float(self.u[m].item())
+            self.z[m].item() - self.u[m].item()
             for m in self.neighbors
         ]
-
-        a_tilde_val = float(self.a_tilde.item())
-        a_val       = float(self.a.item())
-        b_val       = float(self.b.item())
-        D_star_val  = float(self.D_star.item())
-        c_vals      = [float(self.c[m].item()) for m in self.neighbors]
 
         x = cp.Variable(dim)
         D = x[0]
@@ -327,9 +340,10 @@ class Prosumer:
 
         objective = cp.Minimize(J_n + penalty)
 
-        constraints = []
-        constraints += [D >= D_min_val, D <= D_max_val]
-        constraints += [G >= G_min_val, G <= G_max_val]
+        constraints = [
+            D >= D_min_val, D <= D_max_val,
+            G >= G_min_val, G <= G_max_val,
+        ]
         for i in range(k):
             constraints.append(x[2 + i] <= k_caps[i])
         if k > 0:
@@ -346,7 +360,7 @@ class Prosumer:
             return self
 
         x_sol = torch.tensor(x.value, dtype=torch.float32, device=self.device)
-        self.unflatten_local(x_sol)
+        self.unflatten(x_sol)
         return self
 
     def admm_x_update_approx(self, rho: float) -> "Prosumer":
@@ -369,15 +383,14 @@ class Prosumer:
         }
 
         # Step size: 1/(2*a_tilde + rho) for D, 1/(a + rho) for G and q
-        step_D = 1.0 / (2.0 * float(self.a_tilde.item()) + rho)
-        step_G = 1.0 / (float(self.a.item()) + rho)
-        step_q = step_G
+        step_D = 1.0 / (2.0 * self._a_tilde_val + rho)
+        step_G = 1.0 / (self._a_val + rho)
 
         self.D = torch.clamp(self.D - step_D * grad_D, self.D_min, self.D_max)
         self.G = torch.clamp(self.G - step_G * grad_G, self.G_min, self.G_max)
         for m in self.neighbors:
             self.q[m] = torch.clamp(
-                self.q[m] - step_q * grad_q[m],
+                self.q[m] - step_G * grad_q[m],
                 max= self.k[m]
             )
         return self
@@ -408,18 +421,18 @@ class Prosumer:
         k = len(self.neighbors)
         dim = 2 + k
 
-        # Fixed scalar values
-        D_min_val   = float(self.D_min.item())
-        D_max_val   = float(self.D_max.item())
-        G_min_val   = float(self.G_min.item())
-        G_max_val   = float(self.G_max.item())
-        G_res_val   = float(self.G_res.item())
-        a_tilde_val = float(self.a_tilde.item())
-        a_val       = float(self.a.item())
-        b_val       = float(self.b.item())
-        D_star_val  = float(self.D_star.item())
-        c_vals      = [float(self.c[m].item()) for m in self.neighbors]
-        k_caps      = [float(self.k[m].item()) for m in self.neighbors]
+        # Use pre-cached scalar values
+        D_min_val   = self._D_min_val
+        D_max_val   = self._D_max_val
+        G_min_val   = self._G_min_val
+        G_max_val   = self._G_max_val
+        G_res_val   = self._G_res_val
+        a_tilde_val = self._a_tilde_val
+        a_val       = self._a_val
+        b_val       = self._b_val
+        D_star_val  = self._D_star_val
+        c_vals      = self._c_vals
+        k_caps      = self._k_caps
 
         # cvxpy variable and parameter
         x = cp.Variable(dim)
@@ -445,9 +458,10 @@ class Prosumer:
         objective = cp.Minimize(J_n + penalty)
 
         # Constraints
-        constraints = []
-        constraints += [D >= D_min_val, D <= D_max_val]
-        constraints += [G >= G_min_val, G <= G_max_val]
+        constraints = [
+            D >= D_min_val, D <= D_max_val,
+            G >= G_min_val, G <= G_max_val,
+        ]
         for i in range(k):
             constraints.append(x[2 + i] <= k_caps[i])
         if k > 0:
@@ -485,7 +499,6 @@ class Prosumer:
         ]).double() if k > 0 else torch.zeros(0, dtype=torch.float64, device=self.device)
 
         # Solve — output is differentiable w.r.t. target_vals
-        import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sol, = self._cvxpy_layer(target_vals, solver_args={
@@ -531,8 +544,7 @@ class Prosumer:
         for m in self.neighbors:
             a = self.q[m]          + self.u[m]
             b = self.q_received[m] + self.u_received[m]
-            s = a + b
-            self.z[m] = a - torch.clamp(s, min=0.0) / 2.0
+            self.z[m] = a - torch.clamp(a + b, min=0.0) / 2.0
 
     def admm_u_update(self):
         """
@@ -544,27 +556,13 @@ class Prosumer:
 
     def send_z_to(self, other: "Prosumer", training: bool = False):
         """Send z[other.node_id] to other's z_received buffer."""
-        if training:
-            other.z_received[self.node_id] = self.z[other.node_id]
-        else:
-            other.z_received[self.node_id] = self.z[other.node_id].detach().clone()
+        val = self.z[other.node_id]
+        other.z_received[self.node_id] = val if training else val.detach().clone()
 
     def send_u_to(self, other: "Prosumer", training: bool = False):
         """Send u[other.node_id] to other's u_received buffer."""
-        if training:
-            other.u_received[self.node_id] = self.u[other.node_id]
-        else:
-            other.u_received[self.node_id] = self.u[other.node_id].detach().clone()
-
-    def unflatten_local(self, x: torch.Tensor):
-        """
-        Write [D, G, q_m0, q_m1, ...] back from local vector (2+k,).
-        Used by admm_x_update after solving the local QP.
-        """
-        self.D = x[0]
-        self.G = x[1]
-        for i, m in enumerate(self.neighbors):
-            self.q[m] = x[2 + i]
+        val = self.u[other.node_id]
+        other.u_received[self.node_id] = val if training else val.detach().clone()
 
     def send_q_to(self, other: "Prosumer", training: bool = False):
         """
@@ -576,12 +574,27 @@ class Prosumer:
         If training=True, preserves gradient flow between nodes (centralised).
         If training=False (default), detaches for distributed execution.
         """
-        n = self.node_id
-        m = other.node_id
+        val = self.q[other.node_id]
+        other.q_received[self.node_id] = val if training else val.detach().clone()
+
+    def send_all_to(self, other: "Prosumer", training: bool = False):
+        """
+        Send q, z, u to other's receive buffers in a single call.
+        Avoids 3 separate method calls + attribute lookups per edge.
+        """
+        oid = other.node_id
+        sid = self.node_id
+        q_val = self.q[oid]
+        z_val = self.z[oid]
+        u_val = self.u[oid]
         if training:
-            other.q_received[n] = self.q[m]
+            other.q_received[sid] = q_val
+            other.z_received[sid] = z_val
+            other.u_received[sid] = u_val
         else:
-            other.q_received[n] = self.q[m].detach().clone()
+            other.q_received[sid] = q_val.detach().clone()
+            other.z_received[sid] = z_val.detach().clone()
+            other.u_received[sid] = u_val.detach().clone()
 
     # ------------------------------------------------------------------
     # Local PyG data for distributed GNN inference
@@ -609,20 +622,17 @@ class Prosumer:
 
         Edge index: all edges point to ego node (local index 0).
         """
-        from torch_geometric.data import Data
-
         k = len(self.neighbors)
+        is_admm = (algorithm != "fb")
 
-        if algorithm == "fb":
+        if is_admm:
+            feat_size = 3
+            u_avg = (torch.stack([self.u[m] for m in self.neighbors]).mean()
+                     if k > 0 else self._zero)
+            ego_feat = torch.stack([self.D, self.G, u_avg]).unsqueeze(0)  # (1, 3)
+        else:
             feat_size = 2
             ego_feat  = torch.stack([self.D, self.G]).unsqueeze(0)  # (1, 2)
-        else:  # admm
-            feat_size = 3
-            if k > 0:
-                u_avg = torch.stack([self.u[m] for m in self.neighbors]).mean()
-            else:
-                u_avg = torch.zeros(1, device=self.device).squeeze()
-            ego_feat = torch.stack([self.D, self.G, u_avg]).unsqueeze(0)  # (1, 3)
 
         if k > 0:
             nbr_feat   = torch.zeros(k, feat_size, device=self.device)
@@ -632,23 +642,20 @@ class Prosumer:
             dst        = torch.zeros(k,         dtype=torch.long, device=self.device)
             edge_index = torch.stack([src, dst], dim=0)  # (2, k)
 
-            if algorithm == "fb":
+            if is_admm:
+                # Build (k, 3) without per-neighbor inner stack
+                q_r = torch.stack([self.q_received[m] for m in self.neighbors])
+                z_r = torch.stack([self.z_received[m] for m in self.neighbors])
+                u_r = torch.stack([self.u_received[m] for m in self.neighbors])
+                edge_attr = torch.stack([q_r, z_r, u_r], dim=1)  # (k, 3)
+            else:
                 edge_attr = torch.stack(
                     [self.q_received[m].reshape(1) for m in self.neighbors]
                 )  # (k, 1)
-            else:  # admm
-                edge_attr = torch.stack([
-                    torch.stack([
-                        self.q_received[m].reshape(1),
-                        self.z_received[m].reshape(1),
-                        self.u_received[m].reshape(1),
-                    ], dim=-1).squeeze(0)
-                    for m in self.neighbors
-                ])  # (k, 3)
         else:
             x_local    = ego_feat
             edge_index = torch.zeros(2, 0, dtype=torch.long, device=self.device)
-            edge_attr  = torch.zeros(0, 1 if algorithm == "fb" else 3,
+            edge_attr  = torch.zeros(0, 3 if is_admm else 1,
                                      device=self.device)
 
         return Data(
@@ -686,11 +693,9 @@ class Prosumer:
         self.G = self.G + v_G
         for m in self.neighbors:
             self.q[m] = self.q[m] + v_q[m]
-        if v_z is not None:
-            for m in self.neighbors:
+            if v_z is not None:
                 self.z[m] = self.z[m] + v_z[m]
-        if v_u is not None:
-            for m in self.neighbors:
+            if v_u is not None:
                 self.u[m] = self.u[m] + v_u[m]
 
     # ------------------------------------------------------------------
@@ -741,8 +746,7 @@ class Prosumer:
         Shallow copy: shares parameters, creates new state containers.
         Not meant to be used directly — use clone() for independent state.
         """
-        new_p = copy.copy(self)
-        return new_p
+        return copy.copy(self)
 
     # ------------------------------------------------------------------
     # Monitoring
@@ -759,7 +763,7 @@ class Prosumer:
             + 0.5 * self.a * self.G ** 2
             + self.b * self.G
         )
-        trade_cost = sum(self.c[m] * self.q[m] for m in self.neighbors) if self.neighbors else torch.zeros(1, device=self.device).squeeze()
+        trade_cost = sum(self.c[m] * self.q[m] for m in self.neighbors) if self.neighbors else self._zero
         return node_cost + trade_cost
 
     def __repr__(self):

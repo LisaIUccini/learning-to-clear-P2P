@@ -86,45 +86,30 @@ class GNNLayer(nn.Module):
         h_new : (num_nodes, d_h)
         """
         num_nodes = x.size(0)
+        d_h = self.d_h
 
         # Step 1 — Message: apply phi_msg to each edge's feature
-        # edge_attr may be (num_edges, 1) — squeeze to (num_edges,) then
-        # unsqueeze back if needed, or just ensure 2D input to phi_msg.
-        # edge_attr shape must be (num_edges, edge_feat_size) — no extra dims.
         if edge_attr.dim() == 3:
-            edge_attr = edge_attr.squeeze(1)  # (num_edges, 1, feat) -> (num_edges, feat)
-        # msg shape: (num_edges, d_h)
-        msg = self.phi_msg(edge_attr)
+            edge_attr = edge_attr.squeeze(1)
+        msg = self.phi_msg(edge_attr)  # (num_edges, d_h)
 
         # Step 2 — Aggregation: sum / sqrt(degree) at each destination node
-        # sqrt(degree) normalization balances between sum (too large for
-        # high-degree nodes) and mean (too small, loses signal).
-        # With N=3 (degree~2): sum/sqrt(2) ≈ sum*0.71 — almost unchanged.
-        # With N=10 (degree~9): sum/sqrt(9) = sum/3 — moderate reduction.
         dst = edge_index[1]  # (num_edges,)
+        num_edges = dst.size(0)
+        dst_expanded = dst.unsqueeze(1).expand(num_edges, d_h)
 
-        # Compute sum of messages
-        h_agg = torch.zeros(num_nodes, self.d_h, device=x.device)
-        h_agg.scatter_add_(
-            0,
-            dst.unsqueeze(1).expand_as(msg),  # (num_edges, d_h)
-            msg
-        )
+        h_agg = torch.zeros(num_nodes, d_h, device=x.device)
+        h_agg.scatter_add_(0, dst_expanded, msg)
 
         # Count degree per node
         degree = torch.zeros(num_nodes, 1, device=x.device)
-        degree.scatter_add_(
-            0,
-            dst.unsqueeze(1),
-            torch.ones(dst.size(0), 1, device=x.device)
-        )
-        degree = degree.clamp(min=1)
+        degree.scatter_add_(0, dst.unsqueeze(1), torch.ones(num_edges, 1, device=x.device))
+        degree.clamp_(min=1)
 
         # Normalize by sqrt(degree)
         h_agg = h_agg / torch.sqrt(degree)
 
         # Step 3 — Update: apply phi_upd to [node_features, aggregated_messages]
-        # h_new shape: (num_nodes, d_h)
         h_new = self.phi_upd(torch.cat([x, h_agg], dim=-1))
 
         return h_new
@@ -233,12 +218,10 @@ class GNNUpdate(nn.Module):
 
         delta_nodes = self.phi_node(h_new)  # (num_nodes, 2)
 
-        dst = edge_index[1]
-        edge_input  = torch.cat([h_new[dst], edge_attr], dim=-1)
-        delta_edges = self.phi_edge(edge_input)  # (num_edges, 1)
+        edge_input  = torch.cat([h_new[edge_index[1]], edge_attr], dim=-1)
+        delta_edges = self.phi_edge(edge_input)  # (num_edges, 3)
 
-        phi_m = F.softplus(self.phi_m_raw)
-        m_t   = phi_m * (self.rho ** t)
+        m_t = F.softplus(self.phi_m_raw) * (self.rho ** t)
 
         v_nodes = m_t * torch.tanh(delta_nodes)  # (num_nodes, 2)
         v_edges = m_t * torch.tanh(delta_edges)  # (num_edges, 3)
