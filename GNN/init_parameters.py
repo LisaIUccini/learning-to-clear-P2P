@@ -565,6 +565,159 @@ def init_parameters_graph(
 
     return net, 0.1, max_iter, tol, rho_admm
 
+# ------------------------------------------------------------------
+# Fixed-topology parametric instance (random parameters, fixed graph)
+# ------------------------------------------------------------------
+ 
+def init_parameters_fixed_topology(
+    neighbors: dict,
+    seed: int = 0,
+    device: torch.device = torch.device("cpu"),
+) -> tuple:
+    """
+    Generate a random feasible EnergyNetwork on a FIXED topology.
+ 
+    The graph structure (neighbors) is provided and never changes.
+    All physical parameters (G_res, G_max, D_max, D_star, a_tilde,
+    a, c, k) are randomized for each call, modelling different
+    operating conditions on the same physical network:
+      - Different weather → different G_res (solar/wind output)
+      - Different seasons → different D_star (consumption habits)
+      - Market changes   → different c (trading costs)
+      - Equipment aging  → different G_max (flexibility capacity)
+ 
+    Feasibility is guaranteed by the same constraints as
+    init_parameters_graph (see that function for details).
+ 
+    Parameters
+    ----------
+    neighbors : dict {n: list[int]} — fixed graph adjacency
+    seed      : random seed for parameter generation
+    device    : torch.device
+ 
+    Returns
+    -------
+    (net, gamma, max_iter, tol, rho_admm)
+    """
+    rng = np.random.default_rng(seed)
+    N   = len(neighbors)
+ 
+    # ------------------------------------------------------------------
+    # Flexibility (G_max) — sparse: 20-45% of non-root nodes
+    # ------------------------------------------------------------------
+    G_min = torch.zeros(N, dtype=torch.float32)
+    G_max = torch.zeros(N, dtype=torch.float32)
+ 
+    flex_prob = float(rng.uniform(0.2, 0.45))
+    for n in range(1, N):
+        if rng.random() < flex_prob:
+            G_max[n] = float(rng.uniform(2., 8.))
+ 
+    # ------------------------------------------------------------------
+    # Renewable generation — every non-root node has some
+    # ------------------------------------------------------------------
+    G_res = torch.tensor(
+        [0.0] + [float(rng.uniform(0.5, 5.0)) for _ in range(N - 1)],
+        dtype=torch.float32
+    )
+ 
+    # ------------------------------------------------------------------
+    # Link capacities and trading costs
+    # ------------------------------------------------------------------
+    c, k = {}, {}
+    for n in range(N):
+        for m in neighbors[n]:
+            if m == 0 or n == 0:
+                c_val = float(rng.uniform(0.3, 0.5))
+                k_val = float(rng.uniform(15., 25.))
+            else:
+                c_val = float(rng.uniform(0.05, 0.3))
+                k_val = float(rng.uniform(3., 10.))
+            c[(n, m)] = torch.tensor(c_val, dtype=torch.float32)
+            if (n, m) not in k:
+                k[(n, m)] = torch.tensor(k_val, dtype=torch.float32)
+                k[(m, n)] = torch.tensor(k_val, dtype=torch.float32)
+ 
+    # ------------------------------------------------------------------
+    # Import capacity per node
+    # ------------------------------------------------------------------
+    max_import = torch.zeros(N, dtype=torch.float32)
+    for n in range(N):
+        max_import[n] = sum(float(k[(m, n)].item()) for m in neighbors[n])
+ 
+    # ------------------------------------------------------------------
+    # Demand bounds — clipped for feasibility
+    # ------------------------------------------------------------------
+    D_min = torch.zeros(N, dtype=torch.float32)
+    D_max_raw = torch.tensor(
+        [float(rng.uniform(4., 18.)) for _ in range(N)],
+        dtype=torch.float32
+    )
+    D_max_feasible = G_max + G_res + max_import
+    D_max = torch.minimum(D_max_raw, D_max_feasible)
+    D_max = torch.maximum(D_max, G_res)
+    D_max[0] = 0.0
+ 
+    # ------------------------------------------------------------------
+    # Target demand — fraction of D_max
+    # ------------------------------------------------------------------
+    D_star_ratio = torch.tensor(
+        [float(rng.uniform(0.3, 0.75)) for _ in range(N)],
+        dtype=torch.float32
+    )
+    D_star = D_star_ratio * D_max
+    D_star[0] = 0.0
+ 
+    # ------------------------------------------------------------------
+    # Cost parameters
+    # ------------------------------------------------------------------
+    a_tilde = torch.tensor(
+        [0.0] + [float(rng.uniform(5., 15.)) for _ in range(N - 1)],
+        dtype=torch.float32
+    )
+    a = torch.tensor(
+        [1.0] + [float(rng.uniform(2., 6.)) for _ in range(N - 1)],
+        dtype=torch.float32
+    )
+    b = torch.zeros(N, dtype=torch.float32)
+ 
+    # ------------------------------------------------------------------
+    # Root: cover network deficit
+    # ------------------------------------------------------------------
+    total_deficit = 0.0
+    for n in range(1, N):
+        local_gen = float(G_max[n]) + float(G_res[n])
+        deficit_n = max(0.0, float(D_star[n]) - local_gen)
+        total_deficit += deficit_n
+ 
+    root_export_cap = sum(float(k[(0, m)].item()) for m in neighbors[0])
+    G_max[0] = max(50.0, total_deficit * 1.5)
+ 
+    if G_max[0] > root_export_cap:
+        scale = float(G_max[0]) / max(root_export_cap, 1.0)
+        for m in neighbors[0]:
+            new_val = float(k[(0, m)].item()) * scale
+            k[(0, m)] = torch.tensor(new_val, dtype=torch.float32)
+            k[(m, 0)] = torch.tensor(new_val, dtype=torch.float32)
+ 
+    # ------------------------------------------------------------------
+    # Feasibility check
+    # ------------------------------------------------------------------
+    for n in range(N):
+        max_import_n = sum(float(k[(m, n)].item()) for m in neighbors[n])
+        local_supply_max = float(G_max[n]) + float(G_res[n]) + max_import_n
+        assert float(D_min[n]) <= local_supply_max, (
+            f"Node {n}: D_min={D_min[n]:.2f} > max supply {local_supply_max:.2f}")
+        assert float(D_star[n]) <= float(D_max[n]), (
+            f"Node {n}: D_star={D_star[n]:.2f} > D_max={D_max[n]:.2f}")
+ 
+    net = build_network(N, neighbors, D_min, D_max, G_min, G_max, G_res,
+                        a_tilde, a, b, D_star, c, k, device)
+ 
+    rho_admm = compute_rho_admm(neighbors)
+ 
+    return net, 0.1, max_iter, tol, rho_admm
+
 
 # ------------------------------------------------------------------
 # Graph plotting  (invariato)

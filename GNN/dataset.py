@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from energy_network import EnergyNetwork
-from init_parameters import init_parameters_graph
+from init_parameters import init_parameters_graph, init_parameters_fixed_topology
 
 
 
@@ -158,6 +158,98 @@ class MultiTopologyDataset(Dataset):
             'net_template' : EnergyNetwork — graph + parameters for this sample
             'x0'           : torch.Tensor  — initial flattened state
             'rho_admm'     : float         — ADMM penalty for this topology
+        """
+        net, x0, rho_admm = self.samples[idx]
+        return {"net_template": net, "x0": x0, "rho_admm": rho_admm}
+    
+
+class FixedTopologyDataset(Dataset):
+    """
+    Dataset with fixed graph topology but randomized parameters.
+ 
+    Models the realistic deployment scenario: the physical network
+    (which prosumers are connected to which) stays the same, but
+    operating conditions change across samples:
+      - Weather variations  → different G_res (solar/wind output)
+      - Seasonal patterns   → different D_star (consumption habits)
+      - Market fluctuations → different c (trading costs)
+      - Equipment changes   → different G_max (flexibility capacity)
+ 
+    Each sample has its own EnergyNetwork with the SAME neighbors
+    dict but DIFFERENT physical parameters, all guaranteed feasible.
+ 
+    Use this when:
+      - You have a known, fixed network topology
+      - You want the GNN to generalize across operating conditions
+        rather than across graph structures
+      - You want to simulate realistic day-to-day variability
+ 
+    The GNN's weight-sharing architecture handles this naturally:
+    same graph structure means same edge_index, so batching is
+    straightforward if all samples have the same N.
+ 
+    Parameters
+    ----------
+    num_samples : total number of problem instances
+    neighbors   : dict {n: list[int]} — fixed graph adjacency
+                  (can be built via build_graph or provided manually)
+    device      : torch.device
+    seed        : random seed for reproducibility
+    """
+ 
+    def __init__(
+        self,
+        num_samples: int,
+        neighbors: dict,
+        device: torch.device = torch.device("cpu"),
+        seed: int = 42,
+    ):
+        super().__init__()
+ 
+        self.num_samples = num_samples
+        self.device      = device
+        self.N           = len(neighbors)
+        self.neighbors   = neighbors
+ 
+        rng = np.random.default_rng(seed)
+ 
+        self.samples = []  # list of (net, x0, rho_admm)
+ 
+        print(f"Generating {num_samples} fixed-topology samples "
+              f"(N={self.N}, |edges|={sum(len(v) for v in neighbors.values()) // 2})...")
+ 
+        for i in range(num_samples):
+            sample_seed = int(rng.integers(1_000_000))
+ 
+            net, _, _, _, rho_admm = init_parameters_fixed_topology(
+                neighbors=neighbors,
+                seed=sample_seed,
+                device=device,
+            )
+ 
+            # Randomize initial state (D, G, q)
+            net._init_state()
+            x0 = net.flatten().detach().clone()
+ 
+            self.samples.append((net, x0, rho_admm))
+ 
+            if (i + 1) % 10 == 0 or (i + 1) == num_samples:
+                print(f"  {i+1}/{num_samples} samples generated")
+ 
+        print("Dataset generation complete.")
+ 
+    def __len__(self):
+        return self.num_samples
+ 
+    def __getitem__(self, idx):
+        """
+        Returns
+        -------
+        dict with:
+            'net_template' : EnergyNetwork — network with this sample's parameters
+            'x0'           : torch.Tensor  — initial flattened state
+            'rho_admm'     : float         — ADMM penalty (same for all samples
+                                             since topology is fixed)
         """
         net, x0, rho_admm = self.samples[idx]
         return {"net_template": net, "x0": x0, "rho_admm": rho_admm}
