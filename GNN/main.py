@@ -67,11 +67,10 @@ def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
     batch_size  = 1
     T           = 30        # unrolling steps
     epochs      = 20
-    lr          = 4e-3
+    lr          = 3e-3
     alpha       = 0.95      # kept for API compatibility
     d_h         = 12        # GNN hidden dimension
     rho_gnn     = 0.8       # GNN summability decay (rho in GNNUpdate)
-    rho_admm    = 3         # ADMM penalty parameter
     multi_topo  = False     # multi-topology training
     random_fixed_topo = False  # all parameters random but fixed-topology
 
@@ -318,7 +317,7 @@ if __name__ == "__main__":
         help="Network size for training (default: 3)"
     )
     parser.add_argument(
-        "--load", action="store_true", default=False,
+        "--load", action="store_true", default=True,
         help="Load pre-trained model instead of training"
     )
     parser.add_argument(
