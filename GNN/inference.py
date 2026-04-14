@@ -193,7 +193,7 @@ def run_comparison(
             net_learned = net_learned_new
 
             # Stopping: pure algorithm converged
-            if res_pure < tol:
+            if res_pure < tol and res_learned < tol:
                 print(f"  Pure {'ADMM' if is_admm else 'FB'} converged at iteration {it + 1}")
                 break
 

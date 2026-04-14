@@ -1,0 +1,110 @@
+Device: cuda
+Algorithm: ADMM
+
+Checkpoint path: checkpoints/admm_N10_T30_e40_s50_learned_update_rho0.5_lr0.003.pt
+GNNUpdate — trainable parameters: 1590
+neighbors = {0: [1, 2, 3, 4, 5, 6, 7, 8, 9], 1: [0, 2, 4, 6, 8], 2: [0, 1, 3, 4, 6, 7], 3: [0, 2, 6, 9], 4: [0, 1, 2, 6], 5: [0, 8], 6: [0, 1, 2, 3, 4, 8], 7: [0, 2], 8: [0, 1, 5, 6], 9: [0, 3]}
+G_max[0] = 50.0
+
+--- Dataset generation (N=10 rho admm=7.8) ---
+Generating 50 dataset samples...
+  10/50 samples generated
+  20/50 samples generated
+  30/50 samples generated
+  40/50 samples generated
+  50/50 samples generated
+Dataset generation complete.
+
+--- Meta-training (ADMM) ---
+
+Baseline loss (pure ADMM, no GNN): 38.311198
+Training loss should go BELOW this value.
+
+Epoch [  1/40]  loss: 36.444265  lr: 3.00e-03
+Epoch [  2/40]  loss: 28.389156  lr: 3.00e-03
+Epoch [  3/40]  loss: 28.064968  lr: 3.00e-03
+Epoch [  4/40]  loss: 27.385493  lr: 3.00e-03
+Epoch [  5/40]  loss: 27.382760  lr: 3.00e-03
+Epoch [  6/40]  loss: 27.670449  lr: 3.00e-03
+Epoch [  7/40]  loss: 27.927754  lr: 3.00e-03
+Epoch [  8/40]  loss: 28.165931  lr: 3.00e-03
+Epoch [  9/40]  loss: 28.397358  lr: 3.00e-03
+Epoch [ 10/40]  loss: 28.235701  lr: 3.00e-03
+Epoch [ 11/40]  loss: 28.403364  lr: 3.00e-03
+Epoch [ 12/40]  loss: 28.288672  lr: 3.00e-03
+Epoch [ 13/40]  loss: 28.181070  lr: 3.00e-03
+Epoch [ 14/40]  loss: 27.854833  lr: 3.00e-03
+Epoch [ 15/40]  loss: 27.698817  lr: 3.00e-03
+Epoch [ 16/40]  loss: 27.584696  lr: 3.00e-03
+Epoch [ 17/40]  loss: 27.404386  lr: 3.00e-03
+Epoch [ 18/40]  loss: 26.937632  lr: 3.00e-03
+Epoch [ 19/40]  loss: 26.624379  lr: 3.00e-03
+Epoch [ 20/40]  loss: 26.243835  lr: 3.00e-03
+Epoch [ 21/40]  loss: 25.762793  lr: 3.00e-03
+Epoch [ 22/40]  loss: 25.422417  lr: 3.00e-03
+Epoch [ 23/40]  loss: 25.088072  lr: 3.00e-03
+Epoch [ 24/40]  loss: 24.654612  lr: 3.00e-03
+Epoch [ 25/40]  loss: 24.389326  lr: 3.00e-03
+Epoch [ 26/40]  loss: 23.931090  lr: 3.00e-03
+Epoch [ 27/40]  loss: 23.588458  lr: 3.00e-03
+Epoch [ 28/40]  loss: 23.292227  lr: 3.00e-03
+Epoch [ 29/40]  loss: 22.831856  lr: 3.00e-03
+Epoch [ 30/40]  loss: 22.211708  lr: 3.00e-03
+Epoch [ 31/40]  loss: 21.673180  lr: 3.00e-03
+Epoch [ 32/40]  loss: 21.316740  lr: 3.00e-03
+Epoch [ 33/40]  loss: 20.970577  lr: 3.00e-03
+Epoch [ 34/40]  loss: 20.436401  lr: 3.00e-03
+Epoch [ 35/40]  loss: 20.037587  lr: 3.00e-03
+Epoch [ 36/40]  loss: 19.618931  lr: 3.00e-03
+Epoch [ 37/40]  loss: 19.202313  lr: 3.00e-03
+Epoch [ 38/40]  loss: 18.784222  lr: 3.00e-03
+Epoch [ 39/40]  loss: 18.362466  lr: 3.00e-03
+Epoch [ 40/40]  loss: 17.873576  lr: 3.00e-03
+Model saved to checkpoints/admm_N10_T30_e40_s50_learned_update_rho0.5_lr0.003.pt
+Figure saved to checkpoints/admm_N10_T30_e40_s50_loss_history_rho0.5_lr0.003.png
+/home/lisa/energy_market_fixed_point/GNN/main.py:153: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  print(f"phi_m (ampiezza GNN) = {float(torch.nn.functional.softplus(model.phi_m_raw)):.4f}")
+phi_m (ampiezza GNN) = 3.0814
+
+--- Inference (ADMM) ---
+phi_m (ampiezza GNN) = 3.0814
+
+Test instance 1/5:
+  Pure ADMM converged at iteration 28
+Figure saved to figures/admm_N10_test_istance_1.png
+Pure ADMM      — constraint violation: False
+ADMM + GNN    — constraint violation: False
+phi_m (ampiezza GNN) = 3.0814
+
+Test instance 2/5:
+  Pure ADMM converged at iteration 28
+Figure saved to figures/admm_N10_test_istance_2.png
+Pure ADMM      — constraint violation: False
+ADMM + GNN    — constraint violation: False
+phi_m (ampiezza GNN) = 3.0814
+
+Test instance 3/5:
+  Pure ADMM converged at iteration 28
+Figure saved to figures/admm_N10_test_istance_3.png
+Pure ADMM      — constraint violation: False
+ADMM + GNN    — constraint violation: False
+phi_m (ampiezza GNN) = 3.0814
+
+Test instance 4/5:
+  Pure ADMM converged at iteration 28
+Figure saved to figures/admm_N10_test_istance_4.png
+Pure ADMM      — constraint violation: False
+ADMM + GNN    — constraint violation: False
+phi_m (ampiezza GNN) = 3.0814
+
+Test instance 5/5:
+  Pure ADMM converged at iteration 28
+Figure saved to figures/admm_N10_test_istance_5.png
+Pure ADMM      — constraint violation: False
+ADMM + GNN    — constraint violation: False
+Figure saved to figures/admm_N10_average_trainingN10.png
+
+--- Summary (ADMM) ---
+Pure ADMM   — final avg residual: 0.000001
+ADMM + GNN — final avg residual: 0.000000

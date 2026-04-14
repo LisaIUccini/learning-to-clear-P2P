@@ -5,7 +5,7 @@ import random
 
 from energy_network import EnergyNetwork
 from model import GNNUpdate
-from dataset import EnergyDataset, MultiTopologyDataset
+from dataset import EnergyDataset
 from fb   import learned_FB_step, pure_FB_step
 from admm import learned_ADMM_step, pure_ADMM_step
 
@@ -256,121 +256,6 @@ def meta_train(
         loss_history.append(avg_loss)
         #scheduler.step(avg_loss)
         print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  lr: {optimizer.param_groups[0]['lr']:.2e}")
-
-    if save_path is not None:
-        _ensure_dir(save_path)
-        torch.save(model.state_dict(), save_path)
-        print(f"Model saved to {save_path}")
-
-    return model, loss_history
-
-
-# ------------------------------------------------------------------
-# Multi-topology meta-training loop
-# DA AGGIUNGERE IF PER FB
-# ------------------------------------------------------------------
-
-def meta_train_multi(
-    model: GNNUpdate,
-    dataset: MultiTopologyDataset,
-    T: int,
-    epochs: int,
-    lr: float,
-    device: torch.device,
-    save_path: str = None,
-) -> tuple:
-    """
-    Meta-train the GNNUpdate model on a multi-topology dataset.
- 
-    Each sample has its own graph topology and parameters. Since graph
-    dimensions vary, samples are processed one at a time (batch_size=1).
- 
-    Loss: r + s (primal + dual residual) summed over T unrolled ADMM steps.
- 
-    Parameters
-    ----------
-    model    : GNNUpdate to train
-    dataset  : MultiTopologyDataset
-    T        : number of unrolled steps per sample
-    epochs   : number of training epochs
-    lr       : Adam learning rate
-    device   : torch.device
-    save_path: if given, save model weights here after training
-    rho      : ADMM penalty parameter
- 
-    Returns
-    -------
-    (model, loss_history)
-    """
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    model.train()
-    loss_history = []
-
-    num_samples = len(dataset)
-    indices = list(range(num_samples))
-
-    # ------------------------------------------------------------------
-    # Baseline: average pure ADMM loss over all samples
-    # ------------------------------------------------------------------
-    with torch.no_grad():
-        baseline_total = 0.0
-        for idx in range(num_samples):
-            sample = dataset[idx]
-            net_template = sample["net_template"]
-            x0 = sample["x0"].to(device)
-            rho = sample["rho_admm"]
-
-            net_b = net_template.clone()
-            net_b.unflatten(x0)
-            net_b.admm_reset()
-
-            sample_baseline = 0.0
-            for t in range(T):
-                sl, net_b = meta_loss_admm_baseline(rho, net_b)
-                sample_baseline += sl
-
-            baseline_total += sample_baseline
-
-        baseline_avg = baseline_total / num_samples
-        print(f"\nBaseline loss (pure ADMM, no GNN): {baseline_avg:.6f}")
-        print(f"Training loss should go BELOW this value.\n")
-
-    # ------------------------------------------------------------------
-    # Training loop
-    # ------------------------------------------------------------------
-    for epoch in range(epochs):
-        epoch_loss = 0.0
-        random.shuffle(indices)
-
-        for idx in indices:
-            sample = dataset[idx]
-            net_template = sample["net_template"]
-            x0 = sample["x0"].to(device)
-            rho = sample["rho_admm"]
-
-            optimizer.zero_grad()
-
-            net = net_template.clone()
-            net.unflatten(x0)
-            net.admm_reset()
-
-            sample_loss = torch.zeros(1, device=device)
-
-            for t in range(T):
-                sl, net = meta_loss_admm(model, t, rho, net)
-                sample_loss += sl
-
-            sample_loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-
-            epoch_loss += sample_loss.item()
-
-        avg_loss = epoch_loss / num_samples
-        loss_history.append(avg_loss)
-        ratio = avg_loss / baseline_avg if baseline_avg > 0 else float('inf')
-        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  "
-              f"baseline: {baseline_avg:.6f}  ratio: {ratio:.4f}  lr: {optimizer.param_groups[0]['lr']:.2e}")
 
     if save_path is not None:
         _ensure_dir(save_path)
