@@ -41,8 +41,8 @@ class GNNLayer(nn.Module):
         h_new_n     = phi_upd([x_n, h_agg_n])             shape (d_h,)
 
     where:
-        edge_attr_{m->n} = q_{nm}  (trade of m communicated to n)
-        x_n              = [D_n, G_n]
+        edge_attr_{m->n} = [q_{nm}, z_{nm}, u_{nm}]  (m's variables, sent to n)
+        x_n              = [D_n, G_n, u_avg_n]
 
     Implemented manually with scatter_add — no dependency on PyG
     MessagePassing, which has shape issues with local subgraphs.
@@ -86,7 +86,7 @@ class GNNLayer(nn.Module):
         h_new : (num_nodes, d_h)
         """
         num_nodes = x.size(0)
-        d_h = self.d_h
+        d_h       = self.d_h
 
         # Step 1 — Message: apply phi_msg to each edge's feature
         if edge_attr.dim() == 3:
@@ -94,8 +94,8 @@ class GNNLayer(nn.Module):
         msg = self.phi_msg(edge_attr)  # (num_edges, d_h)
 
         # Step 2 — Aggregation: sum / sqrt(degree) at each destination node
-        dst = edge_index[1]  # (num_edges,)
-        num_edges = dst.size(0)
+        dst          = edge_index[1]   # (num_edges,)
+        num_edges    = dst.size(0)
         dst_expanded = dst.unsqueeze(1).expand(num_edges, d_h)
 
         h_agg = torch.zeros(num_nodes, d_h, device=x.device)
@@ -103,7 +103,8 @@ class GNNLayer(nn.Module):
 
         # Count degree per node
         degree = torch.zeros(num_nodes, 1, device=x.device)
-        degree.scatter_add_(0, dst.unsqueeze(1), torch.ones(num_edges, 1, device=x.device))
+        degree.scatter_add_(0, dst.unsqueeze(1),
+                            torch.ones(num_edges, 1, device=x.device))
         degree.clamp_(min=1)
 
         # Normalize by sqrt(degree)
@@ -121,21 +122,21 @@ class GNNLayer(nn.Module):
 
 class GNNUpdate(nn.Module):
     """
-    GNN-based learned perturbation for the Forward-Backward algorithm.
+    GNN-based learned perturbation for the distributed ADMM algorithm.
 
-    At each FB iteration t, given a PyG Data object (global or local subgraph),
-    produces summable perturbations:
+    At each ADMM iteration t, given a PyG Data object (global or local
+    subgraph), produces summable perturbations:
 
-        v_nodes[n] = m_t * tanh(phi_node(h_new[n]))             shape (N, 2)
-        v_edges[i] = m_t * tanh(phi_edge(h_new[n], edge_attr[i]))  shape (|E|, 1)
+        v_nodes[n] = m_t * tanh(phi_node(h_new[n]))                shape (N,    2)
+        v_edges[i] = m_t * tanh(phi_edge(h_new[n], edge_attr[i]))  shape (|E|, 3)
                      for edge i = (m->n), owned by node n
 
     where m_t = phi_m * rho^t ensures summability (v in ell_1).
 
     Distributed execution: each node n independently queries the GNN
     with its local subgraph (ego node + neighbors), using only:
-        - its own state (D_n, G_n)
-        - messages q_{nm} from neighbors (communicated by them)
+        - its own state (D_n, G_n, u_avg_n)
+        - q_{nm}, z_{nm}, u_{nm} from neighbors (communicated by them)
     No global information required.
 
     Weight sharing: phi_msg, phi_upd, phi_node, phi_edge have fixed
@@ -143,17 +144,18 @@ class GNNUpdate(nn.Module):
     The same weights work for any graph size without retraining.
 
     Architecture:
-        GNNLayer  : phi_msg (edge_feat -> d_h) + phi_upd ([node_feat, d_h] -> d_h)
-        phi_node  : MLP (d_h -> 2)
-        phi_edge  : MLP (d_h + edge_feat -> 3)
+        GNNLayer  : phi_msg (edge_feat_size -> d_h) +
+                    phi_upd ([node_feat_size, d_h] -> d_h)
+        phi_node  : MLP (d_h               -> 2)   for (D, G)
+        phi_edge  : MLP (d_h + edge_feat   -> 3)   for (q, z, u)
     """
 
     def __init__(
         self,
         d_h: int = 32,
         rho: float = 0.9,
-        node_feat_size: int = 2,
-        edge_feat_size: int = 1,
+        node_feat_size: int = 3,
+        edge_feat_size: int = 3,
     ):
         super().__init__()
 
@@ -195,14 +197,8 @@ class GNNUpdate(nn.Module):
         Parameters
         ----------
         data : torch_geometric.data.Data
-            FB:
-                .x         : (num_nodes, 2)  — [D, G]
-                .edge_attr : (num_edges, 1)  — [q]
-            ADMM:
-                .x         : (num_nodes, 3)  — [D, G, u_avg]
-                .edge_attr : (num_edges, 2)  — [q, z]
-            In both cases z and u are used as context for the GNN
-            but are NOT perturbed — only D, G, q are safe to perturb.
+            .x         : (num_nodes, 3)  — [D, G, u_avg]
+            .edge_attr : (num_edges, 3)  — [q, z, u]
         t    : current iteration index (int >= 0)
 
         Returns
@@ -216,14 +212,14 @@ class GNNUpdate(nn.Module):
 
         h_new = self.gnn_layer(x, edge_index, edge_attr)  # (num_nodes, d_h)
 
-        delta_nodes = self.phi_node(h_new)  # (num_nodes, 2)
+        delta_nodes = self.phi_node(h_new)                # (num_nodes, 2)
 
         edge_input  = torch.cat([h_new[edge_index[1]], edge_attr], dim=-1)
-        delta_edges = self.phi_edge(edge_input)  # (num_edges, 3)
+        delta_edges = self.phi_edge(edge_input)           # (num_edges, 3)
 
         m_t = F.softplus(self.phi_m_raw) * (self.rho ** t)
 
-        v_nodes = m_t * torch.tanh(delta_nodes)  # (num_nodes, 2)
-        v_edges = m_t * torch.tanh(delta_edges)  # (num_edges, 3)
+        v_nodes = m_t * torch.tanh(delta_nodes)           # (num_nodes, 2)
+        v_edges = m_t * torch.tanh(delta_edges)           # (num_edges, 3)
 
         return v_nodes, v_edges

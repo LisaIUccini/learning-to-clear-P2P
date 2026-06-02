@@ -61,6 +61,7 @@ def plot_results(results: dict, save_path: str = None):
     save_path : if given, save figure here; otherwise show interactively
     """
     plt.style.use("seaborn-v0_8-pastel")
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     fig, ax = plt.subplots(figsize=(12, 5))
 
     res_pure = results["residuals_pure"]
@@ -68,7 +69,7 @@ def plot_results(results: dict, save_path: str = None):
 
     ax.semilogy(iters, res_pure,                     marker="o", label="Pure")
     ax.semilogy(iters, results["residuals_learned"],  marker="*", label="Learned + GNN")
-
+    ax.axhline(y=1e-6, linestyle="--", color = colors[3],linewidth=1.0, alpha=0.7, label=r"tol = $10^{-6}$")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Residual")
     ax.set_title("Residuals")
@@ -81,7 +82,8 @@ def plot_results(results: dict, save_path: str = None):
     _save_or_show(fig, save_path)
 
 
-def plot_results_std(results: dict, std: dict = None, save_path: str = None):
+def plot_results_std(results: dict, lo: dict = None, hi: dict = None,
+                     save_path: str = None):
     """
     Plot residuals with optional shaded standard deviation band.
 
@@ -91,26 +93,36 @@ def plot_results_std(results: dict, std: dict = None, save_path: str = None):
     std       : dict with std sequences (same keys), or None
     save_path : if given, save figure here; otherwise show interactively
     """
-    fig, ax = plt.subplots(figsize=(7, 5))
+    plt.style.use("seaborn-v0_8-pastel")
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    fig, ax = plt.subplots(figsize=(12, 5))
 
-    iters = np.arange(1, len(results["residuals_pure"]) + 1)
+    res_pure = results["residuals_pure"]
+    iters    = range(len(res_pure))
 
-    def _plot(key, color, label):
-        mean = np.array(results[key])
-        ax.semilogy(iters, mean, label=label, color=color)
-        if std is not None:
-            s  = np.array(std[key])
-            lo = np.clip(mean - s, 1e-12, None)
-            hi = mean + s
-            ax.fill_between(iters, lo, hi, alpha=0.2, color=color)
+    # Same style as plot_results
+    ax.semilogy(iters, res_pure,
+                marker="o", label="Pure")
+    ax.semilogy(iters, results["residuals_learned"],
+                marker="*", label="Learned + GNN")
 
-    _plot("residuals_pure",    "steelblue",  "Pure")
-    _plot("residuals_learned", "darkorange", "Learned + GNN")
+    # Shaded bands
+    if lo is not None and hi is not None:
+        ax.fill_between(iters,
+                        np.clip(lo["residuals_pure"],    1e-30, None),
+                        np.clip(hi["residuals_pure"],    1e-30, None),
+                        alpha=0.2)
+        ax.fill_between(iters,
+                        np.clip(lo["residuals_learned"], 1e-30, None),
+                        np.clip(hi["residuals_learned"], 1e-30, None),
+                        alpha=0.2)
+    ax.axhline(y=1e-6, linestyle="--", color = colors[3],linewidth=1.0, alpha=0.7, label=r"tol = $10^{-6}$")
 
     ax.set_xlabel("Iteration")
     ax.set_ylabel(r"$\|r^k\|^2$")
     ax.set_title("Residuals")
     ax.legend()
+    plt.xticks(range(len(res_pure)))
     ax.grid(True, which="both", alpha=0.3)
 
     plt.tight_layout()

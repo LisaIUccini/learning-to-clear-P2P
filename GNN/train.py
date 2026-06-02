@@ -1,93 +1,44 @@
 import os
 import torch
 from torch.utils.data import DataLoader
-import random
 
 from energy_network import EnergyNetwork
-from model import GNNUpdate
-from dataset import EnergyDataset
-from fb   import learned_FB_step, pure_FB_step
-from admm import learned_ADMM_step, pure_ADMM_step
+from model          import GNNUpdate
+from dataset        import EnergyDataset
+from admm           import learned_ADMM_step, pure_ADMM_step
 
 
-def meta_loss_admm(model: GNNUpdate, t, rho, net):
+# ------------------------------------------------------------------
+# Per-step losses
+# ------------------------------------------------------------------
+
+def _meta_loss(model: GNNUpdate, t: int, rho: float, net: EnergyNetwork):
     """
-    # Save z before the step for dual residual computation
-    z_prev = {
-        n: {m: net.prosumers[n].z[m].clone().detach()
-            for m in net.prosumers[n].neighbors}
-        for n in range(net.N)
-    }
+    One unrolled learned ADMM step + fixed-point residual.
 
-    
-    # Learned ADMM step (centralised, differentiable)
-    net = learned_ADMM_step(net, model, t, rho, training=True)
+        L_t = || sigma^t - T_ADMM(sigma^t) ||^2
 
-    # Primal residual: r^t = sum_{(m,n)} (q_{mn} - z_{mn})^2
-    # Measures consensus violation (reciprocity)
-    r = sum(
-        (p.q[m] - p.z[m]) ** 2
-        for p in net.prosumers
-        for m in p.neighbors
-    )
-
-    # Dual residual: s^t = rho^2 * sum_{(m,n)} (z^t - z^{t-1})^2
-    # Measures how much z is still moving (dual feasibility)
-    s = rho ** 2 * sum(
-        (net.prosumers[n].z[m] - z_prev[n][m]) ** 2
-        for n in range(net.N)
-        for m in net.prosumers[n].neighbors
-    )
-
-    sample_loss = sample_loss + (r + s)
+    The step is centralised (training=True) so gradients flow.
+    Returns (loss, advanced_net).
     """
-
-    # Learned ADMM step (centralised, differentiable)
-    net = learned_ADMM_step(net, model, t, rho, training=True)
-
-    # Fixed-point residual: || x^t - T(x^t) ||^2
-    sigma_t  = net.flatten_admm()
-    Tsigma_t = pure_ADMM_step(net, rho).flatten_admm()
-    sl = torch.sum((sigma_t - Tsigma_t) ** 2)
-    return sl, net
+    net    = learned_ADMM_step(net, model, t, rho, training=True)
+    sigma  = net.flatten_admm()
+    Tsigma = pure_ADMM_step(net, rho).flatten_admm()
+    return torch.sum((sigma - Tsigma) ** 2), net
 
 
-def meta_loss_admm_baseline(rho, net_b):
-    net_b = pure_ADMM_step(net_b, rho)
-    sigma_t  = net_b.flatten_admm()
-    Tsigma_t = pure_ADMM_step(net_b, rho).flatten_admm()
-    sl = torch.sum((sigma_t - Tsigma_t) ** 2).item()
-    #net_b = pure_ADMM_step(net_b, rho)
+def _meta_loss_baseline(rho: float, net_b: EnergyNetwork):
     """
-    # Save z before step for dual residual
-    z_prev_b = {
-        n: {m: net_b.prosumers[n].z[m].clone()
-            for m in net_b.prosumers[n].neighbors}
-        for n in range(net_b.N)
-    }
-
-    # Advance state
-    net_b = pure_ADMM_step(net_b, rho)
-
-    # Primal residual: r = sum (q - z)^2
-    r_b = sum(
-        (p.q[m] - p.z[m]) ** 2
-        for p in net_b.prosumers
-        for m in p.neighbors
-    )
-    # Dual residual: s = rho^2 * sum (z^t - z^{t-1})^2
-    s_b = rho ** 2 * sum(
-        (net_b.prosumers[n].z[m] - z_prev_b[n][m]) ** 2
-        for n in range(net_b.N)
-        for m in net_b.prosumers[n].neighbors
-    )
-    sample_baseline += float(r_b + s_b)
+    Same fixed-point residual, but the advancing step is pure ADMM
+    (no GNN). Used to compute the no-learning baseline.
     """
-    return sl, net_b
+    net_b  = pure_ADMM_step(net_b, rho)
+    sigma  = net_b.flatten_admm()
+    Tsigma = pure_ADMM_step(net_b, rho).flatten_admm()
+    return torch.sum((sigma - Tsigma) ** 2).item(), net_b
 
 
-def _ensure_dir(save_path):
-    """Create parent directory for save_path if it doesn't exist."""
+def _ensure_dir(save_path: str):
     dirname = os.path.dirname(save_path)
     os.makedirs(dirname if dirname else ".", exist_ok=True)
 
@@ -106,144 +57,94 @@ def meta_train(
     alpha: float,
     batch_size: int,
     device: torch.device,
+    rho: float,
     save_path: str = None,
-    algorithm: str = "fb",
-    gamma: float = None,
-    rho: float = None,
 ) -> tuple:
     """
-    Meta-train the GNNUpdate model by unrolling T steps of the chosen algorithm
-    and minimising the residual at each step.
+    Meta-train GNNUpdate by unrolling T ADMM steps and minimising the
+    fixed-point residual at each step:
 
-    The GNN architecture and training procedure are identical for both algorithms.
-    Only the unrolled step and the loss definition change.
+        L(theta) = (1/|D|) * sum_d sum_t || sigma^t_d - T_ADMM(sigma^t_d) ||^2
 
-    algorithm="fb"
-        Unrolled step : learned_FB_step (centralised, training=True)
-        Loss per step : || x^t - T(x^t) ||^2
-                        where T(x) = proj(x - gamma * F(x))
-        Requires: gamma
+    The unrolled step is `learned_ADMM_step` (centralised, differentiable
+    via cvxpylayers for the x-update and closed-form for z/u). z and u are
+    reset to zero at the start of each sample.
 
-    algorithm="admm"
-        Unrolled step : learned_ADMM_step (centralised, training=True)
-        Loss per step : sum_{(m,n)} (q_{mn} - z_{mn})^2   (primal residual)
-                        measures consensus violation at each iterate
-        z and u are reset to zero at the start of each sample
-        Requires: rho
-
-    In both cases the GNN receives the full graph (centralised training),
-    and the model weights are updated via Adam with gradient clipping.
+    A no-learning baseline is computed with `pure_ADMM_step` for reference:
+    the training loss should drop below it.
 
     Parameters
     ----------
     model        : GNNUpdate to train
-    dataset      : EnergyDataset (provides x0 tensors)
+    dataset      : EnergyDataset providing x0 tensors
     net_template : EnergyNetwork for graph structure (cloned per sample)
-    T            : number of unrolled steps per sample
+    T            : unrolled steps per sample
     epochs       : number of training epochs
     lr           : Adam learning rate
-    alpha        : discount factor (kept for API compatibility; loss is undiscounted)
-    batch_size   : number of samples per gradient update
+    alpha        : kept for API compatibility (loss is undiscounted)
+    batch_size   : samples per gradient update
     device       : torch.device
-    save_path    : if given, save model weights here after training
-    algorithm    : "fb" or "admm"
-    gamma        : FB step size (required if algorithm="fb")
-    rho          : ADMM penalty parameter (required if algorithm="admm")
+    rho          : ADMM penalty parameter
+    save_path    : if given, save model weights after training
 
     Returns
     -------
     (model, loss_history)
     """
-    if algorithm not in ("fb", "admm"):
-        raise ValueError(f"algorithm must be 'fb' or 'admm', got '{algorithm}'")
-    if algorithm == "fb" and gamma is None:
-        raise ValueError("gamma is required when algorithm='fb'")
-    if algorithm == "admm" and rho is None:
-        raise ValueError("rho is required when algorithm='admm'")
-
-    is_admm = (algorithm == "admm")
-
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer  = torch.optim.Adam(model.parameters(), lr=lr)
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-5)
 
     model.train()
     loss_history = []
 
-    # ------------------------------------------------------------------
-    # Baseline: compute the same loss with pure algorithm (no GNN)
-    # This gives the expected loss if perturbations were zero.
-    # Training loss should go BELOW this value to confirm the GNN helps.
-    # ------------------------------------------------------------------
+    # ----- Baseline (pure ADMM, no GNN) -------------------------------
     with torch.no_grad():
         baseline_total = 0.0
-        n_baseline = 0
+        n_baseline     = 0
         for batch in dataloader:
             x0_batch = batch["x0"].to(device)
             for b in range(x0_batch.shape[0]):
-                x0 = x0_batch[b]
                 net_b = net_template.clone()
-                net_b.unflatten(x0)
-                if is_admm:
-                    net_b.admm_reset()
+                net_b.unflatten(x0_batch[b])
+                net_b.admm_reset()
 
                 sample_baseline = 0.0
                 for t in range(T):
-                    if is_admm:
-                        sl, net_b = meta_loss_admm_baseline(rho, net_b)
-                        sample_baseline += sl
-                    else:
-                        net = learned_FB_step(net, model, t, gamma, training=True)
-                        x_t  = net_b.flatten()
-                        Tx_t = pure_FB_step(net_b, gamma).flatten()
-                        sample_baseline += torch.sum((x_t - Tx_t) ** 2).item()
-                        #net_b = pure_FB_step(net_b, gamma)
+                    sl, net_b        = _meta_loss_baseline(rho, net_b)
+                    sample_baseline += sl
 
                 baseline_total += sample_baseline
-                n_baseline += 1
+                n_baseline     += 1
 
         baseline_avg = baseline_total / max(n_baseline, 1)
-        print(f"\nBaseline loss (pure {algorithm.upper()}, no GNN): {baseline_avg:.6f}")
+        print(f"\nBaseline loss (pure ADMM, no GNN): {baseline_avg:.6f}")
         print(f"Training loss should go BELOW this value.\n")
 
+    # ----- Training loop ----------------------------------------------
     for epoch in range(epochs):
         epoch_loss = 0.0
         n_batches  = 0
 
         for batch in dataloader:
-            x0_batch = batch["x0"].to(device)
-            batch_size_actual = x0_batch.shape[0]
+            x0_batch    = batch["x0"].to(device)
+            actual_size = x0_batch.shape[0]
 
             optimizer.zero_grad()
             batch_loss = torch.zeros(1, device=device)
 
-            for b in range(batch_size_actual):
-                x0 = x0_batch[b]
-
+            for b in range(actual_size):
                 net = net_template.clone()
-                net.unflatten(x0)
-
-                if is_admm:
-                    net.admm_reset()
+                net.unflatten(x0_batch[b])
+                net.admm_reset()
 
                 sample_loss = torch.zeros(1, device=device)
-
                 for t in range(T):
-                    if is_admm:
-                        sl, net = meta_loss_admm(model, t, rho, net)
-                        sample_loss += sl
-                    else:
-                        # Learned FB step (centralised, differentiable)
-                        net = learned_FB_step(net, model, t, gamma, training=True)
-
-                        # Fixed-point residual: || x^t - T(x^t) ||^2
-                        x_t  = net.flatten()
-                        Tx_t = pure_FB_step(net, gamma).flatten()
-                        sample_loss = sample_loss + torch.sum((x_t - Tx_t) ** 2)
+                    sl, net      = _meta_loss(model, t, rho, net)
+                    sample_loss += sl
 
                 batch_loss = batch_loss + sample_loss
 
-            batch_loss = batch_loss / batch_size_actual
+            batch_loss = batch_loss / actual_size
             batch_loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -254,8 +155,8 @@ def meta_train(
 
         avg_loss = epoch_loss / max(n_batches, 1)
         loss_history.append(avg_loss)
-        #scheduler.step(avg_loss)
-        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  lr: {optimizer.param_groups[0]['lr']:.2e}")
+        print(f"Epoch [{epoch+1:3d}/{epochs}]  loss: {avg_loss:.6f}  "
+              f"lr: {optimizer.param_groups[0]['lr']:.2e}")
 
     if save_path is not None:
         _ensure_dir(save_path)

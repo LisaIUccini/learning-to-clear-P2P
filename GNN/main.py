@@ -1,261 +1,193 @@
+
 """
-L2Play — Main entry point
-
-Runs the full pipeline:
-    1. Build EnergyNetwork from parameters
-    2. Generate dataset
-    3. Train GNNUpdate model
-    4. Run inference: pure vs learned (FB or ADMM)
-    5. Plot and save results
-
-Usage:
-    python main.py [--N {3,10,30}] [--load] [--algorithm {fb,admm}]
-
-Arguments:
-    --N         : network size (default: 3)
-    --load      : skip training and load pre-trained model
-    --algorithm : "fb" (default) or "admm"
+L2Play — Main entry point.
+ 
+Pipeline:
+    1. Build an EnergyNetwork from init_parameters.
+    2. Generate a dataset of initial states.
+    3. Train (or load) the GNNUpdate model.
+    4. Run inference: pure ADMM vs learned ADMM, averaged over N_TEST instances.
+    5. Save plots and print a summary.
+ 
+All hyperparameters are defined in config.py.
 """
-
-
+ 
 import os
-import argparse
 import torch
 import numpy as np
-
+ 
+import config
 import init_parameters
-from model import GNNUpdate
-from dataset import EnergyDataset
-from train import meta_train
+from model     import GNNUpdate
+from dataset   import EnergyDataset
+from train     import meta_train
 from inference import run_comparison
-from plot import plot_results, plot_results_std, plot_fig, plot_loss
-
-
-def main(N_choice: int = 3, N_train: int = 3, load: bool = True,
-         algorithm: str = "fb"):
-
-    # ------------------------------------------------------------------
-    # Validate algorithm choice
-    # ------------------------------------------------------------------
-    if algorithm not in ("fb", "admm"):
-        raise ValueError(f"algorithm must be 'fb' or 'admm', got '{algorithm}'")
-
-    # ------------------------------------------------------------------
-    # Device and seeds
-    # ------------------------------------------------------------------
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from plot      import plot_results_std, plot_loss
+ 
+ 
+# ------------------------------------------------------------------
+# Init dispatch
+# ------------------------------------------------------------------
+ 
+_FIXED_INIT = {
+    3:  init_parameters.initN3,
+    4:  init_parameters.initN4,
+    10: init_parameters.initN10,
+    30: init_parameters.initN30,
+}
+ 
+ 
+def init_fn(N: int, device: torch.device, seed: int = 42) -> tuple:
+    """Return (net, max_iter, tol, rho_admm) for any N."""
+    if N in _FIXED_INIT:
+        return _FIXED_INIT[N](device=device)
+    return init_parameters.initN(N=N, seed=seed, device=device)
+ 
+ 
+# ------------------------------------------------------------------
+# Aggregation helpers
+# ------------------------------------------------------------------
+ 
+def _pad_and_stack(results_list: list, key: str, max_len: int) -> np.ndarray:
+    """Pad each residual sequence with its last value, then stack."""
+    padded = []
+    for r in results_list:
+        seq = r[key]
+        padded.append(seq + [seq[-1]] * (max_len - len(seq)))
+    return np.array(padded)
+ 
+ 
+def _log_mean_lo_hi(results_list: list, key: str, max_len: int):
+    """Compute log-mean and log-std bands for residual sequences."""
+    arr      = _pad_and_stack(results_list, key, max_len)
+    log_arr  = np.log10(np.clip(arr, 1e-30, None))
+    log_mean = log_arr.mean(axis=0)
+    log_std  = log_arr.std(axis=0)
+    mean = 10 ** log_mean
+    lo   = 10 ** (log_mean - log_std)
+    hi   = 10 ** (log_mean + log_std)
+    return mean.tolist(), lo.tolist(), hi.tolist()
+ 
+ 
+# ------------------------------------------------------------------
+# Main
+# ------------------------------------------------------------------
+ 
+def main():
+    device = config.DEVICE
     print(f"Device: {device}")
-    print(f"Algorithm: {algorithm.upper()}")
-    torch.manual_seed(42)
-    np.random.seed(42)
-
-    # ------------------------------------------------------------------
-    # Problem parameters
-    # ------------------------------------------------------------------
-    _fixed_init = {
-        #3:  init_parameters.initN3,
-        4:  init_parameters.initN4,
-        #10: init_parameters.initN10,
-        30: init_parameters.initN30,
-    }
-
-    def init_fn(N, device, seed=42):
-        """Return (net, gamma, max_iter, tol, rho_admm) for any N."""
-        if N in _fixed_init:
-            return _fixed_init[N](device=device)
-        return init_parameters.initN(N=N, seed=seed, device=device)
-
-    # ------------------------------------------------------------------
-    # Hyperparameters
-    # ------------------------------------------------------------------
-    num_samples = 50
-    batch_size  = 1
-    T           = 30        # unrolling steps
-    epochs      = 40
-    lr          = 3e-3
-    alpha       = 0.95      # kept for API compatibility
-    d_h         = 12        # GNN hidden dimension
-    rho_gnn     = 0.5       # GNN summability decay (rho in GNNUpdate)
-
-    # Build network for training (needed for single-topology fallback)
-    net_train, gamma, max_iter, tol, rho_admm_train = init_fn(N_train, device=device)
-
-    is_admm = (algorithm == "admm")
-    tag = f"N{N_train}"
-    save_path = (
-        f"checkpoints/{algorithm}_{tag}_T{T}_e{epochs}"
-        f"_s{num_samples}_learned_update_rho{rho_gnn}_lr{lr}.pt"
-    )
+    torch.manual_seed(config.SEED_TRAIN)
+    np.random.seed(config.SEED_TRAIN)
+ 
+    # --- Network for training ---------------------------------------
+    net_train, _, _, _,  rho_admm_train = init_fn(config.N_TRAIN, device=device)
+ 
+    save_path = config.checkpoint_path()
     print(f"\nCheckpoint path: {save_path}")
-
-    # ------------------------------------------------------------------
-    # Model  (feat sizes depend on algorithm)
-    # ------------------------------------------------------------------
-    # FB:   node_feat_size=2 [D, G],        edge_feat_size=1 [q]
-    # ADMM: node_feat_size=3 [D, G, u_avg], edge_feat_size=3 [q, z, u]
-    node_feat_size = 3 if is_admm else 2
-    edge_feat_size = 3 if is_admm else 1
-
+ 
+    # --- Model ------------------------------------------------------
     model = GNNUpdate(
-        d_h            = d_h,
-        rho            = rho_gnn,
-        node_feat_size = node_feat_size,
-        edge_feat_size = edge_feat_size,
+        d_h            = config.D_H,
+        rho            = config.RHO_GNN,
+        node_feat_size = config.NODE_FEAT_SIZE,
+        edge_feat_size = config.EDGE_FEAT_SIZE,
     ).to(device)
-    print(f"GNNUpdate — trainable parameters: {sum(p.numel() for p in model.parameters())}")
-
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
-    if load and os.path.exists(save_path):
+    print(f"GNNUpdate — trainable parameters: "
+          f"{sum(p.numel() for p in model.parameters())}")
+ 
+    # --- Training ---------------------------------------------------
+    if config.LOAD and os.path.exists(save_path):
         print(f"\nLoading pre-trained model from {save_path}")
         model.load_state_dict(torch.load(save_path, map_location=device))
-
     else:
-        if load:
-            print(f"Warning: model not found at {save_path}. Training from scratch.")
-
-        
-        # Single-topology training (original)
-        print(f"neighbors = {net_train.neighbors}")
-        print(f"G_max[0] = {net_train.prosumers[0].G_max}")
-        print(f"\n--- Dataset generation (N={N_train} rho admm={rho_admm_train}) ---")
+        if config.LOAD:
+            print(f"Warning: model not found at {save_path}. "
+                  f"Training from scratch.")
+ 
+        print(f"\n--- Dataset generation "
+              f"(N={config.N_TRAIN}, rho_admm={rho_admm_train}) ---")
         dataset = EnergyDataset(
-            num_samples  = num_samples,
+            num_samples  = config.NUM_SAMPLES,
             net_template = net_train,
             device       = device,
         )
-
-        print(f"\n--- Meta-training ({algorithm.upper()}) ---")
-        algo_kwargs_train = {"rho": rho_admm_train} if is_admm else {"gamma": gamma}
+ 
+        print(f"\n--- Meta-training (ADMM) ---")
         model, loss_history = meta_train(
             model        = model,
             dataset      = dataset,
             net_template = net_train,
-            T            = T,
-            epochs       = epochs,
-            lr           = lr,
-            alpha        = alpha,
-            batch_size   = batch_size,
+            T            = config.T_UNROLL,
+            epochs       = config.EPOCHS,
+            lr           = config.LR,
+            alpha        = config.ALPHA,
+            batch_size   = config.BATCH_SIZE,
             device       = device,
             save_path    = save_path,
-            algorithm    = algorithm,
-            **algo_kwargs_train,
+            rho          = rho_admm_train,
         )
-
-        save_path_loss_h = (
-            f"checkpoints/{algorithm}_{tag}_T{T}_e{epochs}"
-            f"_s{num_samples}_loss_history_rho{rho_gnn}_lr{lr}.png"
-        )
-        plot_loss(loss_history, save_path_loss_h)
-
-    # In train.py, alla fine del loop epochs, aggiungi:
-    print(f"phi_m (ampiezza GNN) = {float(torch.nn.functional.softplus(model.phi_m_raw)):.4f}")
-
-    # ------------------------------------------------------------------
-    # Inference
-    # ------------------------------------------------------------------
-    print(f"\n--- Inference ({algorithm.upper()}) ---")
-
-    torch.manual_seed(0)
-    np.random.seed(0)
-
-    n_test      = 5
+        plot_loss(loss_history, config.loss_history_path())
+ 
+    phi_m = float(torch.nn.functional.softplus(model.phi_m_raw))
+    print(f"phi_m (GNN amplitude) = {phi_m:.4f}")
+ 
+    # --- Inference --------------------------------------------------
+    print(f"\n--- Inference (ADMM) ---")
+    torch.manual_seed(config.SEED_TEST)
+    np.random.seed(config.SEED_TEST)
+ 
+    os.makedirs(config.FIGURES_DIR, exist_ok=True)
     all_results = []
-    os.makedirs("figures", exist_ok=True)
-
-    for i in range(n_test):
-        print(f"phi_m (ampiezza GNN) = {float(torch.nn.functional.softplus(model.phi_m_raw)):.4f}")
-        print(f"\nTest instance {i+1}/{n_test}:")
-
-        net_test, gamma_test, max_iter_test, tol_test, rho_test = net_train, gamma, max_iter, tol, rho_admm_train#init_fn(N_choice, device=device)
-        
-        
+ 
+    for i in range(config.N_TEST):
+        print(f"\nTest instance {i+1}/{config.N_TEST}:")
+ 
+        net_test, _, max_iter_test, tol_test, rho_test = init_fn(
+            config.N_CHOICE, device=device,
+            seed=config.SEED_TRAIN + i,
+        )
         net_init = net_test.clone()
         net_init._init_state()
-
-        inf_kwargs = {"rho": rho_test} if is_admm else {"gamma": gamma_test}
-
+ 
         results = run_comparison(
-            net_init  = net_init,
-            model     = model,
-            max_iter  = max_iter_test,
-            tol       = tol_test,
-            device    = device,
-            algorithm = algorithm,
-            **inf_kwargs,
+            net_init = net_init,
+            model    = model,
+            max_iter = max_iter_test,
+            tol      = tol_test,
+            device   = device,
+            rho      = rho_test,
         )
         all_results.append(results)
-
-        plot_results(
-            results,
-            save_path=f"figures/{algorithm}_{tag}_test_istance_{i+1}.png"
-        )
-
-        print(f"Pure {algorithm.upper()}      — constraint violation: "
+ 
+        print(f"Pure ADMM   — constraint violation: "
               f"{results['pure'].constraint_violation()}")
-        print(f"{algorithm.upper()} + GNN    — constraint violation: "
+        print(f"ADMM + GNN  — constraint violation: "
               f"{results['learned'].constraint_violation()}")
-
-    # ------------------------------------------------------------------
-    # Aggregate plot
-    # ------------------------------------------------------------------
+ 
+    # --- Aggregate plot ---------------------------------------------
     max_len = max(len(r["residuals_pure"]) for r in all_results)
-
-    def pad_and_stack(key):
-        padded = []
-        for r in all_results:
-            seq = r[key]
-            padded.append(seq + [seq[-1]] * (max_len - len(seq)))
-        return np.array(padded)
-
-    def pad_and_mean(key):
-        return pad_and_stack(key).mean(axis=0).tolist()
-
-    avg_results = {
-        key: pad_and_mean(key)
-        for key in ("residuals_pure", "residuals_learned")
-    }
-
-    plot_results(
+    avg_results, lo_results, hi_results = {}, {}, {}
+    for key in ("residuals_pure", "residuals_learned"):
+        m, l, h = _log_mean_lo_hi(all_results, key, max_len)
+        avg_results[key] = m
+        lo_results[key]  = l
+        hi_results[key]  = h
+ 
+    plot_results_std(
         avg_results,
-        save_path=f"figures/{algorithm}_{tag}_average_trainingN{N_train}.png"
+        lo        = lo_results,
+        hi        = hi_results,
+        save_path = config.aggregate_figure_path(),
     )
-
-    # ------------------------------------------------------------------
-    # Final summary
-    # ------------------------------------------------------------------
-    print(f"\n--- Summary ({algorithm.upper()}) ---")
-    print(f"Pure {algorithm.upper()}   — final avg residual: "
+ 
+    # --- Summary ----------------------------------------------------
+    print(f"\n--- Summary (ADMM) ---")
+    print(f"Pure ADMM   — final avg residual: "
           f"{avg_results['residuals_pure'][-1]:.6f}")
-    print(f"{algorithm.upper()} + GNN — final avg residual: "
+    print(f"ADMM + GNN  — final avg residual: "
           f"{avg_results['residuals_learned'][-1]:.6f}")
-
-
+ 
+ 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="L2Play — GNN accelerated FB/ADMM")
-
-    parser.add_argument(
-        "--N", type=int, default=10,
-        help="Network size for inference (default: 3)"
-    )
-    parser.add_argument(
-        "--N_train", type=int, default=10,
-        help="Network size for training (default: 3)"
-    )
-    parser.add_argument(
-        "--load", action="store_true", default=False,
-        help="Load pre-trained model instead of training"
-    )
-    parser.add_argument(
-        "--algorithm", type=str, default="admm", choices=["fb", "admm"],
-        help="Algorithm to use: 'fb' (default) or 'admm'"
-    )
-    args = parser.parse_args()
-
-    main(
-        N_choice  = args.N,
-        N_train   = args.N_train,
-        load      = args.load,
-        algorithm = args.algorithm,
-    )
+    main()
+ 

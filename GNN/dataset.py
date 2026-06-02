@@ -17,7 +17,7 @@ class EnergyDataset(Dataset):
 
     During training, each sample provides a starting point x0. The network
     is reconstructed via net_template.clone() + unflatten(x0), and the loss
-    is the fixed-point residual accumulated over T unrolled FB steps — no
+    is the fixed-point residual accumulated over T unrolled ADMM steps — no
     ground-truth GNE is needed.
 
     Parameters
@@ -69,4 +69,3 @@ class EnergyDataset(Dataset):
             'x0' : torch.Tensor (dim,) — initial flattened state for this sample
         """
         return {"x0": self.x0_data[idx]}
-
