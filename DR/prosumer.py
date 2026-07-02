@@ -55,6 +55,7 @@ with gradient (the local block of the game pseudo-gradient F):
     dJ_n/dq_{mn}  = c_{nm}
 """
 
+from __future__ import annotations
 
 import copy
 from typing import Dict, List, Optional, Sequence, Union
@@ -234,7 +235,7 @@ class Prosumer:
     def local_cost(self) -> torch.Tensor:
         """J_n(x_n) with additive constants dropped (0-dim tensor)."""
         cost = (
-            - self.a_tilde * (self.D - self.D_star) ** 2
+            self.a_tilde * (self.D - self.D_star) ** 2
             + 0.5 * self.a * self.G ** 2
             + self.b * self.G
         )
