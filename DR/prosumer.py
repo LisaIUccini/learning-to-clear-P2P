@@ -9,8 +9,9 @@ its fixed physical parameters, its decision variables, its local cost
 and gradient, and the minimal communication buffer needed to reason
 about the reciprocity coupling with neighbours.
 
-Everything algorithm-specific (Douglas-Rachford steps, GNN features,
-learned perturbations) lives elsewhere and is added in later steps.
+The prosumer is also the COMPUTING UNIT of the distributed algorithm:
+it runs the Douglas-Rachford steps on its own data (see `dr_step`).
+There is no central solver -- `DRSolver` only schedules the rounds.
 
 ----------------------------------------------------------------------
 Market model (from Le Cadre et al. 2020, as used in the L2Play paper)
@@ -163,6 +164,15 @@ class Prosumer:
         self.q_received: Dict[int, torch.Tensor] = {m: self._zero.clone()
                                                     for m in self.neighbors}
 
+        # --- on-board copy of the trained perturbation model (line 8) ---
+        # None -> plain DR. Set by gnn.deploy() after centralised training.
+        self.gnn_agent = None
+
+        # --- residual bookkeeping for the distributed iteration ---
+        self._prev_shadow = None
+        self.residual_sq = torch.zeros((), device=self.device)
+        self.shadow_residual_sq = torch.zeros((), device=self.device)
+
         if init:
             self.init_state()
 
@@ -196,6 +206,7 @@ class Prosumer:
         self.D = self.D_min + (self.D_max - self.D_min) * _rand()
         self.G = self.G_min + (self.G_max - self.G_min) * _rand()
         self.q = {m: (2.0 * _rand() - 1.0) * self.k[m] for m in self.neighbors}
+        self.reset_residuals()
         return self
 
     # ------------------------------------------------------------------
@@ -276,6 +287,181 @@ class Prosumer:
         """
         val = self.q[other.node_id]
         other.q_received[self.node_id] = val if training else val.detach().clone()
+
+    # ==================================================================
+    # DISTRIBUTED DOUGLAS-RACHFORD  (Algorithm 1, lines 4-7)
+    # ------------------------------------------------------------------
+    # Everything below runs on this prosumer alone. The ONLY external
+    # information used is `q_received`, filled by the one-hop message
+    # exchange of line 3 (EnergyNetwork.communicate).
+    # ==================================================================
+    def shadow_q(self) -> Dict[int, torch.Tensor]:
+        """Line 4: shadow projection of the trades onto X^rec.
+
+            qbar_{mn} = q_{mn} - max(0, q_{mn} + q_{nm}) / 2
+
+        Requires a fresh `q_received`. D and G are left untouched, since
+        the reciprocity set only constrains the trades: the full shadow of
+        this node is therefore (D, G, qbar).
+        """
+        return {m: self.q[m] - torch.relu(self.q[m] + self.q_received[m]) / 2.0
+                for m in self.neighbors}
+
+    def local_prox(self, gamma: float, rD: torch.Tensor, rG: torch.Tensor,
+                   rq: Dict[int, torch.Tensor], n_bisect: int = 60):
+        """Line 6: this prosumer's own prox, solved locally.
+
+            argmin_{xi in X^loc_n}  gamma * J_n(xi) + 1/2 ||xi - r||^2
+
+        The objective is separable in (D, G, q) and the only coupling
+        inside X^loc_n is this node's energy balance
+        D = G + G_res + sum_m q_{mn}. Dualising that single equality with a
+        scalar multiplier nu gives closed forms
+
+            D(nu) = clip( (2 gamma a~ D* + rD + nu) / (2 gamma a~ + 1) )
+            G(nu) = clip( (-gamma b + rG - nu) / (gamma a + 1) )
+            q_m(nu) = min( rq_m - gamma c_m - nu , kappa_m )
+
+        and the balance residual is monotone increasing in nu, so nu* is
+        found by a scalar bisection performed by this node. No communication.
+        """
+        g = float(gamma)
+        denomD = 2.0 * g * self.a_tilde + 1.0
+        denomG = g * self.a + 1.0
+
+        def D_of(nu):
+            return torch.clamp((2.0 * g * self.a_tilde * self.D_star + rD + nu)
+                               / denomD, self.D_min, self.D_max)
+
+        def G_of(nu):
+            return torch.clamp((-g * self.b + rG - nu) / denomG,
+                               self.G_min, self.G_max)
+
+        def q_of(nu):
+            return {m: torch.minimum(rq[m] - g * self.c[m] - nu, self.k[m])
+                    for m in self.neighbors}
+
+        def balance(nu):
+            qs = q_of(nu)
+            tot = (torch.stack(list(qs.values())).sum() if qs
+                   else torch.zeros((), device=self.device))
+            return D_of(nu) - G_of(nu) - self.G_res - tot
+
+        lo = -torch.ones((), device=self.device)
+        hi = torch.ones((), device=self.device)
+        for _ in range(80):                       # bracket the root
+            need_lo = bool(balance(lo) > 0)
+            need_hi = bool(balance(hi) < 0)
+            if not need_lo and not need_hi:
+                break
+            if need_lo:
+                lo = lo * 2.0 - 1.0
+            if need_hi:
+                hi = hi * 2.0 + 1.0
+        for _ in range(n_bisect):                 # bisect
+            mid = 0.5 * (lo + hi)
+            if bool(balance(mid) > 0):
+                hi = mid
+            else:
+                lo = mid
+        nu = 0.5 * (lo + hi)
+        return D_of(nu), G_of(nu), q_of(nu)
+
+    def local_gnn_state(self):
+        """Assemble the strictly local input of the perturbation model.
+
+        Contains only this prosumer's own state and parameters plus the
+        q_{nm} received during line 3 -- nothing else. Built BEFORE the DR
+        update, so the learned map consumes exactly the information that is
+        already on hand after the communication round: no second exchange.
+        """
+        from gnn import LocalNodeState
+        return LocalNodeState(
+            node_id=self.node_id, neighbors=list(self.neighbors),
+            D=self.D, G=self.G,
+            q_own={m: self.q[m] for m in self.neighbors},
+            q_recv={m: self.q_received[m] for m in self.neighbors},
+            D_min=self.D_min, D_max=self.D_max,
+            G_min=self.G_min, G_max=self.G_max,
+            kappa={m: self.k[m] for m in self.neighbors},
+        )
+
+    def dr_step(self, gamma: float, lam: float = 1.0, k: int = 0,
+                n_bisect: int = 60) -> None:
+        """One full local iteration: lines 4 to 8 of Algorithm 1.
+
+        Call `EnergyNetwork.communicate()` first, so that `q_received`
+        holds this round's q_{nm} values.
+
+        `k` is the iteration index, needed for the decaying amplitude
+        rho^k of the learned perturbation. If `self.gnn_agent` is None the
+        method runs plain DR (lines 4 to 7).
+        """
+        if len(self.q_received) != self.n_neighbors:
+            raise RuntimeError(
+                f"prosumer {self.node_id}: {len(self.q_received)} of "
+                f"{self.n_neighbors} messages available. Run "
+                "EnergyNetwork.communicate() before dr_step()."
+            )
+
+        # --- line 8 is EVALUATED HERE, on the pre-update state -----------
+        # The features must be the ones available right after line 3; the
+        # value is applied after the DR update, as in Algorithm 1.
+        v = None
+        if self.gnn_agent is not None:
+            v = self.gnn_agent.perturbation(self.local_gnn_state(), k)
+
+        # --- line 4: shadow of the CURRENT iterate (exact, uses received q)
+        qbar = self.shadow_q()
+        self._update_shadow_residual(qbar)          # monitoring only
+
+        # --- line 5: reflection (D, G unchanged by proj_{X^rec})
+        rD, rG = self.D, self.G
+        rq = {m: 2.0 * qbar[m] - self.q[m] for m in self.neighbors}
+
+        # --- line 6: local prox
+        zD, zG, zq = self.local_prox(gamma, rD, rG, rq, n_bisect=n_bisect)
+
+        # --- line 7: relaxed DR update
+        D_new = self.D + lam * (zD - self.D)
+        G_new = self.G + lam * (zG - self.G)
+        q_new = {m: self.q[m] + lam * (zq[m] - qbar[m]) for m in self.neighbors}
+
+        # --- line 8: add the learned perturbation ---
+        if v is not None:
+            v_D, v_G, v_q = v
+            D_new = D_new + v_D
+            G_new = G_new + v_G
+            q_new = {m: q_new[m] + v_q[m] for m in self.neighbors}
+
+        # local part of the auxiliary fixed-point residual ||x^{k+1}-x^k||
+        parts = [(D_new - self.D) ** 2, (G_new - self.G) ** 2]
+        parts += [(q_new[m] - self.q[m]) ** 2 for m in self.neighbors]
+        self.residual_sq = torch.stack(parts).sum()
+
+        # --- commit ---
+        self.D, self.G, self.q = D_new, G_new, q_new
+
+    def _update_shadow_residual(self, qbar: Dict[int, torch.Tensor]) -> None:
+        """This node's share of ||xbar^k - xbar^{k-1}||^2 (monitoring).
+
+        The shadow of the current iterate is exactly (D, G, qbar); it is
+        available only after the messages of this round have arrived, so
+        the shadow residual is reported with a one-iteration lag. No extra
+        communication is needed.
+        """
+        if self._prev_shadow is not None:
+            pD, pG, pq = self._prev_shadow
+            parts = [(self.D - pD) ** 2, (self.G - pG) ** 2]
+            parts += [(qbar[m] - pq[m]) ** 2 for m in self.neighbors]
+            self.shadow_residual_sq = torch.stack(parts).sum()
+        self._prev_shadow = (self.D, self.G, dict(qbar))
+
+    def reset_residuals(self) -> None:
+        """Forget the residual bookkeeping (call before a new run)."""
+        self._prev_shadow = None
+        self.residual_sq = torch.zeros((), device=self.device)
+        self.shadow_residual_sq = torch.zeros((), device=self.device)
 
     # ------------------------------------------------------------------
     # Monitoring / diagnostics

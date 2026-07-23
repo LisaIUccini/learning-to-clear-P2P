@@ -31,8 +31,8 @@ Design choices worth remembering
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field, replace
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -406,3 +406,98 @@ def spec_is_feasible(spec: MarketSpec) -> Dict[str, bool]:
         "D_star_in_box": bool(((spec.D_star >= spec.D_min - 1e-9) &
                                (spec.D_star <= spec.D_max + 1e-9)).all()),
     }
+
+# ======================================================================
+# Dataset of market instances (for training the perturbation model)
+# ======================================================================
+@dataclass
+class DatasetConfig:
+    """How to draw a collection of market instances.
+
+    `N` and `density` accept either a fixed value or a (min, max) range:
+
+        N=20,        density=0.3          -> same size and density, but a
+                                            different graph and different
+                                            parameters in every instance
+        N=(8, 40),   density=(0.1, 0.6)   -> size and density vary too
+
+    `graph_models` lets several topologies appear in the same dataset,
+    which is what makes zero-shot generalisation testable.
+    """
+    n_instances: int = 64
+    N: Union[int, Tuple[int, int]] = 20
+    density: Union[float, Tuple[float, float]] = 0.3
+    graph_models: Sequence[str] = ("sparse",)
+    seed: int = 0
+
+
+class MarketDataset:
+    """A reproducible collection of market instances.
+
+    Only the torch-free `MarketSpec`s are stored; the torch objects are
+    built on demand by `build`, so a large dataset stays cheap in memory.
+    """
+
+    def __init__(self, config: Optional[DatasetConfig] = None,
+                 market_config: Optional[MarketConfig] = None):
+        self.cfg = config if config is not None else DatasetConfig()
+        self.market_config = (market_config if market_config is not None
+                              else MarketConfig())
+        self.specs: List[MarketSpec] = []
+        self._draw()
+
+    # ------------------------------------------------------------------
+    def _draw(self) -> None:
+        cfg = self.cfg
+        rng = np.random.default_rng(cfg.seed)
+        for i in range(cfg.n_instances):
+            N = (int(rng.integers(cfg.N[0], cfg.N[1] + 1))
+                 if isinstance(cfg.N, (tuple, list)) else int(cfg.N))
+            dens = (float(rng.uniform(*cfg.density))
+                    if isinstance(cfg.density, (tuple, list))
+                    else float(cfg.density))
+            model = str(rng.choice(list(cfg.graph_models)))
+
+            mc = replace(self.market_config, graph_model=model, density=dens)
+            gen = MarketGenerator(mc)
+            # a distinct stream per instance keeps the dataset reproducible
+            self.specs.append(gen.sample_spec(N, seed=int(cfg.seed) * 100003 + i))
+
+    # ------------------------------------------------------------------
+    def __len__(self) -> int:
+        return len(self.specs)
+
+    def __getitem__(self, i: int) -> MarketSpec:
+        return self.specs[i]
+
+    def build(self, i: int, device=None, seed: Optional[int] = None):
+        """Instantiate instance `i` as an EnergyNetwork with a random state."""
+        gen = MarketGenerator(self.market_config)
+        return gen.build(self.specs[i], device=device,
+                         seed=(self.cfg.seed + i if seed is None else seed))
+
+    def split(self, train_frac: float = 0.8):
+        """Split into (train, test) datasets without redrawing anything."""
+        n_tr = int(round(train_frac * len(self.specs)))
+        a, b = MarketDataset.__new__(MarketDataset), MarketDataset.__new__(MarketDataset)
+        for part, specs in ((a, self.specs[:n_tr]), (b, self.specs[n_tr:])):
+            part.cfg = self.cfg
+            part.market_config = self.market_config
+            part.specs = list(specs)
+        return a, b
+
+    def summary(self) -> Dict[str, object]:
+        sizes = [s.N for s in self.specs]
+        edges = [len(s.edges_undirected) for s in self.specs]
+        return {
+            "instances": len(self.specs),
+            "N": (min(sizes), max(sizes)),
+            "undirected_edges": (min(edges), max(edges)),
+            "graph_models": sorted({self.market_config.graph_model}
+                                   | set(self.cfg.graph_models)),
+        }
+
+    def __repr__(self) -> str:
+        s = self.summary()
+        return (f"MarketDataset(instances={s['instances']}, "
+                f"N={s['N']}, edges={s['undirected_edges']})")

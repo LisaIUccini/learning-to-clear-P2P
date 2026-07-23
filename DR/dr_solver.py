@@ -2,53 +2,61 @@
 dr_solver.py
 ============
 
-Distributed Douglas-Rachford (DR) equilibrium seeking for the P2P market
-game (Algorithm 1 of the L2Play paper, without the learned perturbation).
+Scheduler for the distributed Douglas-Rachford market clearing
+(Algorithm 1 of the L2Play paper, without the learned perturbation).
 
-One relaxed-DR iteration on the auxiliary iterate x = [D, G, Q]:
+This module does NOT solve anything. All the computation lives in the
+prosumers: each one runs `Prosumer.dr_step` on its own data. `DRSolver`
+only advances synchronous rounds, exactly as a wall clock would in a real
+deployment, and collects diagnostics for plotting.
 
-    xbar = proj_{X^rec}(x)                 # shadow  (J_{gamma B})  -- line 4
-    refl = 2*xbar - x                      # reflection            -- line 5
-    z    = prox_{gamma J}^{X^loc}(refl)    # local prox (J_{gamma A}) line 6
-    x    = x + lam * (z - xbar)            # relaxed DR update      -- line 7
-    x    = x + v                           # learned perturbation   -- line 8 (optional)
+One iteration
+-------------
+    net.communicate()          # line 3: one-hop message exchange
+    for p in net.prosumers:    # lines 4-8, each prosumer independently
+        p.dr_step(gamma, lam, k)
+        #   line 4  shadow      qbar_mn = q_mn - max(0, q_mn + q_nm)/2
+        #   line 5  reflection  r = 2*qbar - q     (D, G unchanged)
+        #   line 6  prox        own scalar-dual bisection over X^loc_n
+        #   line 7  update      x <- x + lam (z - xbar)
+        #   line 8  perturbation  its own GNN copy, if one was deployed
 
-Convergence (Theorem 1) is tracked on the SHADOW xbar = proj_{X^rec}(x),
-the reciprocity-feasible market profile. Two residuals are recorded:
+Exactly ONE communication round per iteration. No prosumer ever reads a
+variable belonging to a non-neighbour.
 
-    residual      = ||xbar_{k+1} - xbar_k||   (shadow move; used for stopping)
-    residual_aux  = ||x_{k+1}   - x_k||       (auxiliary-iterate fixed-point
-                                               residual; the canonical DR one)
+Residuals
+---------
+    residual      = ||xbar^{k}   - xbar^{k-1}||   (shadow, market profile)
+    residual_aux  = ||x^{k+1}    - x^k||          (canonical DR criterion)
 
-Since proj_{X^rec} is nonexpansive, residual <= residual_aux; both vanish at
-a fixed point. The shadow residual is the market-meaningful one, the auxiliary
-residual is the strict operator fixed-point criterion -- we log both.
+The shadow of iterate x^k is (D^k, G^k, qbar^k) and qbar needs the
+neighbours' q^k, which arrive with the messages of round k. The shadow
+residual is therefore known with a one-iteration lag -- and costs no extra
+communication. Both residuals are recorded from the second iteration on,
+so their indices line up.
 
-Note on lambda: with lam = 1 (default) the update reproduces Algorithm 1
-lines 6-7 exactly (D,G take the prox output, q is relaxed). For lam != 1 this
-applies the *uniform* relaxation of Theorem 1 (eq. 17) to all blocks, which
-is the variant covered by the convergence proof.
+Summing the per-node contributions is a global reduction: it is monitoring,
+not part of the algorithm. A real system would stop on a local criterion or
+agree on termination through a distributed consensus.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import torch
 
 from energy_network import EnergyNetwork
 
-PerturbationFn = Callable[[EnergyNetwork, torch.Tensor, int], torch.Tensor]
-
 
 @dataclass
 class DRConfig:
-    gamma: float = 0.3          # resolvent / prox step size (> 0)
+    gamma: float = 0.3          # prox step size (> 0)
     lam: float = 1.0            # DR relaxation, lambda in (0, 2)
     n_iter: int = 2000          # max iterations
-    stop_tol: Optional[float] = 1e-6   # stop when shadow residual < tol (None: never)
-    prox_bisect: int = 60       # bisection steps inside the prox
+    stop_tol: Optional[float] = 1e-6   # stop when shadow residual < tol
+    prox_bisect: int = 60       # bisection steps inside each local prox
 
     def __post_init__(self):
         if not (self.gamma > 0):
@@ -60,14 +68,15 @@ class DRConfig:
 @dataclass
 class DRResult:
     x: torch.Tensor                       # final auxiliary iterate
-    shadow: torch.Tensor                  # final feasible profile proj_{X^rec}(x)
+    shadow: torch.Tensor                  # final feasible market profile
     n_iter: int                           # iterations actually run
     converged: bool
+    n_messages: int = 0                   # total one-hop messages exchanged
     history: Dict[str, List[float]] = field(default_factory=dict)
 
 
 class DRSolver:
-    """Runs relaxed Douglas-Rachford on an EnergyNetwork."""
+    """Advances the synchronous rounds; the prosumers do all the work."""
 
     def __init__(self, config: Optional[DRConfig] = None):
         self.cfg = config if config is not None else DRConfig()
@@ -76,77 +85,70 @@ class DRSolver:
         self,
         net: EnergyNetwork,
         x0: Optional[torch.Tensor] = None,
-        perturbation: Optional[PerturbationFn] = None,
-        training: bool = False,
         record: bool = True,
         write_back: bool = True,
     ) -> DRResult:
-        """Solve the market game.
+        """Run the distributed market clearing.
 
         Parameters
         ----------
         net : EnergyNetwork
-        x0  : optional (dim,) starting auxiliary iterate; defaults to the
-              network's current flattened state.
-        perturbation : optional hook v = perturbation(net, x, k) (line 8).
-        training : if True keep the autograd graph across iterations
-                   (for unrolled GNN training); else run under no_grad.
-        record   : log per-iteration diagnostics into result.history.
-        write_back : write the final shadow into the prosumer state.
+            Holds the prosumers and the communication primitive.
+        x0 : optional (dim,) starting point; defaults to the current state.
+        record : log per-iteration diagnostics into result.history.
+        write_back : leave the prosumers on their feasible shadow profile.
         """
         cfg = self.cfg
-        x = (net.flatten() if x0 is None else x0)
-        if not training:
-            x = x.detach().clone()
+        if x0 is not None:
+            net.unflatten(x0.detach().clone())
+        net.reset_residuals()
 
         history: Dict[str, List[float]] = {
             "residual": [], "residual_aux": [],
             "cost": [], "balance": [], "reciprocity": [],
         }
-
-        context = torch.enable_grad() if training else torch.no_grad()
         converged = False
         k_run = 0
-        with context:
-            xbar = net.project_reciprocity(x)              # shadow of x (line 4)
+
+        with torch.no_grad():
             for k in range(cfg.n_iter):
                 k_run = k + 1
-                refl = 2.0 * xbar - x                       # line 5
-                z = net.prox_local(cfg.gamma, refl, n_bisect=cfg.prox_bisect)  # line 6
-                x_new = x + cfg.lam * (z - xbar)            # line 7
 
-                if perturbation is not None:               # line 8
-                    v = perturbation(net, x_new, k)
-                    x_new = x_new + v
+                # ---- line 3: one communication round ------------------
+                net.communicate()
 
-                xbar_new = net.project_reciprocity(x_new)  # shadow of x_new
-                res = torch.linalg.vector_norm(xbar_new - xbar)   # shadow residual
+                # ---- lines 4-7: every prosumer computes on its own ----
+                for p in net.prosumers:
+                    p.dr_step(cfg.gamma, cfg.lam, k=k,
+                              n_bisect=cfg.prox_bisect)
 
+                # ---- monitoring (global reduction, not algorithmic) ---
+                if k == 0:
+                    continue                    # shadow residual not yet defined
+                res = net.shadow_residual()
                 if record:
-                    res_aux = torch.linalg.vector_norm(x_new - x)
-                    self._log(history, net, xbar_new, res, res_aux)
-
-                x, xbar = x_new, xbar_new                   # advance (reuse shadow)
-
-                if (cfg.stop_tol is not None and perturbation is None
-                        and float(res) < cfg.stop_tol):
+                    self._log(net, history, res)
+                if cfg.stop_tol is not None and res < cfg.stop_tol:
                     converged = True
                     break
 
+        x = net.flatten()
+        shadow = net.project_reciprocity(x)
         if write_back:
-            net.unflatten(xbar.detach() if not training else xbar)
+            net.communicate()
+            net.write_shadow()
 
-        return DRResult(x=x, shadow=xbar, n_iter=k_run,
-                        converged=converged, history=history)
+        return DRResult(x=x, shadow=shadow, n_iter=k_run, converged=converged,
+                        n_messages=k_run * net.E, history=history)
 
     @staticmethod
-    def _log(history, net, shadow, res, res_aux):
-        with torch.no_grad():
-            history["residual"].append(float(res))
-            history["residual_aux"].append(float(res_aux))
-            history["cost"].append(float(net.cost_at(shadow)))
-            history["balance"].append(float(net.balance_at(shadow).abs().max()))
-            history["reciprocity"].append(float(net.reciprocity_max_at(shadow)))
+    def _log(net, history, res):
+        shadow = net.project_reciprocity(net.flatten())
+        history["residual"].append(res)
+        history["residual_aux"].append(net.residual())
+        history["cost"].append(float(net.cost_at(shadow)))
+        history["balance"].append(float(net.balance_at(shadow).abs().max()))
+        history["reciprocity"].append(float(net.reciprocity_max_at(shadow)))
 
 
 # ----------------------------------------------------------------------
@@ -155,7 +157,6 @@ class DRSolver:
 def solve_dr(net: EnergyNetwork, gamma: float = 0.3, lam: float = 1.0,
              n_iter: int = 2000, stop_tol: Optional[float] = 1e-6,
              **kwargs) -> DRResult:
-    """Shortcut: build a DRSolver and solve `net` with vanilla DR."""
-    solver = DRSolver(DRConfig(gamma=gamma, lam=lam, n_iter=n_iter,
-                               stop_tol=stop_tol))
-    return solver.solve(net, **kwargs)
+    """Shortcut: build a DRSolver and run it on `net`."""
+    return DRSolver(DRConfig(gamma=gamma, lam=lam, n_iter=n_iter,
+                             stop_tol=stop_tol)).solve(net, **kwargs)

@@ -217,7 +217,16 @@ class EnergyNetwork:
 
     def prox_local(self, gamma: float, r: torch.Tensor,
                    n_bisect: int = 60) -> torch.Tensor:
-        """Exact, differentiable prox of gamma*J over X^loc, per node.
+        """VECTORISED reference version of the per-node prox.
+
+        The distributed algorithm does NOT use this: each prosumer solves
+        its own prox in `Prosumer.local_prox`. This version computes the
+        same quantity for every node at once and is kept because it is
+        differentiable end-to-end, which the (centralised) training of the
+        learned perturbation will need, and because it lets us verify the
+        per-node implementation against an independent one.
+
+        Exact, differentiable prox of gamma*J over X^loc, per node.
 
         Solves   min_{xi in X^loc_n}  gamma J_n(xi) + 1/2 ||xi - r_n||^2
         for every node in parallel, via dualisation of the single balance
@@ -324,13 +333,60 @@ class EnergyNetwork:
     # Communication round
     # ------------------------------------------------------------------
     def communicate(self, training: bool = False) -> None:
-        """Every prosumer sends its q toward each neighbour.
+        """Line 3 of Algorithm 1: one round of one-hop message exchange.
 
-        After the call: prosumer[n].q_received[m] = prosumer[m].q[n],
-        for every edge (m, n).
+        Every prosumer sends, to each of its neighbours, the trade value it
+        holds for that link. After the call
+
+            prosumer[n].q_received[m] = prosumer[m].q[n] = q_{nm}
+
+        which is exactly the value n needs to evaluate the reciprocity
+        constraint q_{mn} + q_{nm} <= 0 on the link (m, n).
+
+        This is the ONLY place where information crosses between nodes.
+        It is deliberately a plain in-memory hand-over: replacing it with a
+        real transport (message broker, power-line carrier, radio, ...)
+        means rewriting this method alone -- nothing else in the algorithm
+        touches non-local data.
+
+        The round is synchronous: all messages are delivered here, before
+        any prosumer runs `dr_step`, so every node reads values belonging
+        to the same iteration.
         """
         for (m, n) in self.edge_list:
             self.prosumers[m].send_q_to(self.prosumers[n], training=training)
+
+    # ------------------------------------------------------------------
+    # Residual aggregation (MONITORING ONLY)
+    # ------------------------------------------------------------------
+    # These sums are global reductions and are NOT part of the distributed
+    # algorithm: they exist so a simulation can report convergence and stop.
+    # A real deployment would use a local stopping rule or a distributed
+    # consensus on termination.
+    # ------------------------------------------------------------------
+    def residual(self) -> float:
+        """||x^{k+1} - x^k||: sum of the prosumers' local contributions."""
+        return float(sum(float(p.residual_sq) for p in self.prosumers)) ** 0.5
+
+    def shadow_residual(self) -> float:
+        """||xbar^k - xbar^{k-1}||, reported with a one-iteration lag."""
+        return float(sum(float(p.shadow_residual_sq)
+                         for p in self.prosumers)) ** 0.5
+
+    def reset_residuals(self) -> None:
+        """Clear the residual bookkeeping of every prosumer."""
+        for p in self.prosumers:
+            p.reset_residuals()
+
+    def write_shadow(self) -> None:
+        """Replace each prosumer's trades by its reciprocity-feasible shadow.
+
+        Needs a fresh `q_received`, so call `communicate()` first. Used at
+        the end of a run to leave the network in a feasible market profile.
+        """
+        shadows = [p.shadow_q() for p in self.prosumers]
+        for p, qbar in zip(self.prosumers, shadows):
+            p.q = qbar
 
     # ------------------------------------------------------------------
     # Monitoring / diagnostics

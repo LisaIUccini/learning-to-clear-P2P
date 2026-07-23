@@ -23,12 +23,12 @@ from dr_solver import DRSolver, DRConfig
 from plot_style import set_paper_style, show_or_save_many, draw_network
 
 # ============================== CONFIG ================================
-N        = 20        # number of prosumers
+N        = 10        # number of prosumers
 DENSITY  = 0.3       # graph edge density in [0,1]  (0 = tree, 1 = complete)
-GAMMA    = 2.0       # DR prox step size (> 0)
+GAMMA    = 1.5       # DR prox step size (> 0)
 LAM      = 1.0       # DR relaxation in (0, 2)
 TOL      = 1e-6      # stop when shadow residual < TOL
-MAX_ITER = 20000    # safety cap
+MAX_ITER = 5000    # safety cap
 SEED     = 42
 
 RES_FIG_SIZE   = (9.0, 3.4)   # residual figure (wide)
@@ -40,7 +40,7 @@ NAME_GRAPH  = "example_dr_network"
 
 
 def build_example():
-    gen = MarketGenerator(MarketConfig(graph_model="random", density=DENSITY))
+    gen = MarketGenerator(MarketConfig(graph_model="sparse", density=DENSITY))
     return gen.sample(N, seed=SEED)
 
 

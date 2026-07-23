@@ -24,9 +24,9 @@ from dr_solver import DRSolver, DRConfig
 from plot_style import set_paper_style, show_or_save
 
 # ============================== CONFIG ================================
-N         = 20
-DENSITIES = [0.0, 0.1, 0.3,  0.5, 0.6]   # increasing density
-GAMMA     = 2.0        # near-optimal step size (see study_gamma)
+N         = 10
+DENSITIES = [0.1, 0.3,  0.5, 0.6]   # increasing density
+GAMMA     = 1.0        # near-optimal step size (see study_gamma)
 LAM       = 1.0
 TOL       = 1e-6
 MAX_ITER  = 20000

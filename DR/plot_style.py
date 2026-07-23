@@ -192,3 +192,51 @@ def draw_network(ax, neighbors, N, pos=None, seed: int = 0,
     ax.set_aspect("equal")
     ax.axis("off")
     return pos
+
+def median_band(curves, q_low: float = 25.0, q_high: float = 75.0):
+    """Align curves of different length and summarise them.
+
+    Trajectories stop at different iterations, so shorter ones are padded
+    with NaN and the statistics ignore the missing entries. Returns
+
+        x       iteration index (1-based)
+        med     median across instances
+        lo, hi  the requested percentiles (default: interquartile range)
+        n       how many instances are still running at each iteration
+
+    `n` matters when reading the tail: once most instances have converged
+    the band is computed from a handful of runs, so it gets noisy. Cut the
+    x-axis where `n` becomes small if you want a conservative figure.
+    """
+    import numpy as np
+    if not curves:
+        return None
+    L = max(len(c) for c in curves)
+    M = np.full((len(curves), L), np.nan)
+    for i, c in enumerate(curves):
+        M[i, :len(c)] = c
+    med = np.nanmedian(M, axis=0)
+    lo = np.nanpercentile(M, q_low, axis=0)
+    hi = np.nanpercentile(M, q_high, axis=0)
+    n = np.sum(~np.isnan(M), axis=0)
+    return np.arange(1, L + 1), med, lo, hi, n
+
+
+def plot_band(ax, curves, color, label, q_low=25.0, q_high=75.0,
+              min_fraction: float = 0.0):
+    """Draw the median curve with a shaded percentile band.
+
+    `min_fraction` truncates the plot where fewer than that fraction of the
+    instances are still running, to avoid a tail summarising one or two runs.
+    """
+    import numpy as np
+    out = median_band(curves, q_low, q_high)
+    if out is None:
+        return
+    x, med, lo, hi, n = out
+    if min_fraction > 0:
+        keep = n >= max(1, int(min_fraction * len(curves)))
+        cut = int(np.argmax(~keep)) if (~keep).any() else len(x)
+        x, med, lo, hi = x[:cut], med[:cut], lo[:cut], hi[:cut]
+    ax.fill_between(x, lo, hi, color=color, alpha=0.18, lw=0)
+    ax.plot(x, med, color=color, lw=1.6, label=label)
