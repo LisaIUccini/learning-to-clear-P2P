@@ -2,82 +2,122 @@
 gnn.py
 ======
 
-The learned perturbation map Phi_theta of L2Play (Algorithm 1, line 8).
+The learned perturbation map Phi_theta (Algorithm 1, line 8).
+
+Role in the algorithm
+----------------------
+After the plain DR update (line 7) each prosumer adds a small, LEARNED,
+SUMMABLE correction:
+
+    x^{k+1}_n  <-  x^{k+1}_n + v^k_n ,      v^k_n = scale * rho^k * d_n(x^k)
+
+where d_n is bounded (component n of a tanh-squashed, physically-rescaled
+network output). This is a perturbed Krasnoselskii-Mann iteration: the
+unperturbed DR recursion x^{k+1} = x^k + lambda*(J_{gammaA}(2 J_{gammaB}
+x^k - x^k) - J_{gammaB} x^k) is (lambda/2)-averaged nonexpansive for
+lambda in (0,2) (Lions & Mercier 1979), and a classical result on
+perturbed averaged/KM iterations (e.g. Combettes 2001) states that adding
+ANY sequence e_k with sum_k ||e_k|| < infinity preserves convergence to
+the same fixed-point set. We enforce that BY CONSTRUCTION, not by hoping
+training keeps it small:
+
+    * both output heads end in tanh          => |Phi_theta| <= 1 componentwise
+    * scaled by a node/edge-local PHYSICAL reference (half the D/G box
+      width, the trade capacity kappa)        => v^k_n bounded by a fixed
+                                                  constant of the instance
+    * multiplied by the decaying amplitude rho^k, rho in (0,1) fixed
+                                              => geometric decay
+
+    sum_k ||v^k|| <= scale * ||physical_scale|| / (1 - rho) < infinity,
+
+for ANY theta, trained or not, in- or out-of-distribution. The learned
+part can only affect SPEED, never correctness: it cannot break the
+convergence guarantee that lines 4-7 alone already have.
 
 Two execution paths, ONE set of weights
----------------------------------------
-Training is necessarily CENTRALISED (back-propagation through the unrolled
-iteration needs the whole trajectory), while deployment must be
-DISTRIBUTED (each prosumer queries its own copy of the model). Both are
-provided here and are numerically identical:
+----------------------------------------
+Training is necessarily CENTRALISED (back-propagation through the
+unrolled trajectory needs the whole state at once, see training.py), while
+deployment must be DISTRIBUTED (each prosumer queries its own copy of the
+model using only local data). Both are provided here and compute the SAME
+function:
 
-    forward(net, x)        -- centralised, vectorised over the whole graph.
+    direction(net, x)      -- centralised, vectorised over the whole graph.
                               Used for training and for fast simulation.
 
     local_forward(state)   -- what a single prosumer runs after the
                               communication step, using ONLY its own
-                              variables and the q values received from its
-                              direct neighbours. Used for real distributed
+                              variables/parameters and the q values
+                              received from its direct neighbours (1 hop,
+                              reuses the communication DR already does --
+                              no extra round). Used for real distributed
                               inference.
 
-Because the weights theta are shared by every node and every edge, and all
-MLP sizes depend only on the feature dimensions and d_h (never on N, |E| or
-|Omega_n|), the trained model can simply be copied to every node and run on
-networks of any size and topology (zero-shot generalisation).
+Because the weights theta are shared by every node/edge, and every MLP
+size depends only on feature dimensions and d_h (never on N, |E| or
+|Omega_n|), a trained model can be copied to every node and run on
+networks of any size and topology.
 
-Deployment
-----------
-    gnn = PerturbationGNN(cfg)            # train centrally ...
-    torch.save(gnn.state_dict(), "phi.pt")
+Features (strictly local, computed after the line-3 communication round)
+--------------------------------------------------------------------------
+Node n:
+    h_D      position of D_n in its box, in [-1, 1]
+    h_G      position of G_n in its box, in [-1, 1]
+    h_Dstar  position of the TARGET D*_n in the same box, in [-1, 1]
+    h_bal    local balance residual (D_n - G_n - DeltaG_n - sum_m q_mn),
+             normalised by the D-box width -- how far n is from feasible
+    h_atilde, h_a, h_b   n's own cost-curvature coefficients, min-max
+             normalised against `GNNConfig`'s reference ranges (NOT the
+             running network's statistics -- see note below)
+    h_prev_res   how much n's OWN (D,G,q) moved on the PREVIOUS iteration
+             (the local part of ||x^k-x^{k-1}||, normalised by the D-box
+             width) -- a direct, self-supervised progress signal: large
+             and not shrinking says "I am not converging here yet",
+             small says "this is settling, ease off"
 
-    agents = deploy(gnn, net)             # ... then hand a copy to each node
-    dD, dG, dq = agents[n].perturbation(local_state, k)
+Directed edge (m -> n), i.e. n's link toward neighbour m:
+    e_qown   q_{mn} / kappa_{mn}   (n's own decision toward m)
+    e_qrecv  q_{nm} / kappa_{mn}   (received from m during communicate())
+    e_c      n's own trading cost c_{nm}, normalised against the reference
+             range
 
-Role in the algorithm
----------------------
-After the plain DR update (line 7) each prosumer adds
+Why fixed reference ranges, not batch statistics
+--------------------------------------------------
+A single prosumer cannot compute a mean/std over the whole network (that
+needs a global reduction, exactly what `communicate()` is built to avoid).
+Normalisation therefore uses FIXED constants declared in `GNNConfig`
+(`a_tilde_range`, `a_range`, `b_range`, `c_range`), matching the sampling
+ranges of the `MarketConfig` the training data was drawn from --
+`GNNConfig.from_market_config` builds them automatically so the two never
+drift apart. This is a compile-time constant every node already knows
+(it is part of the deployed model), not a quantity derived at runtime from
+other nodes' data, so it costs no communication and stays local.
 
-    x^{k+1}_n  <-  x^{k+1}_n + v^k_n ,      v^k = scale * rho^k * Phi_theta
-
-Theorem 1 guarantees convergence to a v-GNE for ANY learned map, provided
-the perturbation sequence is summable (v in ell_1). We enforce that BY
-CONSTRUCTION:
-
-    * both output heads end with tanh  =>  |Phi_theta| <= 1 componentwise,
-      hence ||Phi_theta||_2 <= sqrt(dim);
-    * the output is scaled by the decaying amplitude rho^k, rho in (0,1).
-
-    sum_k ||v^k|| <= scale * sqrt(dim) / (1 - rho) < infinity,
-
-so summability holds whatever the network outputs -- even untrained or
-out-of-distribution. The learned part can only affect speed, never
-correctness.
-
-Architecture (single message-passing layer, eqs. 6-12 of the paper)
--------------------------------------------------------------------
-For the directed edge (m -> n), q_{mn} is n's own decision toward m and
-q_{nm} is what n RECEIVES from m during the communication step.
-
-    node features   h_n      = (D_n, G_n)                   in R^2   (eq. 6)
-    edge features   e_mn     = (q_nm)                       in R^1   (eq. 7)
-    message         msg_m->n = phi_msg(e_mn)                in R^dh  (eq. 8)
-    aggregation     h_agg_n  = 1/sqrt(|Omega_n|) sum_m msg  in R^dh  (eq. 9)
-    node update     h_new_n  = phi_upd(h_n, h_agg_n)        in R^dh  (eq. 10)
-    node head       delta_n  = phi_node(h_new_n)            in R^2   (eq. 11)
-    edge head       delta_mn = phi_edge(h_new_n, e_mn)      in R^1   (eq. 12)
-
-delta_n perturbs (D_n, G_n); delta_mn perturbs q_{mn}.
+Temporal memory (across DR iterations, NOT graph hops)
+----------------------------------------------------------
+The node-update step is a GRUCell, not a stateless MLP: mem_n^{k+1} =
+GRUCell([h_n^k, agg_n^k], mem_n^k). mem_n is PRIVATE, PER-NODE state that
+persists across `dr_step` calls on the SAME prosumer -- it costs no
+communication whatsoever (nothing about it is sent or received, exactly
+like `Prosumer._round`), so the "one communication round per iteration"
+invariant is unaffected. It lets the network build up a notion of "have
+my recent corrections here actually been helping" over several iterations,
+instead of reacting to the current instant alone -- the earlier, memoryless
+version could not distinguish "just started" from "been pushing here for
+50 iterations with no visible progress".
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 
 from energy_network import EnergyNetwork
+
+Range = Tuple[float, float]
 
 
 # ======================================================================
@@ -87,23 +127,48 @@ from energy_network import EnergyNetwork
 class GNNConfig:
     """Hyper-parameters of the perturbation map.
 
-    hidden_dim (d_h) MUST be a fixed constant, independent of N, |E| and the
-    neighbourhood sizes: that is what makes the weights reusable across
-    topologies.
+    `hidden_dim` (d_h) MUST be a fixed constant, independent of N, |E| and
+    the neighbourhood sizes: that is what makes the weights reusable
+    across topologies. `rho` and `scale` are NOT learned parameters (kept
+    fixed so the summability bound stays a clean, checkable constant, see
+    `PerturbationGNN.summability_bound`).
     """
-    hidden_dim: int = 32          # d_h -- fixed, independent of N and |E|
-    rho: float = 0.9              # perturbation decay in (0,1) -> summability
-    scale: float = 1.0            # global amplitude of the perturbation
-    activation: str = "tanh"      # hidden activation: tanh | relu
-    normalize: bool = True        # rescale features with LOCAL parameters only
-    rich_edge_features: bool = False  # False: e_mn = (q_nm)            [paper]
-                                      # True : e_mn = (q_mn, q_nm, sum) [ablation]
+    hidden_dim: int = 32              # d_h -- fixed, independent of N and |E|
+    rho: float = 0.9                  # perturbation decay in (0,1) -> summability
+    scale: float = 1.0                # amplitude, as a FRACTION of the local
+                                      # physical range (box width / capacity)
+    activation: str = "tanh"          # hidden activation: tanh | relu
+
+    # reference ranges for feature normalisation -- MUST match (or bound)
+    # the MarketConfig the training data is drawn from. Defaults mirror
+    # MarketConfig's own defaults; use `from_market_config` to stay in sync.
+    a_tilde_range: Range = (0.5, 1.5)
+    a_range: Range = (0.5, 2.0)
+    b_range: Range = (0.2, 1.0)
+    c_range: Range = (0.05, 0.30)
 
     def __post_init__(self):
         if not (0.0 < self.rho < 1.0):
             raise ValueError("rho must lie in (0,1) to ensure summability")
         if self.hidden_dim <= 0:
             raise ValueError("hidden_dim must be positive")
+        if not (self.scale > 0):
+            raise ValueError("scale must be > 0")
+
+    @classmethod
+    def from_market_config(cls, market_cfg, **kwargs) -> "GNNConfig":
+        """Build reference ranges consistent with the dataset's MarketConfig.
+
+        Keeps feature normalisation from silently drifting out of sync
+        with whatever ranges actually generated the training instances.
+        """
+        return cls(
+            a_tilde_range=tuple(market_cfg.a_tilde_range),
+            a_range=tuple(market_cfg.a_range),
+            b_range=tuple(market_cfg.b_range),
+            c_range=tuple(market_cfg.c_range),
+            **kwargs,
+        )
 
 
 def _mlp(d_in: int, d_out: int, d_hidden: int, activation: str) -> nn.Sequential:
@@ -114,6 +179,17 @@ def _mlp(d_in: int, d_out: int, d_hidden: int, activation: str) -> nn.Sequential
         act(),
         nn.Linear(d_hidden, d_out),
     )
+
+
+def _norm(v, rng: Range):
+    """Min-max normalise `v` against a FIXED reference range, into [-1, 1].
+
+    Clamped, so values slightly outside the nominal range (a different
+    instance distribution, an ablation) saturate instead of exploding.
+    Works for both batched tensors and 0-dim scalars via broadcasting.
+    """
+    lo, hi = rng
+    return 2.0 * torch.clamp((v - lo) / (hi - lo), 0.0, 1.0) - 1.0
 
 
 # ======================================================================
@@ -131,21 +207,31 @@ class LocalNodeState:
     neighbors: List[int]
     D: torch.Tensor
     G: torch.Tensor
-    q_own: Dict[int, torch.Tensor]
-    q_recv: Dict[int, torch.Tensor]
+    D_star: torch.Tensor
+    G_res: torch.Tensor
     D_min: torch.Tensor
     D_max: torch.Tensor
     G_min: torch.Tensor
     G_max: torch.Tensor
+    a_tilde: torch.Tensor
+    a: torch.Tensor
+    b: torch.Tensor
+    q_own: Dict[int, torch.Tensor]
+    q_recv: Dict[int, torch.Tensor]
+    c: Dict[int, torch.Tensor]
     kappa: Dict[int, torch.Tensor]
+    mem: torch.Tensor            # (hidden_dim,) recurrent state, own private history
+    prev_residual: torch.Tensor  # 0-dim, local move on the PREVIOUS iteration
 
 
-def extract_local_state(net: EnergyNetwork, x: torch.Tensor,
-                        n: int) -> LocalNodeState:
+def extract_local_state(net: EnergyNetwork, x: torch.Tensor, n: int,
+                        mem: torch.Tensor, prev_residual: torch.Tensor
+                        ) -> LocalNodeState:
     """Build node n's local view from a global iterate.
 
-    Used for testing and simulation: in a real deployment each prosumer
-    assembles this from its own memory plus the messages it received.
+    Used for testing/cross-checking `direction` against `local_forward`: in
+    a real deployment each prosumer assembles this from its own memory plus
+    the messages it received (`Prosumer.local_gnn_state`), never from x.
     """
     D, G, Q = net.get_DGQ(x)
     nb = net.neighbors[n]
@@ -153,11 +239,13 @@ def extract_local_state(net: EnergyNetwork, x: torch.Tensor,
     p = net.prosumers[n]
     return LocalNodeState(
         node_id=n, neighbors=list(nb),
-        D=D[n], G=G[n],
+        D=D[n], G=G[n], D_star=p.D_star, G_res=p.G_res,
+        D_min=p.D_min, D_max=p.D_max, G_min=p.G_min, G_max=p.G_max,
+        a_tilde=p.a_tilde, a=p.a, b=p.b,
         q_own={m: Q[idx[m]] for m in nb},                 # q_{mn}
         q_recv={m: Q[net.inv_idx[idx[m]]] for m in nb},   # q_{nm}
-        D_min=p.D_min, D_max=p.D_max, G_min=p.G_min, G_max=p.G_max,
-        kappa={m: p.k[m] for m in nb},
+        c={m: p.c[m] for m in nb}, kappa={m: p.k[m] for m in nb},
+        mem=mem, prev_residual=prev_residual,
     )
 
 
@@ -165,74 +253,105 @@ def extract_local_state(net: EnergyNetwork, x: torch.Tensor,
 # The perturbation network
 # ======================================================================
 class PerturbationGNN(nn.Module):
-    """Phi_theta: one message-passing layer + two bounded output heads."""
+    """Phi_theta: one 1-hop message-passing layer + two bounded output heads.
+
+    A third, per-node GATE head (sigmoid, in [0,1]) scales BOTH output
+    heads uniformly for that node: v_n = scale * rho^k * gate_n *
+    tanh(...). This is a purely additive safety margin -- gate_n = 0
+    recovers plain DR exactly for that node -- it can only ever SHRINK the
+    already-bounded output, so it does not affect the summability bound
+    (`summability_bound`), only gives the network the structural capacity
+    to switch itself off when uncertain instead of always committing to a
+    full-strength correction.
+
+    The node-update step is a GRUCell carrying a PER-NODE recurrent state
+    `mem` across DR iterations (see the module docstring's "Temporal
+    memory" section) -- purely a private history, no communication.
+    """
+
+    D_NODE = 8   # h_D, h_G, h_Dstar, h_bal, h_atilde, h_a, h_b, h_prev_res
+    D_EDGE = 3   # e_qown, e_qrecv, e_c
 
     def __init__(self, config: Optional[GNNConfig] = None):
         super().__init__()
         self.cfg = config if config is not None else GNNConfig()
         d_h = self.cfg.hidden_dim
-
-        self.d_node = 2                                        # (D, G)
-        self.d_edge = 3 if self.cfg.rich_edge_features else 1  # (q_nm) [paper]
-
         act = self.cfg.activation
-        self.phi_msg = _mlp(self.d_edge, d_h, d_h, act)                # eq. 8
-        self.phi_upd = _mlp(self.d_node + d_h, d_h, d_h, act)          # eq. 10
-        self.phi_node = _mlp(d_h, 2, d_h, act)                         # eq. 11
-        self.phi_edge = _mlp(d_h + self.d_edge, 1, d_h, act)           # eq. 12
+
+        self.phi_msg = _mlp(self.D_EDGE, d_h, d_h, act)                # message
+        self.phi_upd = nn.GRUCell(self.D_NODE + d_h, d_h)              # node update + memory
+        self.phi_node = _mlp(d_h, 2, d_h, act)                         # -> (D, G)
+        self.phi_edge = _mlp(d_h + self.D_EDGE, 1, d_h, act)           # -> q_mn
+        self.phi_gate = _mlp(d_h, 1, d_h, act)                         # -> confidence gate
+
+    def init_mem(self, net: EnergyNetwork) -> torch.Tensor:
+        """Zero memory for every node, shape (N, hidden_dim) -- call once
+        at the start of a rollout/run, then thread the returned value
+        through successive `forward` calls."""
+        return torch.zeros(net.N, self.cfg.hidden_dim, device=net.device)
+
+    def init_local_mem(self, device=None) -> torch.Tensor:
+        """Zero memory for a single node, shape (hidden_dim,)."""
+        return torch.zeros(self.cfg.hidden_dim, device=device)
 
     # ==================================================================
     # CENTRALISED PATH  (training / fast simulation)
     # ==================================================================
-    def build_features(self, net: EnergyNetwork, x: torch.Tensor):
+    def build_features(self, net: EnergyNetwork, x: torch.Tensor,
+                       prev_residual: torch.Tensor):
         """Node and edge features from the global iterate x.
 
         Every entry is computed from quantities the corresponding node
         owns or received one-hop, so this is only a vectorised rewriting
-        of the distributed computation.
+        of the distributed computation `local_forward` performs.
+        `prev_residual` is (N,), the local move on the PREVIOUS iteration
+        (zeros on the very first call, see `init_mem`'s counterpart at the
+        call site).
         """
+        cfg = self.cfg
         D, G, Q = net.get_DGQ(x)
+        dD = torch.clamp(net.D_max_vec - net.D_min_vec, min=1e-6)
+        dG = torch.clamp(net.G_max_vec - net.G_min_vec, min=1e-6)
 
-        if self.cfg.normalize:
-            dD = torch.clamp(net.D_max_vec - net.D_min_vec, min=1e-6)
-            dG = torch.clamp(net.G_max_vec - net.G_min_vec, min=1e-6)
-            h_D = 2.0 * (D - net.D_min_vec) / dD - 1.0
-            h_G = 2.0 * (G - net.G_min_vec) / dG - 1.0
-            kappa = torch.clamp(net.k_edge, min=1e-6)
-        else:
-            h_D, h_G = D, G
-            kappa = torch.ones_like(net.k_edge)
-
-        h = torch.stack([h_D, h_G], dim=1)                    # (N, 2)   eq. 6
+        h_D = 2.0 * (D - net.D_min_vec) / dD - 1.0
+        h_G = 2.0 * (G - net.G_min_vec) / dG - 1.0
+        h_Dstar = 2.0 * (net.D_star_vec - net.D_min_vec) / dD - 1.0
+        h_bal = net.balance_at(x) / dD
+        h_prev = prev_residual / dD
+        h_at = _norm(net.a_tilde_vec, cfg.a_tilde_range)
+        h_a = _norm(net.a_vec, cfg.a_range)
+        h_b = _norm(net.b_vec, cfg.b_range)
+        h = torch.stack([h_D, h_G, h_Dstar, h_bal, h_prev, h_at, h_a, h_b],
+                        dim=1)                                       # (N, D_NODE)
 
         if net.E == 0:
-            return h, torch.zeros(0, self.d_edge, device=net.device)
+            return h, torch.zeros(0, self.D_EDGE, device=net.device)
 
-        q_own = Q / kappa                     # q_{mn}: n's own decision
-        q_recv = Q[net.inv_idx] / kappa       # q_{nm}: received from m  eq. 7
-
-        if self.cfg.rich_edge_features:
-            e = torch.stack([q_own, q_recv, q_own + q_recv], dim=1)   # (E,3)
-        else:
-            e = q_recv.unsqueeze(1)                                    # (E,1)
+        kappa = torch.clamp(net.k_edge, min=1e-6)
+        q_own = Q / kappa
+        q_recv = Q[net.inv_idx] / kappa
+        h_c = _norm(net.c_edge, cfg.c_range)
+        e = torch.stack([q_own, q_recv, h_c], dim=1)                    # (E, D_EDGE)
         return h, e
 
-    def forward(self, net: EnergyNetwork, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, net: EnergyNetwork, x: torch.Tensor, mem: torch.Tensor,
+               prev_residual: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Bounded direction Phi_theta(x) for the whole network, shape (dim,).
 
-        Components lie in [-1, 1]; the decay rho^k is applied outside
-        (see `make_perturbation_fn`), keeping this module stateless with
-        respect to the iteration counter.
+        Components lie in [-1, 1] (normalised units); `direction` rescales
+        them to physical units and the decaying amplitude rho^k is applied
+        outside (see `perturbation_vector`). Returns (direction, mem_new):
+        `mem_new` must be fed back in as `mem` on the NEXT call for the
+        same rollout (see `init_mem`).
         """
-        h, e = self.build_features(net, x)
+        h, e = self.build_features(net, x, prev_residual)
         N, d_h = net.N, self.cfg.hidden_dim
 
         if net.E > 0:
             owner = net.edge_index[1]          # dst = n, owner of q_{mn}
-
-            msg = self.phi_msg(e)                                   # eq. 8
+            msg = self.phi_msg(e)                                      # message
             agg = torch.zeros(N, d_h, device=net.device, dtype=msg.dtype)
-            agg = agg.index_add(0, owner, msg)                      # eq. 9
+            agg = agg.index_add(0, owner, msg)                         # aggregate
             deg = torch.zeros(N, device=net.device, dtype=msg.dtype)
             deg = deg.index_add(0, owner,
                                 torch.ones(net.E, device=net.device,
@@ -241,18 +360,43 @@ class PerturbationGNN(nn.Module):
         else:
             agg = torch.zeros(N, d_h, device=net.device, dtype=h.dtype)
 
-        h_new = self.phi_upd(torch.cat([h, agg], dim=1))            # eq. 10
-        delta_node = torch.tanh(self.phi_node(h_new))               # eq. 11
+        mem_new = self.phi_upd(torch.cat([h, agg], dim=1), mem)         # node update + memory
+        gate = torch.sigmoid(self.phi_gate(mem_new)).squeeze(1)         # (N,) confidence
+        delta_node = torch.tanh(self.phi_node(mem_new)) * gate.unsqueeze(1)  # -> (D, G)
 
         if net.E > 0:
-            h_owner = h_new[net.edge_index[1]]
+            owner = net.edge_index[1]
+            h_owner = mem_new[owner]
             delta_edge = torch.tanh(
-                self.phi_edge(torch.cat([h_owner, e], dim=1))).squeeze(1)  # eq.12
+                self.phi_edge(torch.cat([h_owner, e], dim=1))).squeeze(1) * gate[owner]
         else:
             delta_edge = torch.zeros(0, device=net.device, dtype=h.dtype)
 
         # layout [D, G, Q], matching EnergyNetwork.flatten()
-        return torch.cat([delta_node[:, 0], delta_node[:, 1], delta_edge])
+        direction = torch.cat([delta_node[:, 0], delta_node[:, 1], delta_edge])
+        return direction, mem_new
+
+    def physical_scale(self, net: EnergyNetwork) -> torch.Tensor:
+        """Per-coordinate physical reference used to rescale [-1,1] outputs.
+
+        Half the box width for D and G (so a full-scale, undecayed
+        perturbation could move the variable across half its own box), the
+        trade capacity kappa for q. Shape (dim,), matches `flatten()`.
+        """
+        half_D = (net.D_max_vec - net.D_min_vec) / 2.0
+        half_G = (net.G_max_vec - net.G_min_vec) / 2.0
+        return torch.cat([half_D, half_G, net.k_edge])
+
+    def direction(self, net: EnergyNetwork, x: torch.Tensor, mem: torch.Tensor,
+                 prev_residual: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Bounded perturbation direction in PHYSICAL units, shape (dim,).
+
+        |direction_i| <= physical_scale_i componentwise: this is the
+        quantity `perturbation_vector` multiplies by scale * rho^k.
+        Returns (direction, mem_new).
+        """
+        d, mem_new = self.forward(net, x, mem, prev_residual)
+        return d * self.physical_scale(net), mem_new
 
     # ==================================================================
     # DISTRIBUTED PATH  (inference at a single prosumer)
@@ -260,59 +404,70 @@ class PerturbationGNN(nn.Module):
     def local_forward(self, s: LocalNodeState):
         """Perturbation direction computed by prosumer n on its own.
 
-        Uses ONLY s: n's own state and parameters plus the q values received
-        from its direct neighbours. Mathematically identical to the
-        corresponding slice of `forward`.
+        Uses ONLY s: n's own state/parameters, its own recurrent memory
+        and previous-residual signal, plus the q values received from its
+        direct neighbours. Mathematically identical to the corresponding
+        slice of `direction` (already in PHYSICAL units).
 
         Returns
         -------
         delta_D, delta_G : 0-dim tensors, perturbation of (D_n, G_n)
         delta_q          : {m: 0-dim tensor}, perturbation of q_{mn}
+        mem_new          : (hidden_dim,), feed back in as `s.mem` next call
         """
-        # --- local features (eq. 6) ---
-        if self.cfg.normalize:
-            dD = torch.clamp(s.D_max - s.D_min, min=1e-6)
-            dG = torch.clamp(s.G_max - s.G_min, min=1e-6)
-            h_D = 2.0 * (s.D - s.D_min) / dD - 1.0
-            h_G = 2.0 * (s.G - s.G_min) / dG - 1.0
-        else:
-            h_D, h_G = s.D, s.G
-        h = torch.stack([h_D.reshape(()), h_G.reshape(())])          # (2,)
+        cfg = self.cfg
+        dD = torch.clamp(s.D_max - s.D_min, min=1e-6)
+        dG = torch.clamp(s.G_max - s.G_min, min=1e-6)
+        h_D = 2.0 * (s.D - s.D_min) / dD - 1.0
+        h_G = 2.0 * (s.G - s.G_min) / dG - 1.0
+        h_Dstar = 2.0 * (s.D_star - s.D_min) / dD - 1.0
+        q_own_sum = (torch.stack([s.q_own[m] for m in s.neighbors]).sum()
+                    if s.neighbors else torch.zeros((), dtype=s.D.dtype))
+        h_bal = (s.D - s.G - s.G_res - q_own_sum) / dD
+        h_prev = s.prev_residual / dD
+        h_at = _norm(s.a_tilde, cfg.a_tilde_range)
+        h_a = _norm(s.a, cfg.a_range)
+        h_b = _norm(s.b, cfg.b_range)
+        h = torch.stack([h_D.reshape(()), h_G.reshape(()), h_Dstar.reshape(()),
+                         h_bal.reshape(()), h_prev.reshape(()), h_at.reshape(()),
+                         h_a.reshape(()), h_b.reshape(())])              # (D_NODE,)
 
         d_h = self.cfg.hidden_dim
         k_nb = len(s.neighbors)
+        mem = s.mem.reshape(1, d_h)
 
         if k_nb == 0:
-            agg = torch.zeros(d_h, dtype=h.dtype)
-            h_new = self.phi_upd(torch.cat([h, agg]))
-            delta_node = torch.tanh(self.phi_node(h_new))
-            return delta_node[0], delta_node[1], {}
+            agg = torch.zeros(1, d_h, dtype=h.dtype)
+            mem_new = self.phi_upd(torch.cat([h, agg.squeeze(0)]).unsqueeze(0), mem).squeeze(0)
+            gate = torch.sigmoid(self.phi_gate(mem_new)).reshape(())
+            delta_node = torch.tanh(self.phi_node(mem_new)) * gate
+            return (delta_node[0] * (dD / 2.0), delta_node[1] * (dG / 2.0), {}, mem_new)
 
-        # --- edge features (eq. 7), one row per neighbour ---
         rows = []
         for m in s.neighbors:
-            kap = (torch.clamp(s.kappa[m], min=1e-6) if self.cfg.normalize
-                   else torch.ones_like(s.kappa[m]))
+            kap = torch.clamp(s.kappa[m], min=1e-6)
+            q_own = s.q_own[m] / kap
             q_recv = s.q_recv[m] / kap
-            if self.cfg.rich_edge_features:
-                q_own = s.q_own[m] / kap
-                rows.append(torch.stack([q_own.reshape(()), q_recv.reshape(()),
-                                         (q_own + q_recv).reshape(())]))
-            else:
-                rows.append(q_recv.reshape(1))
-        e = torch.stack(rows)                                        # (k, d_edge)
+            h_c = _norm(s.c[m], cfg.c_range)
+            rows.append(torch.stack([q_own.reshape(()), q_recv.reshape(()),
+                                     h_c.reshape(())]))
+        e = torch.stack(rows)                                          # (k, D_EDGE)
 
-        msg = self.phi_msg(e)                                        # eq. 8
-        agg = msg.sum(dim=0) / float(k_nb) ** 0.5                    # eq. 9
-        h_new = self.phi_upd(torch.cat([h, agg]))                    # eq. 10
-        delta_node = torch.tanh(self.phi_node(h_new))                # eq. 11
+        msg = self.phi_msg(e)                                          # message
+        agg = msg.sum(dim=0) / float(k_nb) ** 0.5                      # aggregate
+        mem_new = self.phi_upd(torch.cat([h, agg]).unsqueeze(0), mem).squeeze(0)  # update + memory
+        gate = torch.sigmoid(self.phi_gate(mem_new)).reshape(())       # confidence
+        delta_node = torch.tanh(self.phi_node(mem_new)) * gate         # -> (D, G)
+
+        delta_D = delta_node[0] * (dD / 2.0)
+        delta_G = delta_node[1] * (dG / 2.0)
 
         delta_q = {}
-        for i, m in enumerate(s.neighbors):                          # eq. 12
-            out = self.phi_edge(torch.cat([h_new, e[i]]))
-            delta_q[m] = torch.tanh(out).reshape(())
+        for i, m in enumerate(s.neighbors):
+            out = torch.tanh(self.phi_edge(torch.cat([mem_new, e[i]]))) * gate
+            delta_q[m] = out.reshape(()) * torch.clamp(s.kappa[m], min=1e-6)
 
-        return delta_node[0], delta_node[1], delta_q
+        return delta_D, delta_G, delta_q, mem_new
 
     # ------------------------------------------------------------------
     # Diagnostics
@@ -321,30 +476,29 @@ class PerturbationGNN(nn.Module):
         """Number of trainable weights (independent of N and |E|)."""
         return sum(p.numel() for p in self.parameters())
 
-    def summability_bound(self, dim: int) -> float:
-        """Upper bound on sum_k ||v^k||: scale * sqrt(dim) / (1 - rho)."""
-        return self.cfg.scale * (dim ** 0.5) / (1.0 - self.cfg.rho)
+    def summability_bound(self, net: EnergyNetwork) -> float:
+        """Upper bound on sum_k ||v^k|| for this instance.
+
+        scale * ||physical_scale(net)||_2 / (1 - rho): finite for any
+        trained (or untrained) weights, since the bound never uses theta.
+        """
+        with torch.no_grad():
+            norm = torch.linalg.vector_norm(self.physical_scale(net))
+        return float(self.cfg.scale * norm / (1.0 - self.cfg.rho))
 
 
 # ======================================================================
-# Wiring into the DR solver (centralised simulation)
+# Wiring into the DR solver (centralised simulation / training)
 # ======================================================================
-def make_perturbation_fn(gnn: PerturbationGNN,
-                         rho: Optional[float] = None,
-                         scale: Optional[float] = None):
-    """Build the `perturbation(net, x, k) -> v` hook used by DRSolver.
-
-    Applies the decaying amplitude:  v^k = scale * rho^k * Phi_theta(x).
-    Since Phi_theta is bounded by construction, the sequence is summable
-    and Theorem 1 applies.
-    """
-    rho = gnn.cfg.rho if rho is None else rho
-    scale = gnn.cfg.scale if scale is None else scale
-
-    def perturbation(net: EnergyNetwork, x: torch.Tensor, k: int) -> torch.Tensor:
-        return (scale * (rho ** k)) * gnn(net, x)
-
-    return perturbation
+def perturbation_vector(gnn: PerturbationGNN, net: EnergyNetwork, x: torch.Tensor,
+                        k: int, mem: torch.Tensor, prev_residual: torch.Tensor
+                        ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """v^k = scale * rho^k * direction(x): the centralised mirror of what
+    `LocalAgent.perturbation` computes distributedly, used by the
+    differentiable training rollout in training.py. Returns (v, mem_new)."""
+    amp = gnn.cfg.scale * (gnn.cfg.rho ** k)
+    d, mem_new = gnn.direction(net, x, mem, prev_residual)
+    return amp * d, mem_new
 
 
 # ======================================================================
@@ -353,9 +507,9 @@ def make_perturbation_fn(gnn: PerturbationGNN,
 class LocalAgent:
     """A prosumer's on-board copy of the trained perturbation model.
 
-    In a real deployment each device holds its own instance (same weights).
-    `perturbation` is what line 8 of Algorithm 1 executes locally, right
-    after the communication round.
+    In a real deployment each device holds its own instance (same
+    weights). `perturbation` is what line 8 of Algorithm 1 executes
+    locally, right after the communication round.
     """
 
     def __init__(self, gnn: PerturbationGNN, node_id: int,
@@ -367,19 +521,26 @@ class LocalAgent:
 
     @torch.no_grad()
     def perturbation(self, state: LocalNodeState, k: int):
-        """v^k_n for this prosumer: (delta_D, delta_G, {m: delta_q})."""
+        """v^k_n for this prosumer: (delta_D, delta_G, {m: delta_q}, mem_new).
+
+        `mem_new` must be stored by the caller (`Prosumer.dr_step`) and
+        passed back in as `state.mem` on the next call -- it is this
+        node's own recurrent history, untouched by the amplitude schedule
+        (only the direction is scaled, not the memory).
+        """
         amp = self.scale * (self.rho ** k)
-        dD, dG, dq = self.gnn.local_forward(state)
-        return amp * dD, amp * dG, {m: amp * v for m, v in dq.items()}
+        dD, dG, dq, mem_new = self.gnn.local_forward(state)
+        return amp * dD, amp * dG, {m: amp * v for m, v in dq.items()}, mem_new
 
 
-def deploy(gnn: PerturbationGNN, net, share_weights: bool = True) -> None:
+def deploy(gnn: PerturbationGNN, net: EnergyNetwork, share_weights: bool = True) -> None:
     """Install the trained model on every prosumer of `net`.
 
     After this call each prosumer runs line 8 on its own during `dr_step`.
-    `share_weights=True` keeps a single copy of the tensors in memory (fine
-    for simulation); set it to False to give every node a physically
-    independent copy, as when shipping the weights to real devices.
+    `share_weights=True` keeps a single copy of the tensors in memory
+    (fine for simulation); set it to False to give every node a
+    physically independent copy, as when shipping the weights to
+    real devices.
     """
     import copy as _copy
     gnn.eval()
@@ -389,7 +550,7 @@ def deploy(gnn: PerturbationGNN, net, share_weights: bool = True) -> None:
         p.gnn_agent = LocalAgent(model, p.node_id)
 
 
-def undeploy(net) -> None:
+def undeploy(net: EnergyNetwork) -> None:
     """Remove the learned perturbation: the prosumers fall back to plain DR."""
     for p in net.prosumers:
         p.gnn_agent = None

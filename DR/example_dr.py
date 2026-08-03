@@ -24,23 +24,29 @@ from plot_style import set_paper_style, show_or_save_many, draw_network
 
 # ============================== CONFIG ================================
 N        = 10        # number of prosumers
-DENSITY  = 0.3       # graph edge density in [0,1]  (0 = tree, 1 = complete)
+DENSITY  = 0.20       # graph edge density in [0,1]  (0 = tree, 1 = complete)
+graph_model ="sparse"
 GAMMA    = 1.5       # DR prox step size (> 0)
 LAM      = 1.0       # DR relaxation in (0, 2)
-TOL      = 1e-6      # stop when shadow residual < TOL
+TOL      = 1e-6      # stop when shadow residual NORM < TOL
+                     #   (1e-3 on the norm == old 1e-6 on the squared move)
 MAX_ITER = 5000    # safety cap
 SEED     = 42
 
 RES_FIG_SIZE   = (9.0, 3.4)   # residual figure (wide)
 GRAPH_FIG_SIZE = (4.0, 4.0)   # network figure (square)
-SHOW_GRAPH  = True            # also produce the network figure
-NAME_RESID  = "example_dr_residual"
-NAME_GRAPH  = "example_dr_network"
+SHOW_GRAPH  = False            # also produce the network figure
+if graph_model == "sparse":
+    NAME_RESID  = "example_dr_residual_N"+str(N)+"SparseD"+str(DENSITY)
+    NAME_GRAPH  = "example_dr_network_N"+str(N)+"SparseD"+str(DENSITY)
+else:
+    NAME_RESID  = "example_dr_residual_N"+str(N)+str(graph_model.capitalize())
+    NAME_GRAPH  = "example_dr_network_N"+str(N)+str(graph_model.capitalize())
 # =====================================================================
 
 
 def build_example():
-    gen = MarketGenerator(MarketConfig(graph_model="sparse", density=DENSITY))
+    gen = MarketGenerator(MarketConfig(graph_model=graph_model, density=DENSITY))
     return gen.sample(N, seed=SEED)
 
 
@@ -86,7 +92,7 @@ def main():
     rep = net.feasibility_report()
     print(f"iterations           : {result.n_iter}")
     print(f"converged (< {TOL:g}) : {result.converged}")
-    print(f"final shadow residual: {result.history['residual'][-1]:.3e}")
+    print(f"final shadow residual (norm): {result.history['residual'][-1]:.3e}")
     print(f"final aux residual   : {result.history['residual_aux'][-1]:.3e}")
     print(f"final cost           : {result.history['cost'][-1]:.4f}")
     print(f"feasible solution    : {rep['feasible']} "

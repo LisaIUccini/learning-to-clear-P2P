@@ -1,6 +1,6 @@
 """
 training.py
-===========
+============
 
 Centralised training of the perturbation model Phi_theta.
 
@@ -9,35 +9,79 @@ Why centralised
 Back-propagation has to flow through the whole unrolled trajectory, so the
 optimiser needs the entire state at once. Training is therefore a one-off,
 offline, centralised procedure. What comes out of it is a single set of
-weights theta, which is then copied to every prosumer (`gnn.deploy`) and
-used in the fully distributed loop. Nothing about deployment is centralised.
+weights theta, copied to every prosumer (`gnn.deploy`) and used in the
+fully distributed loop (`dr_solver.DRSolver`). Nothing about deployment is
+centralised.
 
-The rollout used here MIRRORS the distributed one exactly
----------------------------------------------------------
-Same order, same information, same amplitude schedule:
+The rollout MIRRORS the distributed one exactly
+------------------------------------------------
+Same order, same information, same amplitude schedule as `Prosumer.dr_step`:
 
-    v^k   = scale * rho^k * Phi_theta(x^k)     <- features from the PRE-update
-    xbar  = proj_{X^rec}(x)                       state, i.e. exactly what a
-    refl  = 2*xbar - x                            prosumer holds after line 3
-    z     = prox_{gamma J}(refl)
+    v^k    = scale * rho^k * Phi_theta(x^k)     <- features from the PRE-update
+    xbar   = proj_{X^rec}(x)                       state, i.e. exactly what a
+    refl   = 2*xbar - x                            prosumer holds after line 3
+    z      = prox_{gamma J}(refl)
     x^{k+1} = x + lam*(z - xbar) + v^k
 
 The only difference is bookkeeping: here the per-node prox is evaluated by
 the vectorised, differentiable `EnergyNetwork.prox_local`, whereas each
-prosumer uses its own `Prosumer.local_prox`. The two compute the same
-quantity -- a property that is verified numerically, because if it drifted
-we would be training one system and deploying another.
+prosumer uses its own `Prosumer.local_prox`; `gnn.py`'s smoke test cross
+-checks the two agree numerically. If they ever drifted we would be
+training one system and deploying another.
 
-Loss (self-supervised, no labels)
----------------------------------
-The target is simply "make the residual fall fast". Writing
-r_k = ||xbar^{k+1} - xbar^k||, the default objective is
+Loss: strictly self-supervised -- no baseline rollout, no precomputed target
+-------------------------------------------------------------------------------
+Three earlier designs were tried; the first two failed end-to-end, the
+third worked but was set aside on principle, which is why this one looks
+the way it does.
 
-    L = (1/K) * sum_k log(r_k + eps)
+Attempt 1: minimise the consecutive-step residual itself,
+r_k = ||xbar^{k+1} - xbar^k||, relative to plain DR on the same instance
+and initial state: L = mean_k [log(r_k+eps) - log(r_k^DR+eps)]. EXPLOITABLE:
+a direction that briefly nearly FREEZES the trajectory (x^{k+1} ~ x^k)
+drives r_k -> 0 and log(r_k) -> -infinity, an unbounded reward, while the
+cost of that stall (the unperturbed tail has to cover the distance it
+didn't) is a bounded, ordinary log-residual increase later. Measured
+end-to-end: mean speed-up 0.73x -- SLOWER than plain DR -- even though the
+unrolled training loss looked excellent.
 
-The logarithm makes the loss scale-free: residuals span many orders of
-magnitude along a trajectory, and without it the first iterations would
-dominate the gradient entirely. No knowledge of the equilibrium is needed.
+Attempt 2: same idea, averaged only over the tail k in [k_start, K), past
+the amplitude's decay horizon. Helped (0.73x -> 1.23x) but plateaued far
+short of a reliable, uniform improvement: gains concentrated on
+already-slow outlier instances (up to 2.16x) while about a third of the
+ordinary, fast-converging instances got WORSE (0.61x-0.99x). The root
+cause survives windowing: r_k measures how far ONE step moved, not how
+close the point is to the solution -- loosely correlated at best.
+
+Attempt 3: anchor to a precomputed near-equilibrium xbar* (plain DR run to
+convergence once per instance, cheap, cached) and minimise
+d_k/d_k^DR + beta*relu(d_k/d_k^DR - 1), d_k = ||xbar^k - xbar*||. This
+worked well in testing, but it IS a target-based signal -- xbar* plays the
+role of a label, even though it costs nothing extra to obtain and comes
+from the very algorithm being accelerated, not an external oracle. Set
+aside to keep training strictly self-supervised: no reference solution,
+precomputed or otherwise, enters the loss at all.
+
+This design (attempt 4, current) uses only the perturbed trajectory's own
+r_k sequence and a STATIC, zero-computation per-instance scale (the same
+`gnn.physical_scale` used to size the perturbation itself -- half the D/G
+box, the trade capacity kappa -- no DR steps of any kind needed to obtain
+it). Writing rho_k = r_k / (||physical_scale|| + eps):
+
+    L = mean_k [ rho_k ]  +  gamma_mono * mean_k [ relu(rho_{k+1} - rho_k) ]
+
+The first term rewards small (normalised) steps -- without a log, so
+driving one rho_k to zero contributes at most 0 to the mean: a bounded,
+modest benefit, not an exploitable unbounded one. The second term uses a
+real property of plain DR: it is an averaged operator, so its own residual
+sequence is naturally non-increasing. Any INCREASE is therefore evidence
+that the perturbation broke that good behaviour -- exactly what caused the
+worst failures seen so far (one instance going from 353 to 3734 iterations)
+-- and it is penalised directly, using nothing but the trajectory itself.
+Optionally (`loss_late_weight`) the first term is weighted towards later
+steps, so an already-fast instance (rho_k ~ 0 for most of the window) is
+judged mainly on whether it STAYS near zero, which is a direct, cheap way
+to push on "never worse than DR" without comparing to DR at all.
 """
 
 from __future__ import annotations
@@ -51,7 +95,7 @@ import numpy as np
 import torch
 
 from energy_network import EnergyNetwork
-from gnn import PerturbationGNN, deploy, undeploy
+from gnn import PerturbationGNN, GNNConfig, perturbation_vector, deploy, undeploy
 
 
 # ======================================================================
@@ -61,22 +105,41 @@ from gnn import PerturbationGNN, deploy, undeploy
 class TrainConfig:
     # --- solver settings the model is trained against ---
     # Tune the BASELINE first: accelerating a badly tuned DR proves nothing.
-    gamma: float = 16.0
-    lam: float = 1.8
+    gamma: float = 1.5
+    lam: float = 1.0
     prox_bisect: int = 30
 
     # --- unrolling ---
-    unroll: int = 30            # K: iterations differentiated through
+    # K should still comfortably exceed the amplitude's decay horizon (see
+    # the note printed by Reporter.setup), so the loss also sees how the
+    # trajectory behaves once the perturbation has switched off, not only
+    # while it is active.
+    unroll: int = 120           # K: iterations differentiated through
     rho: float = 0.9            # decay of the perturbation (summability)
-    scale: float = 1.0          # amplitude
+    scale: float = 1.0          # amplitude, as a fraction of the local
+                                # physical range (see gnn.PerturbationGNN)
+
+    # --- loss (strictly self-supervised, see module docstring) ---
+    # rho_k = r_k / ||physical_scale||, a per-instance normalisation that
+    # needs zero DR computation (static box/capacity information only).
+    # gamma_mono weights the penalty for any INCREASE in rho_k step-to-step
+    # (plain DR's residual is naturally non-increasing; a perturbation that
+    # breaks this is exactly what caused the worst instance-level failures
+    # so far). loss_late_weight biases the decay term towards later steps,
+    # so an already-fast instance is judged on whether it STAYS fast.
+    # loss_start_frac restricts the loss to k in [loss_start_frac*unroll,
+    # unroll); 0 (default) uses the whole window -- safe here, rho_k cannot
+    # be gamed by freezing (no log, no baseline to race against).
+    loss_gamma_mono: float = 2.0
+    loss_late_weight: bool = True
+    loss_start_frac: float = 0.0
 
     # --- optimisation ---
     epochs: int = 30
     lr: float = 1e-3
     weight_decay: float = 0.0
     grad_clip: float = 1.0
-    loss_type: str = "log_ratio"      # log_ratio | log_residual | rel_residual | final
-    eps: float = 1e-12
+    eps: float = 1e-9
 
     # --- misc ---
     seed: int = 0
@@ -84,21 +147,24 @@ class TrainConfig:
     verbose: bool = True
 
     def __post_init__(self):
-        if self.loss_type not in ("log_ratio", "log_residual",
-                                  "rel_residual", "final"):
-            raise ValueError(f"unknown loss_type {self.loss_type!r}")
         if not (0.0 < self.rho < 1.0):
             raise ValueError("rho must lie in (0,1)")
+        if self.unroll <= 0:
+            raise ValueError("unroll must be positive")
+        if not (0.0 <= self.loss_start_frac < 1.0):
+            raise ValueError("loss_start_frac must lie in [0,1)")
+
+    @property
+    def loss_start(self) -> int:
+        """First index (0-based) of the residual list that enters the loss."""
+        return int(self.loss_start_frac * self.unroll)
 
 
 # ======================================================================
-# Reporting
+# Reporting (plain, structured console log)
 # ======================================================================
 class Reporter:
-    """Structured console log: which phase, on what, with which settings.
-
-    Set `enabled=False` to silence it entirely.
-    """
+    """Minimal structured console log. Set `enabled=False` to silence it."""
 
     WIDTH = 68
 
@@ -107,7 +173,6 @@ class Reporter:
         self._t0 = _time.time()
         self._phase_t0 = self._t0
 
-    # --- primitives ---
     def _p(self, text: str = "") -> None:
         if self.enabled:
             print(text, flush=True)
@@ -119,7 +184,7 @@ class Reporter:
         self._phase_t0 = _time.time()
         self._p("")
         self.rule("=")
-        self._p(f"  L2Play  |  phase {index}/{total}  |  {title.upper()}")
+        self._p(f"  phase {index}/{total}  |  {title.upper()}")
         self.rule("=")
 
     def kv(self, key: str, value: str) -> None:
@@ -136,35 +201,34 @@ class Reporter:
     def elapsed(self) -> float:
         return _time.time() - self._t0
 
-    # --- domain-specific blocks ---
     def dataset(self, name: str, ds) -> None:
         s = ds.summary()
         self.kv(name, f"{s['instances']} instances | N={s['N'][0]}..{s['N'][1]} "
                       f"| undirected edges {s['undirected_edges'][0]}.."
                       f"{s['undirected_edges'][1]}")
 
-    def setup(self, gnn, cfg: "TrainConfig", n_instances: int) -> None:
-        """Everything the run depends on, printed once."""
+    def setup(self, gnn: PerturbationGNN, cfg: "TrainConfig", n_instances: int) -> None:
         k99 = int(np.ceil(np.log(0.01) / np.log(cfg.rho)))
         self.kv("baseline DR", f"gamma={cfg.gamma}  lambda={cfg.lam}  "
                                f"bisect={cfg.prox_bisect}")
         self.kv("model", f"d_h={gnn.cfg.hidden_dim} | {gnn.n_parameters()} "
                          f"parameters (independent of N and |E|)")
-        self.kv("features", f"node (D,G) | edge "
-                            f"{'(q_mn,q_nm,sum)' if gnn.cfg.rich_edge_features else '(q_nm received)'}"
-                            f" | normalise={gnn.cfg.normalize}")
         self.kv("unrolling", f"K={cfg.unroll} steps | rho={cfg.rho:.2f} "
                              f"(amplitude below 1% after k={k99})")
-        self.kv("summability", "guaranteed by construction: tanh output x rho^k")
-        self.kv("loss", f"{cfg.loss_type}"
-                        + ("  (0 = same as DR, negative = faster)"
-                           if cfg.loss_type == "log_ratio" else ""))
+        self.kv("summability", "guaranteed by construction: tanh output "
+                               "x physical scale x rho^k")
+        self.kv("loss", f"self-referential: normalised residual + "
+                       f"gamma_mono={cfg.loss_gamma_mono:g} monotonicity, "
+                       f"window k=[{cfg.loss_start},{cfg.unroll})")
+        self.kv("no target", "no baseline rollout, no precomputed equilibrium -- "
+                             "strictly self-supervised")
         self.kv("optimiser", f"Adam lr={cfg.lr:g} clip={cfg.grad_clip} | "
                              f"{cfg.epochs} epochs x {n_instances} instances")
         if cfg.unroll < k99:
-            self.line(f"note: K={cfg.unroll} < {k99}, so training does not "
-                      f"cover the whole window where the")
-            self.line(f"      perturbation is active. Consider raising unroll.")
+            self.line(f"note: K={cfg.unroll} < {k99}, training does not cover "
+                      f"the whole window where the perturbation is still")
+            self.line(f"      active at more than 1% amplitude -- consider "
+                      f"raising `unroll`.")
 
     def epoch(self, i: int, total: int, train: float,
               val: Optional[float], dt: float) -> None:
@@ -184,9 +248,19 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
             ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
     """Unroll the DR iteration, optionally perturbed by `gnn`.
 
+    Mirrors `Prosumer.dr_step` line by line (shadow -> reflection -> prox
+    -> relaxed update -> perturbation), but vectorised over the whole
+    network via `EnergyNetwork.prox_local` / `project_reciprocity`, and
+    with `gnn.direction` playing the role of every prosumer's own
+    `gnn_agent.perturbation` call, evaluated on the SAME pre-update state.
+
     Returns the final auxiliary iterate and the list of shadow residuals
     r_k = ||xbar^{k+1} - xbar^k||, kept as tensors so they can carry
-    gradients.
+    gradients back to theta when `differentiable=True`. The GNN's own
+    per-node recurrent memory and previous-residual feature (see gnn.py)
+    are threaded through the loop exactly as `Prosumer.dr_step` threads
+    them across real iterations -- initialised to zero (`gnn.init_mem`),
+    i.e. "no history yet", at k=0.
     """
     K = cfg.unroll if n_iter is None else n_iter
     x = net.flatten() if x0 is None else x0
@@ -194,14 +268,17 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
         x = x.detach()
     xbar = net.project_reciprocity(x)
 
+    mem = gnn.init_mem(net) if gnn is not None else None
+    prev_res = torch.zeros(net.N, device=net.device) if gnn is not None else None
+
     residuals: List[torch.Tensor] = []
     ctx = torch.enable_grad() if differentiable else torch.no_grad()
     with ctx:
         for k in range(K):
-            # line 8: evaluated on the PRE-update state, as the prosumers do
+            # line 8: evaluated on the PRE-update state, as every prosumer does
             v = None
             if gnn is not None:
-                v = (cfg.scale * (cfg.rho ** k)) * gnn(net, x)
+                v, mem = perturbation_vector(gnn, net, x, k, mem, prev_res)
 
             refl = 2.0 * xbar - x                                  # line 5
             z = net.prox_local(cfg.gamma, refl,
@@ -212,63 +289,61 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
 
             xbar_new = net.project_reciprocity(x_new)              # line 4 (next)
             residuals.append(torch.linalg.vector_norm(xbar_new - xbar))
+
+            if gnn is not None:
+                D_old, G_old, Q_old = net.get_DGQ(x)
+                D_new, G_new, Q_new = net.get_DGQ(x_new)
+                per_node_sq = ((D_new - D_old) ** 2 + (G_new - G_old) ** 2
+                              + net._node_sum((Q_new - Q_old) ** 2))
+                prev_res = torch.sqrt(per_node_sq + 1e-12)
+
             x, xbar = x_new, xbar_new
 
     return x, residuals
 
 
-def needs_baseline(cfg: TrainConfig) -> bool:
-    """True if the loss compares the run against plain (unperturbed) DR."""
-    return cfg.loss_type in ("log_ratio", "rel_residual")
+def stability_loss(residuals: List[torch.Tensor], scale: torch.Tensor,
+                   gamma_mono: float = 2.0, eps: float = 1e-9,
+                   start: int = 0, late_weight: bool = True) -> torch.Tensor:
+    """Strictly self-referential loss -- no baseline rollout, no target.
 
+        rho_k = r_k / (||scale|| + eps)
+        L = weighted_mean_k[rho_k]  +  gamma_mono * mean_k[relu(rho_{k+1}-rho_k)]
 
-def rollout_loss(residuals: List[torch.Tensor], cfg: TrainConfig,
-                 baseline: Optional[List[torch.Tensor]] = None) -> torch.Tensor:
-    """Self-supervised objective built from the residual trajectory.
-
-    log_ratio (default)
-        mean_k [ log(r_k) - log(r_k^DR) ], where r^DR is the residual of the
-        SAME rollout without the perturbation (detached). Directly readable:
-
-             0.00   the learned model changes nothing
-            < 0     residuals smaller than plain DR  ->  faster
-            -0.69   residual roughly halved at every unrolled step
-
-        Being a ratio it is scale-free, so instances of different size
-        contribute comparably, and its gradient does not blow up as the
-        residuals shrink.
-
-    log_residual
-        mean_k log(r_k). Also valid, and NEGATIVE simply because residuals
-        are smaller than 1 -- but its value depends on the scale of the
-        instance, so it cannot be compared across instances.
-
-    rel_residual / final
-        mean_k r_k / r_k^DR, and the log of the last residual.
+    `scale` is `gnn.PerturbationGNN.physical_scale(net)`, a static,
+    zero-computation per-instance normalisation. See the module docstring
+    for why this replaces the two consecutive-residual designs (both
+    exploitable) and the equilibrium-anchored one (not strictly
+    self-supervised).
     """
-    r = torch.stack(residuals)
-    if cfg.loss_type == "log_residual":
-        return torch.log(r + cfg.eps).mean()
-    if cfg.loss_type == "final":
-        return torch.log(r[-1] + cfg.eps)
-    if baseline is None:
-        raise ValueError(f"loss_type={cfg.loss_type!r} needs a baseline rollout")
-    b = torch.stack(baseline).detach()
-    if cfg.loss_type == "log_ratio":
-        return (torch.log(r + cfg.eps) - torch.log(b + cfg.eps)).mean()
-    return (r / (b + cfg.eps)).mean()
+    r = torch.stack(residuals[start:])
+    denom = torch.linalg.vector_norm(scale) + eps
+    rho = r / denom
+
+    if late_weight and rho.numel() > 1:
+        w = torch.arange(1, rho.numel() + 1, dtype=rho.dtype, device=rho.device)
+        decay = (w * rho).sum() / w.sum()
+    else:
+        decay = rho.mean()
+
+    if rho.numel() > 1:
+        mono = torch.relu(rho[1:] - rho[:-1]).mean()
+    else:
+        mono = torch.zeros((), dtype=rho.dtype, device=rho.device)
+
+    return decay + gamma_mono * mono
 
 
 # ======================================================================
 # Trainer
 # ======================================================================
 class Trainer:
-    """Trains Phi_theta on a MarketDataset by unrolling the iteration."""
+    """Trains Phi_theta on a MarketDataset by unrolling the DR iteration."""
 
     def __init__(self, gnn: PerturbationGNN, cfg: Optional[TrainConfig] = None):
         self.gnn = gnn
         self.cfg = cfg if cfg is not None else TrainConfig()
-        # keep the model and the solver settings consistent
+        # keep the deployed amplitude schedule consistent with training
         self.gnn.cfg.rho = self.cfg.rho
         self.gnn.cfg.scale = self.cfg.scale
         self.opt = torch.optim.Adam(gnn.parameters(), lr=self.cfg.lr,
@@ -277,25 +352,30 @@ class Trainer:
 
     # ------------------------------------------------------------------
     def _instance_loss(self, net: EnergyNetwork,
-                       need_baseline: bool) -> torch.Tensor:
+                       differentiable: bool = True) -> torch.Tensor:
+        cfg = self.cfg
         x0 = net.flatten().detach()
-        base = None
-        if need_baseline:
-            _, base = rollout(net, None, self.cfg, x0=x0.clone(),
-                              differentiable=False)
-        _, res = rollout(net, self.gnn, self.cfg, x0=x0.clone(),
-                         differentiable=True)
-        return rollout_loss(res, self.cfg, baseline=base)
+        _, res = rollout(net, self.gnn, cfg, x0=x0, differentiable=differentiable)
+        scale = self.gnn.physical_scale(net)
+        return stability_loss(res, scale, cfg.loss_gamma_mono, cfg.eps,
+                              start=cfg.loss_start, late_weight=cfg.loss_late_weight)
 
     # ------------------------------------------------------------------
     def fit(self, dataset, val_dataset=None,
             reporter: Optional[Reporter] = None) -> Dict[str, List[float]]:
-        """Train for `cfg.epochs` passes over `dataset` (CENTRALISED)."""
+        """Train for `cfg.epochs` passes over `dataset` (CENTRALISED).
+
+        A fresh random initial state is drawn for every (instance, epoch)
+        pair -- reproducibly, from `cfg.seed` -- so the model is not
+        overfit to one arbitrary starting point per instance; it only ever
+        sees genuinely different states along genuinely different
+        trajectories of the SAME market. Only ONE rollout per instance per
+        epoch is needed now (no baseline rollout, no equilibrium solve).
+        """
         cfg = self.cfg
         rep = reporter if reporter is not None else Reporter(cfg.verbose)
         torch.manual_seed(cfg.seed)
         device = torch.device(cfg.device)
-        need_base = needs_baseline(cfg)
 
         rep.setup(self.gnn, cfg, len(dataset))
         rep.line("")
@@ -305,9 +385,10 @@ class Trainer:
             self.gnn.train()
             total = 0.0
             for i in range(len(dataset)):
-                net = dataset.build(i, device=device)
+                seed = cfg.seed * 1_000_003 + epoch * 7_919 + i
+                net = dataset.build(i, device=device, seed=seed)
                 self.opt.zero_grad()
-                loss = self._instance_loss(net, need_base)
+                loss = self._instance_loss(net, differentiable=True)
                 loss.backward()
                 if cfg.grad_clip:
                     torch.nn.utils.clip_grad_norm_(self.gnn.parameters(),
@@ -327,19 +408,13 @@ class Trainer:
     # ------------------------------------------------------------------
     @torch.no_grad()
     def evaluate_loss(self, dataset) -> float:
+        """Same loss, on fixed (non-epoch-varying) initial states, no grad."""
         self.gnn.eval()
         device = torch.device(self.cfg.device)
         tot = 0.0
         for i in range(len(dataset)):
             net = dataset.build(i, device=device)
-            x0 = net.flatten()
-            base = None
-            if needs_baseline(self.cfg):
-                _, base = rollout(net, None, self.cfg, x0=x0.clone(),
-                                  differentiable=False)
-            _, res = rollout(net, self.gnn, self.cfg, x0=x0.clone(),
-                             differentiable=False)
-            tot += float(rollout_loss(res, self.cfg, baseline=base))
+            tot += float(self._instance_loss(net, differentiable=False))
         return tot / max(len(dataset), 1)
 
     # ------------------------------------------------------------------
@@ -350,8 +425,7 @@ class Trainer:
 
     @staticmethod
     def load(path: str) -> PerturbationGNN:
-        from gnn import GNNConfig
-        blob = torch.load(path, map_location="cpu")
+        blob = torch.load(path, map_location="cpu", weights_only=False)
         gnn = PerturbationGNN(GNNConfig(**blob["gnn_config"]))
         gnn.load_state_dict(blob["state_dict"])
         gnn.eval()
@@ -359,15 +433,17 @@ class Trainer:
 
 
 # ======================================================================
-# End-to-end evaluation: plain DR vs L2Play, in the DISTRIBUTED solver
+# End-to-end evaluation: plain DR vs DR+Phi_theta, in the DISTRIBUTED solver
 # ======================================================================
 def iterations_to_tolerance(dataset, gnn: Optional[PerturbationGNN],
                             cfg: TrainConfig, tol: float = 1e-6,
                             max_iter: int = 20000, device=None) -> List[int]:
     """Run the distributed solver on every instance and count iterations.
 
-    This is the honest end-to-end measurement: the learned model is queried
-    by each prosumer through its own LocalAgent, exactly as in deployment.
+    This is the honest end-to-end measurement: the learned model is
+    queried by each prosumer through its own `LocalAgent`, exactly as in
+    deployment -- `training.rollout` is used ONLY to compute gradients,
+    never to report the speed-up.
     """
     from dr_solver import DRSolver, DRConfig
 
@@ -377,13 +453,12 @@ def iterations_to_tolerance(dataset, gnn: Optional[PerturbationGNN],
     for i in range(len(dataset)):
         net = dataset.build(i, device=device)
         if gnn is not None:
-            deploy(gnn, net)          # one LocalAgent per prosumer
+            deploy(gnn, net)
         else:
             undeploy(net)
         res = solver.solve(net, record=False, write_back=False)
         out.append(res.n_iter if res.converged else max_iter)
     return out
-
 
 
 def residual_curves(dataset, gnn: Optional[PerturbationGNN], cfg: TrainConfig,
@@ -412,10 +487,11 @@ def residual_curves(dataset, gnn: Optional[PerturbationGNN], cfg: TrainConfig,
         curves.append(np.asarray(res.history["residual"]))
     return curves
 
+
 def compare(dataset, gnn: PerturbationGNN, cfg: TrainConfig,
             tol: float = 1e-6, max_iter: int = 20000,
             reporter: Optional[Reporter] = None) -> Dict[str, object]:
-    """Iterations of plain DR vs L2Play over a dataset (DISTRIBUTED solver)."""
+    """Iterations of plain DR vs DR+Phi_theta over a dataset (DISTRIBUTED)."""
     rep = reporter if reporter is not None else Reporter(False)
     rep.kv("mode", "each prosumer: communicate -> DR lines 4-7 -> "
                    "own model (line 8)")
@@ -425,14 +501,14 @@ def compare(dataset, gnn: PerturbationGNN, cfg: TrainConfig,
     learned = iterations_to_tolerance(dataset, gnn, cfg, tol, max_iter)
     for i, (b, l) in enumerate(zip(base, learned)):
         rep.line(f"instance {i + 1:3d}/{len(base)} | DR {b:6d} it | "
-                 f"L2Play {l:6d} it | x{b / max(l, 1):.2f}")
+                 f"learned {l:6d} it | x{b / max(l, 1):.2f}")
     speedup = [b / max(l, 1) for b, l in zip(base, learned)]
     n = len(speedup)
     return {
         "dr": base,
-        "l2play": learned,
+        "learned": learned,
         "speedup": speedup,
         "mean_speedup": sum(speedup) / max(n, 1),
         "median_dr": sorted(base)[n // 2] if n else 0,
-        "median_l2play": sorted(learned)[n // 2] if n else 0,
+        "median_learned": sorted(learned)[n // 2] if n else 0,
     }

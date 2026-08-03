@@ -164,14 +164,26 @@ class Prosumer:
         self.q_received: Dict[int, torch.Tensor] = {m: self._zero.clone()
                                                     for m in self.neighbors}
 
-        # --- on-board copy of the trained perturbation model (line 8) ---
-        # None -> plain DR. Set by gnn.deploy() after centralised training.
-        self.gnn_agent = None
-
         # --- residual bookkeeping for the distributed iteration ---
         self._prev_shadow = None
         self.residual_sq = torch.zeros((), device=self.device)
         self.shadow_residual_sq = torch.zeros((), device=self.device)
+
+        # --- on-board copy of the trained perturbation model (line 8) ---
+        # None -> plain DR. Set by gnn.deploy() after centralised training.
+        # `_round` is this node's OWN count of dr_step calls since the last
+        # reset: purely local bookkeeping (no message needed) that stays in
+        # lockstep with every other node because the scheduler calls
+        # dr_step exactly once per synchronous round. It drives the
+        # decaying amplitude rho^_round of the learned perturbation.
+        self.gnn_agent = None
+        self._round = 0
+        # own recurrent memory (gnn.PerturbationGNN's GRUCell state) and the
+        # local move of the PREVIOUS iteration -- both purely private state,
+        # lazily sized to gnn_agent's hidden_dim on first use (see
+        # local_gnn_state), reset alongside everything else below.
+        self._mem = None
+        self._prev_residual = torch.zeros((), device=self.device)
 
         if init:
             self.init_state()
@@ -289,7 +301,7 @@ class Prosumer:
         other.q_received[self.node_id] = val if training else val.detach().clone()
 
     # ==================================================================
-    # DISTRIBUTED DOUGLAS-RACHFORD  (Algorithm 1, lines 4-7)
+    # DISTRIBUTED DOUGLAS-RACHFORD  (Algorithm 1, lines 4-8)
     # ------------------------------------------------------------------
     # Everything below runs on this prosumer alone. The ONLY external
     # information used is `q_received`, filled by the one-hop message
@@ -370,31 +382,35 @@ class Prosumer:
     def local_gnn_state(self):
         """Assemble the strictly local input of the perturbation model.
 
-        Contains only this prosumer's own state and parameters plus the
-        q_{nm} received during line 3 -- nothing else. Built BEFORE the DR
-        update, so the learned map consumes exactly the information that is
-        already on hand after the communication round: no second exchange.
+        Contains only this prosumer's own state, own fixed cost/box
+        parameters, its own recurrent memory and previous-residual signal,
+        and the q_{nm} received during line 3 -- nothing belonging to a
+        non-neighbour. Built BEFORE the DR update, so the learned map
+        consumes exactly the information already on hand right after the
+        communication round: no second exchange.
         """
         from gnn import LocalNodeState
+        if self._mem is None:
+            self._mem = self.gnn_agent.gnn.init_local_mem(device=self.device)
         return LocalNodeState(
             node_id=self.node_id, neighbors=list(self.neighbors),
-            D=self.D, G=self.G,
-            q_own={m: self.q[m] for m in self.neighbors},
-            q_recv={m: self.q_received[m] for m in self.neighbors},
+            D=self.D, G=self.G, D_star=self.D_star, G_res=self.G_res,
             D_min=self.D_min, D_max=self.D_max,
             G_min=self.G_min, G_max=self.G_max,
+            a_tilde=self.a_tilde, a=self.a, b=self.b,
+            q_own={m: self.q[m] for m in self.neighbors},
+            q_recv={m: self.q_received[m] for m in self.neighbors},
+            c={m: self.c[m] for m in self.neighbors},
             kappa={m: self.k[m] for m in self.neighbors},
+            mem=self._mem, prev_residual=self._prev_residual,
         )
 
-    def dr_step(self, gamma: float, lam: float = 1.0, k: int = 0,
+    def dr_step(self, gamma: float, lam: float = 1.0,
                 n_bisect: int = 60) -> None:
         """One full local iteration: lines 4 to 8 of Algorithm 1.
 
         Call `EnergyNetwork.communicate()` first, so that `q_received`
-        holds this round's q_{nm} values.
-
-        `k` is the iteration index, needed for the decaying amplitude
-        rho^k of the learned perturbation. If `self.gnn_agent` is None the
+        holds this round's q_{nm} values. If `self.gnn_agent` is None the
         method runs plain DR (lines 4 to 7).
         """
         if len(self.q_received) != self.n_neighbors:
@@ -406,10 +422,16 @@ class Prosumer:
 
         # --- line 8 is EVALUATED HERE, on the pre-update state -----------
         # The features must be the ones available right after line 3; the
-        # value is applied after the DR update, as in Algorithm 1.
+        # value is applied after the DR update, as in Algorithm 1. `_round`
+        # is this node's OWN count of completed dr_step calls -- it equals
+        # the global iteration index k with no communication needed, since
+        # every node is called exactly once per synchronous round.
         v = None
+        new_mem = None
         if self.gnn_agent is not None:
-            v = self.gnn_agent.perturbation(self.local_gnn_state(), k)
+            v_D, v_G, v_q, new_mem = self.gnn_agent.perturbation(
+                self.local_gnn_state(), self._round)
+            v = (v_D, v_G, v_q)
 
         # --- line 4: shadow of the CURRENT iterate (exact, uses received q)
         qbar = self.shadow_q()
@@ -422,12 +444,25 @@ class Prosumer:
         # --- line 6: local prox
         zD, zG, zq = self.local_prox(gamma, rD, rG, rq, n_bisect=n_bisect)
 
-        # --- line 7: relaxed DR update
+        # --- line 7 of Algorithm 1: fully-relaxed DR update -------------
+        # The Douglas-Rachford recursion is
+        #     x^{k+1} = x^k + lambda (z^k - xbar^k)
+        # on EVERY coordinate (Eq. 21 of the paper). The reciprocity
+        # resolvent J_{gamma B} = proj_{X^rec} leaves (D, G) untouched, so
+        # their shadow equals the iterate itself, Dbar^k = D^k and
+        # Gbar^k = G^k, and the relaxation reads
+        #     D^{k+1} = D^k + lambda (zD - D^k)      (Dbar = D)
+        #     G^{k+1} = G^k + lambda (zG - G^k)      (Gbar = G)
+        #     q^{k+1} = q^k + lambda (zq - qbar).
+        # At lambda = 1 this collapses to D^{k+1} = zD, G^{k+1} = zG, the
+        # special case that was previously hard-coded. Relaxing every block
+        # keeps the iterate consistent with Theorem 1 for ANY lambda in
+        # (0, 2), not only lambda = 1.
         D_new = self.D + lam * (zD - self.D)
         G_new = self.G + lam * (zG - self.G)
         q_new = {m: self.q[m] + lam * (zq[m] - qbar[m]) for m in self.neighbors}
 
-        # --- line 8: add the learned perturbation ---
+        # --- line 8: add the learned, summable perturbation ---
         if v is not None:
             v_D, v_G, v_q = v
             D_new = D_new + v_D
@@ -441,6 +476,10 @@ class Prosumer:
 
         # --- commit ---
         self.D, self.G, self.q = D_new, G_new, q_new
+        self._round += 1
+        if new_mem is not None:
+            self._mem = new_mem
+            self._prev_residual = torch.sqrt(self.residual_sq + 1e-12)
 
     def _update_shadow_residual(self, qbar: Dict[int, torch.Tensor]) -> None:
         """This node's share of ||xbar^k - xbar^{k-1}||^2 (monitoring).
@@ -458,10 +497,19 @@ class Prosumer:
         self._prev_shadow = (self.D, self.G, dict(qbar))
 
     def reset_residuals(self) -> None:
-        """Forget the residual bookkeeping (call before a new run)."""
+        """Forget the residual bookkeeping and restart the round counter.
+
+        Call before a new run: `_round` must start at 0 so the learned
+        perturbation's amplitude schedule rho^_round restarts too, and the
+        recurrent memory / previous-residual signal must restart from
+        "no history yet" (zeros) along with it.
+        """
         self._prev_shadow = None
         self.residual_sq = torch.zeros((), device=self.device)
         self.shadow_residual_sq = torch.zeros((), device=self.device)
+        self._round = 0
+        self._mem = None
+        self._prev_residual = torch.zeros((), device=self.device)
 
     # ------------------------------------------------------------------
     # Monitoring / diagnostics

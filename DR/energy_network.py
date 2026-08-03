@@ -217,14 +217,15 @@ class EnergyNetwork:
 
     def prox_local(self, gamma: float, r: torch.Tensor,
                    n_bisect: int = 60) -> torch.Tensor:
-        """VECTORISED reference version of the per-node prox.
+        """VECTORISED, DIFFERENTIABLE reference version of the per-node prox.
 
         The distributed algorithm does NOT use this: each prosumer solves
         its own prox in `Prosumer.local_prox`. This version computes the
-        same quantity for every node at once and is kept because it is
-        differentiable end-to-end, which the (centralised) training of the
-        learned perturbation will need, and because it lets us verify the
-        per-node implementation against an independent one.
+        same quantity for every node at once, end-to-end differentiable in
+        both `r` and the network's own parameters. It is what `training.py`
+        unrolls to back-propagate through the DR trajectory (centralised
+        training only -- see gnn.py); it also lets the per-node
+        implementation be cross-checked against an independent one.
 
         Exact, differentiable prox of gamma*J over X^loc, per node.
 
@@ -367,6 +368,15 @@ class EnergyNetwork:
     def residual(self) -> float:
         """||x^{k+1} - x^k||: sum of the prosumers' local contributions."""
         return float(sum(float(p.residual_sq) for p in self.prosumers)) ** 0.5
+
+    def shadow_residual_sq(self) -> float:
+        """||xbar^k - xbar^{k-1}||^2, the SQUARED move of the solution.
+
+        This is the quantity the stopping test compares against the
+        tolerance. Note the squaring: a tolerance of 1e-6 on this value
+        corresponds to 1e-3 on the norm itself.
+        """
+        return float(sum(float(p.shadow_residual_sq) for p in self.prosumers))
 
     def shadow_residual(self) -> float:
         """||xbar^k - xbar^{k-1}||, reported with a one-iteration lag."""

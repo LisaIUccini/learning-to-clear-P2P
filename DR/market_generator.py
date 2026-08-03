@@ -31,7 +31,7 @@ Design choices worth remembering
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -97,14 +97,19 @@ class MarketSpec:
 
     @property
     def edges_undirected(self) -> List[Tuple[int, int]]:
-        seen, out = set(), []
-        for n in self.neighbors:
-            for m in self.neighbors[n]:
-                e = (min(m, n), max(m, n))
-                if e not in seen:
-                    seen.add(e)
-                    out.append(e)
-        return out
+        return _undirected_pairs(self.neighbors)
+
+
+def _undirected_pairs(neighbors: Dict[int, List[int]]) -> List[Tuple[int, int]]:
+    """Each undirected pair (m, n) once, m < n order not enforced."""
+    seen, out = set(), []
+    for n in neighbors:
+        for m in neighbors[n]:
+            e = (min(m, n), max(m, n))
+            if e not in seen:
+                seen.add(e)
+                out.append(e)
+    return out
 
 
 # ======================================================================
@@ -328,10 +333,7 @@ class MarketGenerator:
         for n in range(N):
             for m in neighbors[n]:
                 c[(m, n)] = float(rng.uniform(*cfg.c_range))
-        for (i, j) in MarketSpec(
-            N, neighbors, D_min, D_max, D_star, Gmin, Gmax, G_res,
-            a_tilde, a, b, c, {}
-        ).edges_undirected:
+        for (i, j) in _undirected_pairs(neighbors):
             cap = float(rng.uniform(*cfg.kappa_range))   # symmetric per edge
             kappa[(i, j)] = cap
             kappa[(j, i)] = cap
@@ -407,8 +409,9 @@ def spec_is_feasible(spec: MarketSpec) -> Dict[str, bool]:
                                (spec.D_star <= spec.D_max + 1e-9)).all()),
     }
 
+
 # ======================================================================
-# Dataset of market instances (for training the perturbation model)
+# Dataset of market instances (for training the learned perturbation)
 # ======================================================================
 @dataclass
 class DatasetConfig:
@@ -416,16 +419,18 @@ class DatasetConfig:
 
     `N` and `density` accept either a fixed value or a (min, max) range:
 
-        N=20,        density=0.3          -> same size and density, but a
+        N=10,        density=0.3          -> same size and density, but a
                                             different graph and different
                                             parameters in every instance
         N=(8, 40),   density=(0.1, 0.6)   -> size and density vary too
+                                            (zero-shot generalisation)
 
-    `graph_models` lets several topologies appear in the same dataset,
-    which is what makes zero-shot generalisation testable.
+    For a first training pass keep `N` and `density` fixed and rely on the
+    seed to vary graph/parameters across instances; widen the ranges later
+    once the pipeline is validated on a single size.
     """
     n_instances: int = 64
-    N: Union[int, Tuple[int, int]] = 20
+    N: Union[int, Tuple[int, int]] = 10
     density: Union[float, Tuple[float, float]] = 0.3
     graph_models: Sequence[str] = ("sparse",)
     seed: int = 0
