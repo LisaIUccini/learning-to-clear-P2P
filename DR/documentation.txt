@@ -1,0 +1,509 @@
+================================================================================
+DR + Phi_theta -- Technical Reference
+Learning a summable perturbation for distributed Douglas-Rachford
+================================================================================
+
+Internal reference for writing the paper's methods section. Reflects the
+state of the code at the time of writing -- the loss design (Sec. 7) and
+results (Sec. 10) are the most likely to keep moving.
+
+CONTENTS
+  00. Overview
+  01. The market model
+  02. Base Douglas-Rachford (lines 3-7)
+  03. Why the perturbation cannot break convergence
+  04. GNN architecture -- Phi_theta
+  05. How the perturbation is wired into dr_step
+  06. Centralised training
+  07. Loss function -- four attempts, in order
+  08. Dataset construction
+  09. End-to-end pipeline
+  10. Current results
+  11. Hyperparameter reference
+
+
+--------------------------------------------------------------------------------
+00. OVERVIEW
+--------------------------------------------------------------------------------
+
+The base algorithm is a distributed Douglas-Rachford (DR) splitting method
+that clears a peer-to-peer energy market, formulated as a Generalized Nash
+Equilibrium Problem (GNEP). It is exact, distributed (one hop of
+communication per iteration, nothing more), and provably convergent on its
+own.
+
+The contribution is a learned, additive perturbation -- one extra term
+added to the DR update at every iteration, produced by a graph neural
+network (GNN) -- designed to reduce the number of iterations needed to
+reach the equilibrium. Three requirements had to hold simultaneously:
+
+  - Plain DR must remain distributed and convergent, unmodified.
+  - DR + perturbation must ALSO be distributed and convergent -- for ANY
+    weights the network ends up with, trained well or badly.
+  - Training is the only centralised step. Every prosumer runs inference
+    locally, using only what it has seen over its own one-hop links.
+
+The rest of this document walks through the system in the order it
+actually executes: the market model, the base algorithm, the theorem that
+makes the perturbation safe, the network that produces it, how it is
+wired into the DR update, how it is trained, and how the whole pipeline
+fits together -- closing with the current empirical picture, including
+its open problem.
+
+
+--------------------------------------------------------------------------------
+01. THE MARKET MODEL
+--------------------------------------------------------------------------------
+
+The distribution network is a connected graph G=(N,E). Each prosumer n
+controls three decision variables:
+
+  D_n     flexible demand
+  G_n     controllable local generation (flexibility activation)
+  q_mn    bilateral trade with neighbour m: positive = buying from m,
+          negative = selling to m
+
+Plus one fixed (non-decision) parameter: DeltaG_n >= 0, a renewable
+injection.
+
+Each prosumer's LOCAL FEASIBLE SET is a box plus one equality:
+
+    D_min_n <= D_n <= D_max_n
+    G_min_n <= G_n <= G_max_n
+    q_mn <= kappa_mn                          for every neighbour m
+    D_n = G_n + DeltaG_n + sum_m q_mn          (local energy balance)
+
+Neighbours are coupled by one more constraint, handled at the network
+level rather than locally -- the RECIPROCITY constraint:
+
+    q_mn + q_nm <= 0        for every edge (m,n)
+
+and each prosumer's local cost is
+
+    J_n(x_n) = 1/2 a_n*G_n^2 + b_n*G_n + sum_m c_nm*q_mn
+               - a~_n*(D_n - D*_n)^2
+               |__ generation cost __|  |_trading cost_|  |_ demand-usage benefit _|
+
+with a~_n, a_n > 0. Under the paper's regularity condition
+(-b_n/a_n >= G_min_n) the game is monotone and admits a unique
+variational equilibrium.
+
+
+--------------------------------------------------------------------------------
+02. BASE DOUGLAS-RACHFORD (lines 3-7)
+--------------------------------------------------------------------------------
+
+Split the game's monotone inclusion into two operators: A = pseudo-
+gradient + local-box normal cone, B = reciprocity normal cone. The DR
+recursion is
+
+    x^(k+1) = x^k + lambda*( J_gA(2*J_gB(x^k) - x^k) - J_gB(x^k) ),
+    lambda in (0,2)
+
+Distributed, this becomes five steps per iteration, run independently by
+every prosumer with exactly one message exchange:
+
+  line 3  COMMUNICATE. Every prosumer sends each neighbour its own q, and
+          receives theirs -- the only place any information crosses
+          between nodes.
+
+  line 4  SHADOW. qbar_mn = q_mn - max(0, q_mn+q_nm)/2 -- the exact
+          Euclidean projection onto the reciprocity halfspace. D and G
+          pass through untouched, since B only constrains trades.
+
+  line 5  REFLECTION. r = 2*qbar - q (again a no-op on D, G).
+
+  line 6  LOCAL PROX. Each prosumer solves its own strongly-convex prox
+          by dualising the single local balance equality with a scalar
+          multiplier nu, found by bisection -- closed form given nu, no
+          communication.
+
+  line 7  RELAXED UPDATE. x^(k+1) = x^k + lambda*(z^k - xbar^k).
+
+Convergence: J_gB = proj_X^rec is firmly nonexpansive, so the DR operator
+is (lambda/2)-averaged nonexpansive for any lambda in (0,2) (Lions &
+Mercier, 1979) -- it converges to a fixed point whose shadow is the
+game's equilibrium.
+
+
+--------------------------------------------------------------------------------
+03. WHY THE PERTURBATION CANNOT BREAK CONVERGENCE
+--------------------------------------------------------------------------------
+
+Line 8 adds one term to the update: x^(k+1)_n <- x^(k+1)_n + v^k_n. This
+turns the plain DR recursion into a PERTURBED KRASNOSELSKII-MANN
+ITERATION. A classical result (Combettes, 2001, building on
+Lions-Mercier) states: if T is averaged nonexpansive and
+sum_k ||e_k|| < infinity, then
+
+    x^(k+1) = x^k + lambda*(T(x^k) - x^k) + e_k
+
+still converges to a fixed point of T -- the SAME fixed-point set as
+unperturbed DR, regardless of what e_k is, as long as it is summable. The
+perturbation is built so this holds BY CONSTRUCTION, not by hoping
+training keeps it small:
+
+  - both GNN output heads end in tanh -> the raw direction is bounded
+    componentwise by 1
+  - the confidence gate is a sigmoid, so it can only SHRINK the output
+    further, never amplify it
+  - the bounded direction is rescaled by a fixed physical reference per
+    coordinate (half the D/G box width, the trade capacity kappa) ->
+    v^k_n is bounded by a fixed constant of the instance
+  - multiplied by a geometrically decaying amplitude scale*rho^k,
+    rho in (0,1)
+
+    sum_k ||v^k||  <=  scale * ||physical_scale|| / (1 - rho)  <  infinity
+
+for ANY weights theta -- trained, untrained, or adversarial. This is what
+makes it safe to let training run freely: the learned part can only ever
+affect SPEED, never correctness.
+
+
+--------------------------------------------------------------------------------
+04. GNN ARCHITECTURE -- Phi_theta
+--------------------------------------------------------------------------------
+
+One 1-hop message-passing layer -- spatial depth is capped at one hop to
+match the distributed constraint -- plus TEMPORAL recurrence across DR
+iterations (not graph hops), which is where most of the network's
+effective memory comes from.
+
+NODE FEATURES (8, all strictly local)
+
+  h_D, h_G     position of D_n, G_n in their own box, scaled to [-1,1]
+  h_D*         position of the target D*_n in the same box
+  h_bal        local balance residual, normalised by the D-box width --
+               how far n is from feasible right now
+  h_prev_res   how much n's own (D,G,q) moved on the PREVIOUS iteration --
+               a direct, self-supervised progress signal ("am I still
+               converging here, or stuck?")
+  h_a~,h_a,h_b n's own cost-curvature coefficients, min-max normalised
+               against FIXED reference ranges declared in the model
+               config
+
+  Why fixed ranges, not batch statistics -- a single prosumer cannot
+  compute a mean or standard deviation over the whole network -- that
+  needs a global reduction, exactly what one-hop communication is built
+  to avoid. Normalisation instead uses constants matching the sampling
+  ranges of the market generator the training data came from, built
+  automatically via GNNConfig.from_market_config(...) so the two can't
+  silently drift apart. It's a compile-time constant every node already
+  has, not something computed from other nodes' data.
+
+EDGE FEATURES (3), per directed edge (m -> n)
+
+  e_qown    q_mn / kappa_mn -- n's own decision toward m
+  e_qrecv   q_nm / kappa_mn -- received from m at line 3 (one-hop,
+            already on hand -- no extra round)
+  e_c       n's own trading cost c_nm, normalised
+
+MESSAGE PASSING -> RECURRENT UPDATE -> OUTPUT HEADS
+
+    msg_(m->n)   = phi_msg(e_mn)
+    agg_n        = (1/sqrt(|Omega_n|)) * sum_m msg_(m->n)
+    mem_n^(k+1)  = GRUCell( [h_n^k ; agg_n^k] , mem_n^k )
+
+    gate_n       = sigmoid( phi_gate(mem_n) )                  in [0,1]
+    Delta_node   = tanh( phi_node(mem_n) ) * gate_n             -> perturbs (D_n, G_n)
+    Delta_mn     = tanh( phi_edge([mem_n ; e_mn]) ) * gate_n    -> perturbs q_mn
+
+  The recurrent memory costs zero communication -- mem_n is PRIVATE,
+  per-node state that persists across a prosumer's own dr_step calls;
+  nothing about it is ever sent or received, exactly like the local
+  iteration counter each prosumer already keeps. It replaced a stateless
+  MLP that reacted only to the current instant; with it, the network can
+  distinguish "just started pushing here" from "been pushing for 50
+  iterations with no visible progress" -- the gate can only learn to use
+  that distinction once it exists as an input at all.
+
+  The confidence gate is a purely additive safety margin: gate_n = 0
+  recovers plain DR exactly for that node. It can only shrink the
+  already-bounded output, so it never affects the summability bound -- it
+  just gives the network the structural option to switch itself off when
+  uncertain, instead of always committing to a full-strength correction.
+
+TWO EXECUTION PATHS, ONE SET OF WEIGHTS
+
+  Training needs the whole state at once (back-propagation through an
+  unrolled trajectory), so it runs CENTRALISED: forward / direction
+  vectorise the computation above over the entire graph via cached
+  tensors and scatter-aggregation. Deployment is DISTRIBUTED:
+  local_forward is exactly what one prosumer runs after communicate(),
+  using only its own state, its own memory, and the q it received from
+  direct neighbours. Both compute the identical mathematical function of
+  the same weights -- cross-checked numerically to agree to about 1e-7
+  across multiple iterations of recurrent state.
+
+  Every MLP's size depends only on feature counts and the hidden width
+  d_h -- never on N or |E| -- so one trained model is architecturally
+  deployable on any network size or topology.
+
+
+--------------------------------------------------------------------------------
+05. HOW THE PERTURBATION IS WIRED INTO dr_step
+--------------------------------------------------------------------------------
+
+Full amplitude schedule at deployment:
+
+    v^k_n = scale * rho^k * gate_n * tanh(Phi_theta(...)) * physical_scale_n
+
+evaluated on the PRE-UPDATE state (right after line 3), added AFTER the
+relaxed DR update commits (line 8). Two pieces of state make this
+possible with zero extra communication:
+
+  _round             a prosumer's own count of completed dr_step calls.
+                      Because the scheduler calls every prosumer exactly
+                      once per synchronous round, this always equals the
+                      true global iteration k -- no message needed to
+                      know "what round are we on".
+
+  _mem, _prev_residual  the recurrent state described above, plus the
+                      node's own residual from the last step -- both
+                      private, lazily zero-initialised, reset at the
+                      start of a run.
+
+  Train-scale vs deploy-scale -- scale is deliberately allowed to differ
+  between training and deployment. Baking a larger scale directly into
+  training made results WORSE -- training under bigger, noisier
+  perturbation dynamics seems to teach a lower-quality direction.
+  Training gently (small scale, stable dynamics) and only AMPLIFYING the
+  same learned direction at deployment time works better, and got safer
+  once the recurrent memory was added: without it, turning deployment
+  scale up caused the worst case to collapse; with it, the worst case
+  stays roughly flat as scale increases from 0.3 to 1.0.
+
+
+--------------------------------------------------------------------------------
+06. CENTRALISED TRAINING
+--------------------------------------------------------------------------------
+
+Training is the one centralised step, for one reason: back-propagating
+through an unrolled trajectory needs the entire state at once, which no
+single prosumer has. It produces one set of weights theta, saved to disk
+and copied to every prosumer afterwards -- nothing about deployment is
+centralised.
+
+The DIFFERENTIABLE ROLLOUT mirrors dr_step line for line, but vectorised
+over the whole network -- the vectorised twin of the per-node local prox,
+plus the vectorised reciprocity resolvent, playing the role of every
+prosumer's local computation at once. The GNN's memory and
+previous-residual state are threaded through the unrolled loop exactly as
+Prosumer.dr_step threads them across real iterations, zero-initialised at
+the first step.
+
+The unroll length K (how many DR iterations are differentiated through
+per training step) has to comfortably exceed the amplitude's decay
+horizon -- otherwise the loss only ever sees the window where the
+perturbation is still active, and never sees the consequences of the
+network's own actions once they've decayed away.
+
+
+--------------------------------------------------------------------------------
+07. LOSS FUNCTION -- FOUR ATTEMPTS, IN ORDER
+--------------------------------------------------------------------------------
+
+The current loss looks the way it does because of what specifically
+failed before it. Worth documenting all four, since the design choices
+only make sense in that light.
+
+--- 1. Consecutive-residual log-ratio  [ABANDONED] ---
+
+    L = mean_k[ log(r_k+eps) - log(r_k^DR+eps) ]     r_k = ||xbar^(k+1) - xbar^k||
+
+  EXPLOITABLE. A direction that briefly, nearly freezes the trajectory
+  drives r_k -> 0 and log(r_k) -> -infinity -- an unbounded reward --
+  while the cost (an unperturbed tail that now has further to go) is a
+  bounded, ordinary-sized penalty later. Measured end-to-end: 0.73x --
+  slower than plain DR -- despite an excellent-looking training loss.
+
+--- 2. Same idea, windowed to the post-decay tail  [PARTIAL] ---
+
+  Averaging only over k in [k_start, K), past the amplitude's decay
+  horizon, excludes the exploitable early window. Helped (-> 1.23x) but
+  plateaued: gains concentrated on already-slow outlier instances, while
+  roughly a third of ordinary fast-converging instances got worse. Root
+  cause survives windowing -- a consecutive-step residual measures how
+  far ONE step moved, not how close the point is to the actual solution.
+
+--- 3. Anchored to a precomputed equilibrium  [SET ASIDE ON PRINCIPLE] ---
+
+    ratio_k = d_k / d_k^DR          d_k = ||xbar^k - xbar*||
+    L = mean_k[ ratio_k + beta*relu(ratio_k - 1) ]
+
+  Plain DR run to convergence once per training instance (cheap, cached,
+  no external labels) gives xbar*. This worked well -- but it IS a
+  target-based signal, even though it costs nothing extra and comes from
+  the very algorithm being accelerated rather than an external oracle.
+  Set aside to keep training strictly self-supervised: no reference
+  solution enters the loss, precomputed or otherwise.
+
+--- 4. Self-referential: normalised residual + monotonicity  [CURRENT] ---
+
+    rho_k = r_k / (||physical_scale|| + eps)
+
+    L = weighted_mean_k[ rho_k ]  +  gamma_mono * mean_k[ relu(rho_(k+1) - rho_k) ]
+
+  No baseline rollout, no precomputed target -- only the perturbed
+  trajectory's own residual sequence and a static, zero-computation
+  per-instance scale (the same physical reference used to size the
+  perturbation itself).
+
+    decay term         rewards a small normalised residual. No log --
+                        driving one rho_k to zero contributes at most a
+                        bounded (~0) amount, not an exploitable unbounded
+                        one.
+
+    monotonicity term   plain DR's own residual sequence is naturally
+                        non-increasing (a Fejer-type property of averaged
+                        operators). Any INCREASE is direct evidence the
+                        perturbation broke that good behaviour -- exactly
+                        the failure mode behind the worst blow-ups seen in
+                        earlier, memory-less attempts (one instance went
+                        from 353 to 3734 iterations). Penalised using
+                        nothing but the trajectory itself.
+
+    late-weighting      optionally weights the decay term toward later
+                        steps, so an already-fast instance is judged
+                        mainly on whether it STAYS converged.
+
+  KNOWN LIMITATION, CURRENT DESIGN -- being strictly self-referential,
+  this loss has no notion of "how fast would plain DR have solved THIS
+  instance". It can teach smoothness and local progress, but cannot
+  directly teach "you weren't needed here" -- the leading explanation for
+  the pattern in the current results (large wins on structurally slow
+  instances, occasional mild regressions on already-fast ones).
+
+
+--------------------------------------------------------------------------------
+08. DATASET CONSTRUCTION
+--------------------------------------------------------------------------------
+
+Two-stage, torch-free-first, so instances are cheap to validate, save and
+reproduce.
+
+STAGE 1 -- sample_spec(N, seed), pure numpy
+
+  A random connected graph (several topology models available; the
+  default interpolates between a random spanning tree at density 0 and
+  the complete graph at density 1), then per-node parameters
+  (generation-cost coefficients, an operating point, renewable injection,
+  a demand box anchored around a feasible point, a target demand), then
+  per-edge parameters (trading cost, possibly asymmetric; capacity,
+  symmetric per undirected pair).
+
+STAGE 2 -- build(spec, seed)
+
+  Turns the numeric spec into real Prosumer/EnergyNetwork objects. A
+  separate seed draws the INITIAL decision variables (D, G, q) inside
+  their boxes -- the starting point x^0, independent of the spec itself.
+
+REPRODUCIBILITY AND TRAIN/TEST DISJOINTNESS
+
+  Instance i of a dataset always uses seed = cfg.seed*100003 + i -- a
+  function of its own index alone, never of how many instances are
+  requested in total. Growing a dataset only ever APPENDS new instances;
+  it never reshuffles the ones already drawn. Splitting into train/test
+  is a plain sequential partition of that list -- by construction, the
+  two never overlap. In practice, when the training pool needs to grow
+  independently of the test pool, the extra training instances are drawn
+  from a DISTINCT seed offset entirely, rather than by extending the same
+  sequential draw -- otherwise growing training would silently shift
+  which instances land in the test set and break every before/after
+  comparison.
+
+  During training, x^0 is redrawn fresh for every (instance, epoch) pair,
+  so the network is never fit to one arbitrary starting point. During
+  evaluation, x^0 is fixed per test instance, so comparisons stay
+  reproducible run to run.
+
+
+--------------------------------------------------------------------------------
+09. END-TO-END PIPELINE
+--------------------------------------------------------------------------------
+
+  01 DATASET     MarketConfig -> sampled specs -> train / test split,
+                 disjoint by construction
+       |
+       v
+  02 INIT Phi_theta   PerturbationGNN with random weights, feature ranges
+                      bound to the market config
+       |
+       v
+  03 TRAIN       Per epoch, per instance: fresh x^0, differentiable
+                 K-step rollout, self-referential loss, Adam step
+       |
+       v
+  04 SAVE theta   Weights + both configs persisted to disk -- the only
+                  artifact deployment needs
+       |
+       v
+  05 DEPLOY      Every prosumer gets a LocalAgent(theta, rho, scale) --
+                 inference is now 100% distributed
+       |
+       v
+  06 EVALUATE    Real distributed solver, with vs. without Phi_theta, on
+                 held-out instances -- iterations to tolerance
+
+Only step 03 is centralised. Step 06 is the only number that counts --
+never the training-time rollout.
+
+
+--------------------------------------------------------------------------------
+10. CURRENT RESULTS
+--------------------------------------------------------------------------------
+
+Latest evaluation: 64 training instances, unroll K=400, deployed at
+scale=1.0 (trained at 0.3), on 30 held-out test instances -- the real
+distributed solver, not the training rollout.
+
+  Metric                              Value
+  -----------------------------------------
+  Median DR                           594 it.
+  Median DR + Phi_theta               306 it.
+  Mean speed-up                       2.45x
+  Instances at or below 1.0x          9 / 30
+  Worst case                          0.53x
+  Best case                           17.01x
+
+The mean comfortably clears the target (40% fewer iterations, i.e.
+>=1.67x). The open problem is the minority of regressions, which are NOT
+the instances that are structurally hard for plain DR (those improve the
+most, sometimes 10-20x) -- they cluster on instances plain DR itself
+already solves quickly, in a few hundred iterations. There, the
+perturbation's active window overlaps almost the entire natural
+trajectory rather than just nudging its start, and a badly-calibrated
+push can cost more than it saves.
+
+Leading hypothesis: the amplitude envelope scale*rho^k is identical for
+every instance regardless of how much help it actually needs, and the
+training signal is likely dominated by slow/plateau instances -- their
+residual stays far from zero across far more of the unrolled window,
+generating much larger gradients than an instance that's basically
+already converged by step 300. Under investigation: reweighting so fast
+instances aren't drowned out during training, and whether the pattern is
+a property of the specific random seed or holds in general.
+
+
+--------------------------------------------------------------------------------
+11. HYPERPARAMETER REFERENCE
+--------------------------------------------------------------------------------
+
+  Name              Value        Role
+  --------------------------------------------------------------------------
+  gamma, lambda     2.0, 1.0     DR step size / relaxation (baseline, tuned)
+  prox_bisect       25           bisection steps in the local prox
+  tol               1e-6         shadow-residual stopping tolerance
+  hidden_dim        32           GNN width d_h (N/|E|-independent)
+  rho               0.9          perturbation decay (deploy = train)
+  train_scale       0.3          amplitude fraction used during training
+  deploy_scale      1.0          amplitude fraction used at inference
+  unroll K          400          differentiated DR steps per training instance
+  gamma_mono        2.0          monotonicity-penalty weight
+  epochs / lr       40 / 3e-3    Adam optimiser
+  train / test      64 / 30      market instances
+  N, density        10, 0.3      prosumers per market, sparse graph
+
+================================================================================
+End of document.
+================================================================================

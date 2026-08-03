@@ -1,0 +1,138 @@
+Device: cuda
+
+Checkpoint path: checkpoints/admm_N10_T60_e80_s50_learned_update_rho0.8_lr0.002.pt
+GNNUpdate — trainable parameters: 1590
+Warning: model not found at checkpoints/admm_N10_T60_e80_s50_learned_update_rho0.8_lr0.002.pt. Training from scratch.
+
+--- Dataset generation (N=10, seeds 42..91) ---
+Generating 50 dataset samples (N=10, seeds 42..91)...
+  10/50 samples generated
+  20/50 samples generated
+  30/50 samples generated
+  40/50 samples generated
+  50/50 samples generated
+Dataset generation complete.
+
+--- Meta-training (ADMM) ---
+
+Baseline loss (pure ADMM, no GNN): 92.956593
+Training loss should go BELOW this value.
+
+Epoch [  1/80]  loss: 88.202790  lr: 2.00e-03
+Epoch [  2/80]  loss: 76.389369  lr: 2.00e-03
+Epoch [  3/80]  loss: 72.643030  lr: 2.00e-03
+Epoch [  4/80]  loss: 72.799647  lr: 2.00e-03
+Epoch [  5/80]  loss: 71.325975  lr: 2.00e-03
+Epoch [  6/80]  loss: 69.398414  lr: 2.00e-03
+Epoch [  7/80]  loss: 68.693195  lr: 2.00e-03
+Epoch [  8/80]  loss: 67.400691  lr: 2.00e-03
+Epoch [  9/80]  loss: 65.944921  lr: 2.00e-03
+Epoch [ 10/80]  loss: 64.322869  lr: 2.00e-03
+Epoch [ 11/80]  loss: 64.804608  lr: 2.00e-03
+Epoch [ 12/80]  loss: 62.918586  lr: 2.00e-03
+Epoch [ 13/80]  loss: 62.122260  lr: 2.00e-03
+Epoch [ 14/80]  loss: 61.525617  lr: 2.00e-03
+Epoch [ 15/80]  loss: 60.415306  lr: 2.00e-03
+Epoch [ 16/80]  loss: 60.174695  lr: 2.00e-03
+Epoch [ 17/80]  loss: 59.424512  lr: 2.00e-03
+Epoch [ 18/80]  loss: 58.909573  lr: 2.00e-03
+Epoch [ 19/80]  loss: 58.482739  lr: 2.00e-03
+Epoch [ 20/80]  loss: 57.478570  lr: 2.00e-03
+Epoch [ 21/80]  loss: 57.032572  lr: 2.00e-03
+Epoch [ 22/80]  loss: 55.852341  lr: 2.00e-03
+Epoch [ 23/80]  loss: 54.831778  lr: 2.00e-03
+Epoch [ 24/80]  loss: 54.859709  lr: 2.00e-03
+Epoch [ 25/80]  loss: 53.064814  lr: 2.00e-03
+Epoch [ 26/80]  loss: 52.988761  lr: 2.00e-03
+Epoch [ 27/80]  loss: 52.427653  lr: 2.00e-03
+Epoch [ 28/80]  loss: 52.191320  lr: 2.00e-03
+Epoch [ 29/80]  loss: 52.122153  lr: 2.00e-03
+Epoch [ 30/80]  loss: 50.995988  lr: 2.00e-03
+Epoch [ 31/80]  loss: 50.431848  lr: 2.00e-03
+Epoch [ 32/80]  loss: 50.068974  lr: 2.00e-03
+Epoch [ 33/80]  loss: 48.352118  lr: 2.00e-03
+Epoch [ 34/80]  loss: 47.984777  lr: 2.00e-03
+Epoch [ 35/80]  loss: 47.403406  lr: 2.00e-03
+Epoch [ 36/80]  loss: 47.474310  lr: 2.00e-03
+Epoch [ 37/80]  loss: 46.792795  lr: 2.00e-03
+Epoch [ 38/80]  loss: 45.968735  lr: 2.00e-03
+Epoch [ 39/80]  loss: 45.823947  lr: 2.00e-03
+Epoch [ 40/80]  loss: 45.475213  lr: 2.00e-03
+Epoch [ 41/80]  loss: 44.935397  lr: 2.00e-03
+Epoch [ 42/80]  loss: 45.587454  lr: 2.00e-03
+Epoch [ 43/80]  loss: 43.660916  lr: 2.00e-03
+Epoch [ 44/80]  loss: 45.175700  lr: 2.00e-03
+Epoch [ 45/80]  loss: 43.144374  lr: 2.00e-03
+Epoch [ 46/80]  loss: 43.964847  lr: 2.00e-03
+Epoch [ 47/80]  loss: 44.309556  lr: 2.00e-03
+Epoch [ 48/80]  loss: 43.368357  lr: 2.00e-03
+Epoch [ 49/80]  loss: 42.786906  lr: 2.00e-03
+Epoch [ 50/80]  loss: 43.557549  lr: 2.00e-03
+Epoch [ 51/80]  loss: 42.085402  lr: 2.00e-03
+Epoch [ 52/80]  loss: 41.893833  lr: 2.00e-03
+Epoch [ 53/80]  loss: 40.954498  lr: 2.00e-03
+Epoch [ 54/80]  loss: 41.339353  lr: 2.00e-03
+Epoch [ 55/80]  loss: 41.448364  lr: 2.00e-03
+Epoch [ 56/80]  loss: 41.078670  lr: 2.00e-03
+Epoch [ 57/80]  loss: 40.686040  lr: 2.00e-03
+Epoch [ 58/80]  loss: 40.049353  lr: 2.00e-03
+Epoch [ 59/80]  loss: 39.408242  lr: 2.00e-03
+Epoch [ 60/80]  loss: 39.490086  lr: 2.00e-03
+Epoch [ 61/80]  loss: 40.063060  lr: 2.00e-03
+Epoch [ 62/80]  loss: 38.905034  lr: 2.00e-03
+Epoch [ 63/80]  loss: 38.682281  lr: 2.00e-03
+Epoch [ 64/80]  loss: 38.381692  lr: 2.00e-03
+Epoch [ 65/80]  loss: 37.410869  lr: 2.00e-03
+Epoch [ 66/80]  loss: 37.989410  lr: 2.00e-03
+Epoch [ 67/80]  loss: 37.160567  lr: 2.00e-03
+Epoch [ 68/80]  loss: 36.743634  lr: 2.00e-03
+Epoch [ 69/80]  loss: 37.162049  lr: 2.00e-03
+Epoch [ 70/80]  loss: 36.292810  lr: 2.00e-03
+Epoch [ 71/80]  loss: 36.391136  lr: 2.00e-03
+Epoch [ 72/80]  loss: 35.053189  lr: 2.00e-03
+Epoch [ 73/80]  loss: 36.756587  lr: 2.00e-03
+Epoch [ 74/80]  loss: 35.691110  lr: 2.00e-03
+Epoch [ 75/80]  loss: 34.922508  lr: 2.00e-03
+Epoch [ 76/80]  loss: 36.572989  lr: 2.00e-03
+Epoch [ 77/80]  loss: 34.829388  lr: 2.00e-03
+Epoch [ 78/80]  loss: 35.764703  lr: 2.00e-03
+Epoch [ 79/80]  loss: 34.062092  lr: 2.00e-03
+Epoch [ 80/80]  loss: 34.013473  lr: 2.00e-03
+Model saved to checkpoints/admm_N10_T60_e80_s50_learned_update_rho0.8_lr0.002.pt
+Figure saved to checkpoints/admm_N10_T60_e80_s50_loss_history_rho0.8_lr0.002.png
+/home/lisa/energy_market_fixed_point/GNN/main.py:106: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  phi_m = float(torch.nn.functional.softplus(model.phi_m_raw))
+phi_m (GNN amplitude) = 3.8298
+
+--- Inference (ADMM) ---
+
+Test instance 1/5:
+  ADMM converged at iteration 33
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 2/5:
+  ADMM converged at iteration 39
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 3/5:
+  ADMM converged at iteration 34
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 4/5:
+  ADMM converged at iteration 33
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 5/5:
+  ADMM converged at iteration 37
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+Figure saved to figures/admm_N10_average_trainingN10.png
+
+--- Summary (ADMM) ---
+Pure ADMM   — final avg residual: 0.000000
+ADMM + GNN  — final avg residual: 0.000001

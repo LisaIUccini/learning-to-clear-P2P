@@ -1,0 +1,77 @@
+Device: cuda
+
+Checkpoint path: checkpoints/admm_N10_T60_e20_s50_learned_update_rho0.8_lr0.002.pt
+GNNUpdate — trainable parameters: 1590
+
+--- Dataset generation (N=10, seeds 42..91) ---
+Generating 50 dataset samples (N=10, seeds 42..91)...
+  10/50 samples generated
+  20/50 samples generated
+  30/50 samples generated
+  40/50 samples generated
+  50/50 samples generated
+Dataset generation complete.
+
+--- Meta-training (ADMM) ---
+
+Baseline loss (pure ADMM, no GNN): 92.956593
+Training loss should go BELOW this value.
+
+Epoch [  1/20]  loss: 88.202785  lr: 2.00e-03
+Epoch [  2/20]  loss: 76.389370  lr: 2.00e-03
+Epoch [  3/20]  loss: 72.643009  lr: 2.00e-03
+Epoch [  4/20]  loss: 72.799734  lr: 2.00e-03
+Epoch [  5/20]  loss: 71.326907  lr: 2.00e-03
+Epoch [  6/20]  loss: 69.400297  lr: 2.00e-03
+Epoch [  7/20]  loss: 68.705556  lr: 2.00e-03
+Epoch [  8/20]  loss: 67.484370  lr: 2.00e-03
+Epoch [  9/20]  loss: 65.838592  lr: 2.00e-03
+Epoch [ 10/20]  loss: 64.312677  lr: 2.00e-03
+Epoch [ 11/20]  loss: 65.106868  lr: 2.00e-03
+Epoch [ 12/20]  loss: 62.872726  lr: 2.00e-03
+Epoch [ 13/20]  loss: 62.129638  lr: 2.00e-03
+Epoch [ 14/20]  loss: 61.528792  lr: 2.00e-03
+Epoch [ 15/20]  loss: 60.576363  lr: 2.00e-03
+Epoch [ 16/20]  loss: 60.159908  lr: 2.00e-03
+Epoch [ 17/20]  loss: 59.079140  lr: 2.00e-03
+Epoch [ 18/20]  loss: 58.911500  lr: 2.00e-03
+Epoch [ 19/20]  loss: 58.478203  lr: 2.00e-03
+Epoch [ 20/20]  loss: 57.350302  lr: 2.00e-03
+Model saved to checkpoints/admm_N10_T60_e20_s50_learned_update_rho0.8_lr0.002.pt
+Figure saved to checkpoints/admm_N10_T60_e20_s50_loss_history_rho0.8_lr0.002.png
+/home/lisa/energy_market_fixed_point/GNN/main.py:106: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  phi_m = float(torch.nn.functional.softplus(model.phi_m_raw))
+phi_m (GNN amplitude) = 1.4210
+
+--- Inference (ADMM) ---
+
+Test instance 1/5:
+  ADMM converged at iteration 36
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 2/5:
+  ADMM converged at iteration 39
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 3/5:
+  ADMM converged at iteration 36
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 4/5:
+  ADMM converged at iteration 37
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+
+Test instance 5/5:
+  ADMM converged at iteration 36
+Pure ADMM   — constraint violation: False
+ADMM + GNN  — constraint violation: False
+Figure saved to figures/admm_N10_average_trainingN10.png
+
+--- Summary (ADMM) ---
+Pure ADMM   — final avg residual: 0.000000
+ADMM + GNN  — final avg residual: 0.000001
