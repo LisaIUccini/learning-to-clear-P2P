@@ -52,8 +52,8 @@ from plot_style import set_paper_style, show_or_save_many, PALETTE, plot_band
 #     -good ones (#5, #6) became bad instead, one severely (0.43x). More
 #     training diversity is the test for whether that's overfitting to a
 #     too-small training pool rather than genuine long-horizon learning.
-TRAIN_INSTANCES = 64
-TEST_INSTANCES  = 30
+TRAIN_INSTANCES = 100
+TEST_INSTANCES  = 50
 NODES           = 10
 DENSITY         = 0.3
 GRAPH_MODELS    = ("sparse",)
