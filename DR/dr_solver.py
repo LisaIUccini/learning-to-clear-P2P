@@ -118,7 +118,7 @@ class DRSolver:
 
         history: Dict[str, List[float]] = {
             "residual": [], "residual_aux": [],
-            "cost": [], "balance": [], "reciprocity": [],
+            "cost": [], "balance": [], "reciprocity": [], "reciprocity_raw": [],
         }
         converged = False
         k_run = 0
@@ -156,12 +156,18 @@ class DRSolver:
 
     @staticmethod
     def _log(net, history, res):
-        shadow = net.project_reciprocity(net.flatten())
+        x = net.flatten()
+        shadow = net.project_reciprocity(x)
         history["residual"].append(res)
         history["residual_aux"].append(net.residual())
         history["cost"].append(float(net.cost_at(shadow)))
         history["balance"].append(float(net.balance_at(shadow).abs().max()))
         history["reciprocity"].append(float(net.reciprocity_max_at(shadow)))
+        # reciprocity BEFORE the shadow projection -- shadow is always
+        # reciprocity-feasible by construction, so `reciprocity` above is
+        # ~0 at every iteration and carries no signal; this one measures
+        # the actual violation the projection step corrects each round.
+        history["reciprocity_raw"].append(float(net.reciprocity_max_at(x)))
 
 
 # ----------------------------------------------------------------------

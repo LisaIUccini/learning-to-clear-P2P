@@ -32,7 +32,8 @@ import matplotlib.pyplot as plt
 
 from market_generator import MarketConfig, MarketDataset, DatasetConfig
 from gnn import PerturbationGNN, GNNConfig, deploy
-from training import TrainConfig, Trainer, compare, Reporter, residual_curves
+from training import (TrainConfig, Trainer, compare, Reporter, residual_curves,
+                     histories, optimal_costs)
 from plot_style import set_paper_style, show_or_save_many, PALETTE, plot_band
 
 # ============================== CONFIG ================================
@@ -52,8 +53,8 @@ from plot_style import set_paper_style, show_or_save_many, PALETTE, plot_band
 #     -good ones (#5, #6) became bad instead, one severely (0.43x). More
 #     training diversity is the test for whether that's overfitting to a
 #     too-small training pool rather than genuine long-horizon learning.
-TRAIN_INSTANCES = 100
-TEST_INSTANCES  = 50
+TRAIN_INSTANCES = 64
+TEST_INSTANCES  = 30
 NODES           = 10
 DENSITY         = 0.3
 GRAPH_MODELS    = ("sparse",)
@@ -91,22 +92,70 @@ RHO = 0.9
 # actually shipped to the prosumers.
 TRAIN_SCALE = 0.3
 DEPLOY_SCALE = 1.0
-# rho is NOT raised here on purpose. Per-instance diagnostics showed the
-# perturbation's effective contribution (scale*rho^k*|direction|) is
-# already ~0 by k~150 for EVERY instance, good or bad -- including the
-# best ones (4.28x, 2.76x speed-up), which proves a short active window
-# CAN be enough to "aim" well. The two instances that end up worse than
-# plain DR do so because of a LONG plateau that only appears at k~400-1300,
-# entirely after the perturbation has already died out -- so the network
-# never gets to react to it in real time either way. What raising unroll
-# alone tests is a DIFFERENT, cheaper hypothesis: does the training loss
-# simply not look far enough ahead to teach good aim for instances shaped
-# like these two, even though rho/deployment behaviour is unaffected by
-# this change (amp is still ~0 past k~150)? If this does not help, the
-# next step is raising rho AND unroll together, to test the more
-# expensive hypothesis (the network needs real-time ability to act deep
-# into a plateau, not just better foresight from a longer training window).
+# rho is NOT raised here on purpose -- see "ATTEMPTS TO EXTEND REACH" below.
+# scale*rho^k is ~0 by k~150-200 for EVERY instance (verified numerically:
+# 1.3e-23 already at k=500), which caps how late a plateau can be reached.
+# Raising rho is the only way to lift that cap -- but every way we tried to
+# actually make that work has failed so far. Kept here as a record, NOT to
+# be re-run blindly:
+#
+#   1. Deploy-time-only override (SAME rho=0.9 trained weights, rho just
+#      changed at inference, no retraining): proves real headroom exists
+#      (one hard instance went from 1.31x to 57x at rho=0.95) but wrecks
+#      easy instances more and more as rho grows, because the gate was
+#      never trained to self-regulate past k~150 -- it doesn't know what
+#      to do with the extra leash.
+#   2. Full retrain from scratch at rho=0.97/unroll=800 (64 instances,
+#      40 epochs): WORSE overall (1.41x mean / 19-30 regress) than the
+#      rho=0.9 baseline (3.42x / 9-30) -- training under the longer,
+#      noisier horizon converges to a lower-quality policy, not a more
+#      patient version of the good one.
+#   3. Cheap proxy screening (24 instances / 10 epochs) of the SAME
+#      rho=0.97/unroll=800 config gave the OPPOSITE signal (looked great,
+#      4.88x) -- proxy training at reduced scale is NOT a reliable
+#      predictor for this lever; do not trust a cheap screen here.
+#   4. Per-epoch checkpoint curve of that same 40-epoch run (evaluated at
+#      epochs 4,8,...,40): noisy, no single epoch recovers the rho=0.9
+#      baseline's quality -- ruled out "just stop training earlier."
+#   5. Curriculum (staged warm-start rho 0.90 -> 0.99 -> 0.997, each stage
+#      continuing training from the previous stage's weights instead of
+#      from scratch): got WORSE at every single stage (1.38x -> 0.51x ->
+#      0.28x on a representative panel) -- gradual extension is not a fix
+#      either, if anything it is worse than a single direct jump.
+#   6. Root cause found for #5/#2: at long horizons the network converges
+#      to one GENERIC pace applied almost identically to every instance,
+#      regardless of how different their own natural DR speed is (verified:
+#      near-identical iteration-to-iteration decay RATIOS across instances
+#      whose plain-DR baselines differ by 5x) -- it stops being an
+#      instance-adaptive policy and becomes a one-size-fits-all one.
+#   7. Tried fixing #6 by disabling the loss's `late_weight` (the term that
+#      weights later iterations more heavily in the loss, on the theory
+#      that it was diluting early per-instance signal): DISPROVEN --
+#      turned out slightly WORSE (even more uniform, ~4000-4300 iters
+#      across the board instead of ~3000-3200), not better. The loss
+#      weighting is not the cause.
+#   8. Diagnosis: this looks like a vanishing/diluted-gradient problem from
+#      backpropagating through thousands of recurrent steps in one shot,
+#      not a loss-shaping problem -- the credit assignment for "do this
+#      specific thing on THIS instance, early on" gets washed out over
+#      that many BPTT steps, leaving only the generic, easy-to-learn
+#      late-horizon signal. A first idea (hand-craft an explicit "am I
+#      stuck" input feature) was set aside on principle: it decides in
+#      advance what the network should look for, rather than letting it
+#      learn whatever it needs from data. The general, established fix for
+#      this exact class of problem is TRUNCATED BPTT instead (see
+#      `TrainConfig.tbptt_segment` in training.py): train on short,
+#      well-conditioned windows (TBPTT_SEGMENT below) while letting the
+#      state flow forward across many of them to cover the full horizon
+#      (UNROLL) -- the network still has to discover everything itself,
+#      only the credit-assignment problem is fixed.
 UNROLL = 400
+# If set, `unroll` is covered as consecutive windows of this many steps
+# instead of one differentiable rollout (truncated BPTT -- see the note
+# above and training.py's module docstring). None reproduces today's
+# known-good short-horizon behaviour exactly; set together with a larger
+# RHO when training for a longer reach.
+TBPTT_SEGMENT = None
 # the current loss needs only ONE rollout per instance per epoch (no
 # baseline rollout, no equilibrium solve), several times cheaper than the
 # earlier designs -- affording more epochs in the same time budget.
@@ -144,13 +193,26 @@ def make_datasets():
     return (train_ds, test_ds), market_cfg
 
 
-def train(train_ds, market_cfg, val_ds=None, rep=None):
-    torch.manual_seed(SEED)
+def train(train_ds, market_cfg, val_ds=None, rep=None, *,
+         hidden=HIDDEN, rho=RHO, train_scale=TRAIN_SCALE,
+         unroll=UNROLL, tbptt_segment=TBPTT_SEGMENT,
+         gamma=GAMMA, lam=LAM, bisect=BISECT,
+         epochs=EPOCHS, lr=LR, seed=SEED):
+    """Centralised training. All hyperparameters are explicit keyword
+    arguments (defaulting to this module's own CONFIG constants) so a
+    CALLER's own values are actually used -- a plain module-global lookup
+    here would silently resolve to example_l2play.py's globals even when
+    called from a different file with same-named but different constants
+    (this bit a real run: example_fixedgraph.py's own EPOCHS/LR were being
+    ignored in favour of this module's, undetected until the saved
+    checkpoint's metadata was checked)."""
+    torch.manual_seed(seed)
     gnn = PerturbationGNN(GNNConfig.from_market_config(
-        market_cfg, hidden_dim=HIDDEN, rho=RHO, scale=TRAIN_SCALE))
-    cfg = TrainConfig(gamma=GAMMA, lam=LAM, prox_bisect=BISECT,
-                      unroll=UNROLL, rho=RHO, scale=TRAIN_SCALE,
-                      epochs=EPOCHS, lr=LR, seed=SEED, verbose=True)
+        market_cfg, hidden_dim=hidden, rho=rho, scale=train_scale))
+    cfg = TrainConfig(gamma=gamma, lam=lam, prox_bisect=bisect,
+                      unroll=unroll, rho=rho, scale=train_scale,
+                      tbptt_segment=tbptt_segment,
+                      epochs=epochs, lr=lr, seed=seed, verbose=True)
     tr = Trainer(gnn, cfg)
     hist = tr.fit(train_ds, val_dataset=val_ds, reporter=rep)
     return gnn, cfg, tr, hist
@@ -210,6 +272,134 @@ def per_instance_figure(curves_dr, curves_learned, tol, ncols=4):
     return fig
 
 
+def aux_residual_figure(hist_dr, hist_learned, ncols=4):
+    """Per-instance grid of the AUXILIARY iterate's residual ||x^{k+1}-x^k||.
+
+    This is the quantity DR's own convergence theory actually promises to
+    be (near-exactly) monotonically non-increasing -- the Krasnoselskii-Mann
+    residual of the averaged operator DR iterates on the raw auxiliary
+    variable `x` (lines 4-7), BEFORE the reciprocity projection. The
+    "residual" shown in `per_instance_figure` is the shadow x-bar's own
+    residual instead -- a derived quantity (an extra projection on top of
+    x) that the theory does not promise to be monotone, and in practice
+    isn't. Plot this one to see the theorem actually hold (up to tiny
+    numerical noise from the finite-step prox bisection).
+    """
+    n = len(hist_dr)
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 2.2 * nrows),
+                             squeeze=False)
+    for i in range(n):
+        ax = axes[i // ncols][i % ncols]
+        ra_dr = np.asarray(hist_dr[i]["residual_aux"])
+        ra_l = np.asarray(hist_learned[i]["residual_aux"])
+        ax.semilogy(np.arange(1, len(ra_dr) + 1), ra_dr, color=PALETTE[0],
+                   lw=1.0, label="DR")
+        ax.semilogy(np.arange(1, len(ra_l) + 1), ra_l, color=PALETTE[1],
+                   lw=1.0, label=r"DR+$\Phi_\theta$")
+        ax.set_title(f"#{i + 1}", fontsize=7.5)
+        ax.tick_params(labelsize=6.5)
+        if i == 0:
+            ax.legend(fontsize=6, loc="upper right")
+    for j in range(n, nrows * ncols):
+        axes[j // ncols][j % ncols].axis("off")
+    fig.suptitle(r"auxiliary residual $\|x^{k+1}-x^k\|$, per test instance"
+                "\n" r"(the quantity DR theory guarantees is monotone)",
+                fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
+def z_residual(hist):
+    """Combined residual on z = (xbar, x, cost, balance, reciprocity_raw).
+
+    xbar (shadow) and x (auxiliary, pre-reciprocity-projection) are the two
+    iterates DR itself updates every round -- same units, combined directly.
+    cost/balance/reciprocity_raw are the solver's own monitoring scalars
+    (reciprocity read on the RAW iterate, since on the shadow it is ~0 by
+    construction -- the projection step is exactly what enforces it there).
+    Each scalar block is normalised by the magnitude of its own first
+    recorded step, a fixed per-instance scale that does not distort the
+    shape of the decay.
+    """
+    r = np.asarray(hist["residual"])
+    ra = np.asarray(hist["residual_aux"])
+    cost = np.asarray(hist["cost"])
+    bal = np.asarray(hist["balance"])
+    rec = np.asarray(hist["reciprocity_raw"])
+
+    dcost, dbal, drec = np.diff(cost), np.diff(bal), np.diff(rec)
+    r, ra = r[1:], ra[1:]     # align: no delta available at the first point
+
+    eps = 1e-12
+    s_cost = abs(dcost[0]) + eps
+    s_bal = abs(dbal[0]) + eps
+    s_rec = abs(drec[0]) + eps
+    return np.sqrt(r ** 2 + ra ** 2 + (dcost / s_cost) ** 2
+                  + (dbal / s_bal) ** 2 + (drec / s_rec) ** 2)
+
+
+def z_residual_figure(hist_dr, hist_learned, ncols=4):
+    """Per-instance grid of the combined z-residual, DR vs DR+Phi_theta.
+
+    Same layout as `per_instance_figure`, for the extended residual instead
+    of the plain shadow one.
+    """
+    n = len(hist_dr)
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 2.2 * nrows),
+                             squeeze=False)
+    for i in range(n):
+        ax = axes[i // ncols][i % ncols]
+        zd, zl = z_residual(hist_dr[i]), z_residual(hist_learned[i])
+        ax.semilogy(np.arange(1, len(zd) + 1), zd, color=PALETTE[0],
+                   lw=1.0, label="DR")
+        ax.semilogy(np.arange(1, len(zl) + 1), zl, color=PALETTE[1],
+                   lw=1.0, label=r"DR+$\Phi_\theta$")
+        ax.set_title(f"#{i + 1}", fontsize=7.5)
+        ax.tick_params(labelsize=6.5)
+        if i == 0:
+            ax.legend(fontsize=6, loc="upper right")
+    for j in range(n, nrows * ncols):
+        axes[j // ncols][j % ncols].axis("off")
+    fig.suptitle(r"combined residual $\|z^{k+1}-z^k\|$, per test instance"
+                "\n" r"($z=(\bar x,\,x,\,J,\,\mathrm{balance},\,"
+                r"\mathrm{reciprocity})$)", fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
+def cost_gap_figure(hist_dr, hist_learned, J_stars, ncols=4):
+    """Per-instance grid of |J*-J(x^k)|, DR vs DR+Phi_theta.
+
+    J_stars[i] is an estimate of the (equilibrium-independent) optimal
+    aggregate cost for test instance i -- see `training.optimal_costs`.
+    """
+    n = len(hist_dr)
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 2.2 * nrows),
+                             squeeze=False)
+    for i in range(n):
+        ax = axes[i // ncols][i % ncols]
+        j_star = J_stars[i]
+        gd = np.abs(j_star - np.asarray(hist_dr[i]["cost"]))
+        gl = np.abs(j_star - np.asarray(hist_learned[i]["cost"]))
+        ax.semilogy(np.arange(1, len(gd) + 1), gd, color=PALETTE[0],
+                   lw=1.0, label="DR")
+        ax.semilogy(np.arange(1, len(gl) + 1), gl, color=PALETTE[1],
+                   lw=1.0, label=r"DR+$\Phi_\theta$")
+        ax.set_title(f"#{i + 1}", fontsize=7.5)
+        ax.tick_params(labelsize=6.5)
+        if i == 0:
+            ax.legend(fontsize=6, loc="upper right")
+    for j in range(n, nrows * ncols):
+        axes[j // ncols][j % ncols].axis("off")
+    fig.suptitle(r"cost gap $|J^\star-J(x^k)|$, per test instance",
+                fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
 def band_figure(curves_dr, curves_learned, tol, gamma, lam, rho, min_fraction=0.2):
     """Single plot: median + shaded inter-quartile band across ALL test
     instances. Quick aggregate read of the overall trend; see
@@ -251,11 +441,51 @@ def scatter_figure(res):
     return fig
 
 
+def improvement_histogram(res):
+    """How many test instances improve, and by how much.
+
+    Buckets instances by the fraction of iterations saved,
+    (K_DR - K_phi) / K_DR: negative means DR+Phi_theta needed MORE
+    iterations than plain DR. The "worse" bar's label shows the actual
+    worst-to-best range inside it, so a handful of instances that are only
+    marginally worse don't read as catastrophic next to one that is.
+    """
+    dr_iters = np.asarray(res["dr"], dtype=float)
+    learned_iters = np.asarray(res["learned"], dtype=float)
+    reduction_pct = (dr_iters - learned_iters) / dr_iters * 100.0
+
+    edges = [-np.inf, 0, 50, 80, np.inf]
+    labels = ["worse", "improves\n(up to 50%)",
+              "improves a lot\n(50-80%)", "improves\ndramatically\n(>80%)"]
+    colors = [PALETTE[1], "#C7E8DB", "#43AD85", PALETTE[2]]
+
+    counts = [int(((reduction_pct > lo) & (reduction_pct <= hi)).sum())
+              for lo, hi in zip(edges[:-1], edges[1:])]
+    counts[0] = int((reduction_pct <= edges[1]).sum())
+    if counts[0] > 0:
+        worse = reduction_pct[reduction_pct <= edges[1]]
+        labels[0] = f"worse\n({worse.min():+.0f}% .. {worse.max():+.0f}%)"
+
+    n = len(dr_iters)
+    fig, ax = plt.subplots(figsize=(4.2, 3.2))
+    bars = ax.bar(labels, counts, color=colors, edgecolor="white", linewidth=0.6)
+    for rect, c in zip(bars, counts):
+        pct = 100.0 * c / n
+        ax.annotate(f"{c}\n({pct:.0f}%)", (rect.get_x() + rect.get_width() / 2,
+                    rect.get_height()), ha="center", va="bottom", fontsize=7)
+    ax.set_ylabel("number of instances")
+    ax.set_xlabel(r"iteration reduction, $(K_{\mathrm{DR}}-K_{\Phi})/K_{\mathrm{DR}}$")
+    ax.set_title(f"distribution of improvement (n={n} instances)")
+    ax.set_ylim(0, max(counts) * 1.25)
+    fig.tight_layout()
+    return fig
+
+
 def main():
     rep = Reporter(True)
 
     # ---------------- phase 1: dataset ----------------
-    rep.phase(1, 4, "dataset")
+    rep.phase(1, 5, "dataset")
     (train_ds, test_ds), market_cfg = make_datasets()
     rep.dataset("train", train_ds)
     rep.dataset("test", test_ds)
@@ -265,7 +495,7 @@ def main():
 
     # ---------------- phase 2: centralised training ----------------
     if not FORCE_RETRAIN and os.path.exists(MODEL_PATH):
-        rep.phase(2, 4, "loading existing model")
+        rep.phase(2, 5, "loading existing model")
         gnn = Trainer.load(MODEL_PATH)
         cfg = TrainConfig(gamma=GAMMA, lam=LAM, prox_bisect=BISECT, unroll=UNROLL,
                           rho=RHO, scale=TRAIN_SCALE, epochs=EPOCHS, lr=LR, seed=SEED)
@@ -274,7 +504,7 @@ def main():
                          f"set FORCE_RETRAIN=True to train a fresh one)")
         rep.done()
     else:
-        rep.phase(2, 4, "centralised training")
+        rep.phase(2, 5, "centralised training")
         rep.line("")
         gnn, cfg, trainer, hist = train(train_ds, market_cfg, val_ds=test_ds, rep=rep)
         trainer.save(MODEL_PATH)
@@ -283,7 +513,7 @@ def main():
         rep.done()
 
     # ---------------- phase 3: distributed inference ----------------
-    rep.phase(3, 4, "distributed inference")
+    rep.phase(3, 5, "distributed inference")
     gnn.cfg.scale = DEPLOY_SCALE   # amplitude actually shipped to the prosumers
     rep.kv("deployment", f"weights copied to every prosumer "
                          f"({gnn.n_parameters()} params each), "
@@ -295,8 +525,8 @@ def main():
     rep.kv("mean speed-up", f"{res['mean_speedup']:.2f}x")
     rep.done(f"total {rep.elapsed():.1f}s")
 
-    # ---------------- phase 4: figures ----------------
-    rep.phase(4, 4, "figures")
+    # ---------------- phase 4: basic figures ----------------
+    rep.phase(4, 5, "basic figures")
     rep.kv("curves", f"recording residuals on all {len(test_ds)} test instances")
     curves_dr = residual_curves(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
     curves_learned = residual_curves(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
@@ -312,8 +542,23 @@ def main():
     figures.append((band_figure(curves_dr, curves_learned, TOL, GAMMA, LAM, RHO),
                     "l2play_residual_band"))
     figures.append((scatter_figure(res), "l2play_scatter"))
+    figures.append((improvement_histogram(res), "l2play_improvement_hist"))
     show_or_save_many(figures)
     rep.done()
+
+    # ---------------- phase 5: extended diagnostics ----------------
+    rep.phase(5, 5, "extended diagnostics")
+    rep.line("recomputing full per-iteration histories (DR and DR+model)")
+    hist_dr = histories(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
+    hist_learned = histories(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
+    rep.line("estimating J* per instance (tol=1e-7)")
+    J_stars = optimal_costs(test_ds, cfg, tol=1e-7, max_iter=30000)
+
+    figures2 = [(aux_residual_figure(hist_dr, hist_learned), "l2play_auxresidual"),
+               (z_residual_figure(hist_dr, hist_learned), "l2play_zresidual"),
+               (cost_gap_figure(hist_dr, hist_learned, J_stars), "l2play_costgap")]
+    show_or_save_many(figures2)
+    rep.done(f"grand total {rep.elapsed():.1f}s")
 
 
 if __name__ == "__main__":

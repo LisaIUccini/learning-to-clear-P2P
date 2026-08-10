@@ -295,12 +295,18 @@ class MarketGenerator:
 
     # --- stage 1: pure spec -------------------------------------------
     def sample_spec(self, N: int, seed: Optional[int] = None,
-                    rng: Optional[np.random.Generator] = None) -> MarketSpec:
+                    rng: Optional[np.random.Generator] = None,
+                    neighbors: Optional[Dict[int, List[int]]] = None
+                    ) -> MarketSpec:
         if rng is None:
             rng = np.random.default_rng(seed)
         cfg = self.cfg
 
-        neighbors = _sample_graph(N, cfg, rng)
+        # `neighbors`, if given, fixes the graph and skips drawing a new one
+        # -- used to build datasets where only parameters/initial state vary
+        # across instances (controlled experiments, see DatasetConfig.fixed_graph)
+        if neighbors is None:
+            neighbors = _sample_graph(N, cfg, rng)
 
         def U(lohi):
             return rng.uniform(lohi[0], lohi[1], size=N)
@@ -428,12 +434,21 @@ class DatasetConfig:
     For a first training pass keep `N` and `density` fixed and rely on the
     seed to vary graph/parameters across instances; widen the ranges later
     once the pipeline is validated on a single size.
+
+    `fixed_graph=True` draws ONE graph (using `N`/`density`/`graph_models`,
+    resolved once from `seed`) and reuses it for every instance -- only the
+    market parameters and the initial state differ. Useful as a controlled
+    setting: it removes graph-topology variation as a confound, so any
+    difference in convergence behaviour across instances can be attributed
+    to parameters/initialisation alone. `N` and `density` must be fixed
+    values (not ranges) in this mode.
     """
     n_instances: int = 64
     N: Union[int, Tuple[int, int]] = 10
     density: Union[float, Tuple[float, float]] = 0.3
     graph_models: Sequence[str] = ("sparse",)
     seed: int = 0
+    fixed_graph: bool = False
 
 
 class MarketDataset:
@@ -455,18 +470,38 @@ class MarketDataset:
     def _draw(self) -> None:
         cfg = self.cfg
         rng = np.random.default_rng(cfg.seed)
+
+        fixed_neighbors = None
+        if cfg.fixed_graph:
+            if isinstance(cfg.N, (tuple, list)) or isinstance(cfg.density, (tuple, list)):
+                raise ValueError("fixed_graph=True requires fixed N and density "
+                                "(not ranges), since one graph is shared by "
+                                "every instance.")
+            N0 = int(cfg.N)
+            model0 = str(rng.choice(list(cfg.graph_models)))
+            mc0 = replace(self.market_config, graph_model=model0, density=float(cfg.density))
+            # a graph drawn once, independently of the per-instance streams below
+            graph_rng = np.random.default_rng(cfg.seed)
+            fixed_neighbors = _sample_graph(N0, mc0, graph_rng)
+
         for i in range(cfg.n_instances):
-            N = (int(rng.integers(cfg.N[0], cfg.N[1] + 1))
-                 if isinstance(cfg.N, (tuple, list)) else int(cfg.N))
-            dens = (float(rng.uniform(*cfg.density))
-                    if isinstance(cfg.density, (tuple, list))
-                    else float(cfg.density))
-            model = str(rng.choice(list(cfg.graph_models)))
+            if cfg.fixed_graph:
+                N = int(cfg.N)
+                dens = float(cfg.density)
+                model = model0
+            else:
+                N = (int(rng.integers(cfg.N[0], cfg.N[1] + 1))
+                    if isinstance(cfg.N, (tuple, list)) else int(cfg.N))
+                dens = (float(rng.uniform(*cfg.density))
+                        if isinstance(cfg.density, (tuple, list))
+                        else float(cfg.density))
+                model = str(rng.choice(list(cfg.graph_models)))
 
             mc = replace(self.market_config, graph_model=model, density=dens)
             gen = MarketGenerator(mc)
             # a distinct stream per instance keeps the dataset reproducible
-            self.specs.append(gen.sample_spec(N, seed=int(cfg.seed) * 100003 + i))
+            self.specs.append(gen.sample_spec(N, seed=int(cfg.seed) * 100003 + i,
+                                              neighbors=fixed_neighbors))
 
     # ------------------------------------------------------------------
     def __len__(self) -> int:
