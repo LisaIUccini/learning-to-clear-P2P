@@ -100,6 +100,35 @@ class MarketSpec:
         return _undirected_pairs(self.neighbors)
 
 
+@dataclass
+class MarketPrimitives:
+    """The independent random draws `MarketGenerator` derives a MarketSpec
+    from -- the inputs to the feasibility-preserving formulas in
+    `MarketGenerator._build_spec` (regularity condition -b/a >= G_min,
+    D_star inside its box, the G+G_res/D balance anchor).
+
+    Perturbing THESE (see `MarketGenerator.perturb_spec`) and re-running
+    the SAME derivation formulas keeps every invariant intact by
+    construction; perturbing the derived MarketSpec fields directly
+    (D_min, G_min, D_star, ...) independently would not -- e.g. jittering
+    `a`, `b` and `G_min` separately could break -b/a >= G_min, which the
+    original draw satisfies only because G_min is DERIVED from a, b and a
+    positive margin, not sampled independently.
+    """
+    a: np.ndarray
+    b: np.ndarray
+    Gmax: np.ndarray
+    margin: np.ndarray            # >= 0; Gmin = -b/a - margin
+    G0_frac: np.ndarray           # in (0,1); G0 = G0_frac * Gmax
+    G_res: np.ndarray
+    spread_lo: np.ndarray
+    spread_hi: np.ndarray
+    Dstar_jitter: np.ndarray      # D_star = clip(D0 + jitter, D_min, D_max)
+    a_tilde: np.ndarray
+    c: Dict[Tuple[int, int], float]
+    kappa: Dict[Tuple[int, int], float]   # symmetric per undirected pair
+
+
 def _undirected_pairs(neighbors: Dict[int, List[int]]) -> List[Tuple[int, int]]:
     """Each undirected pair (m, n) once, m < n order not enforced."""
     seen, out = set(), []
@@ -294,6 +323,55 @@ class MarketGenerator:
         self.cfg = config if config is not None else MarketConfig()
 
     # --- stage 1: pure spec -------------------------------------------
+    def _sample_primitives(self, N: int, neighbors: Dict[int, List[int]],
+                           rng: np.random.Generator) -> MarketPrimitives:
+        """Draw the independent random inputs a fresh MarketSpec is built
+        from (see `MarketPrimitives`), each uniform over its `MarketConfig`
+        range."""
+        cfg = self.cfg
+
+        def U(lohi):
+            return rng.uniform(lohi[0], lohi[1], size=N)
+
+        c: Dict[Tuple[int, int], float] = {}
+        for n in range(N):
+            for m in neighbors[n]:
+                c[(m, n)] = float(rng.uniform(*cfg.c_range))
+        kappa: Dict[Tuple[int, int], float] = {}
+        for (i, j) in _undirected_pairs(neighbors):
+            cap = float(rng.uniform(*cfg.kappa_range))   # symmetric per edge
+            kappa[(i, j)] = cap
+            kappa[(j, i)] = cap
+
+        return MarketPrimitives(
+            a=U(cfg.a_range), b=U(cfg.b_range), Gmax=U(cfg.Gmax_range),
+            margin=U(cfg.Gmin_margin_range), G0_frac=U(cfg.G0_frac_range),
+            G_res=U(cfg.G_res_range), spread_lo=U(cfg.D_spread_lo_range),
+            spread_hi=U(cfg.D_spread_hi_range),
+            Dstar_jitter=rng.uniform(-0.5, 0.5, size=N),
+            a_tilde=U(cfg.a_tilde_range), c=c, kappa=kappa,
+        )
+
+    @staticmethod
+    def _build_spec(N: int, neighbors: Dict[int, List[int]],
+                    prim: MarketPrimitives) -> MarketSpec:
+        """Derive a MarketSpec from `prim` -- the SAME formulas regardless
+        of whether `prim` came from a fresh draw or from `perturb_spec`, so
+        every feasibility invariant holds either way (see
+        `MarketPrimitives`'s docstring)."""
+        Gmin = -prim.b / prim.a - prim.margin           # ensures -b/a >= Gmin
+        G0 = prim.G0_frac * prim.Gmax                   # in (0, Gmax)
+        D0 = G0 + prim.G_res                             # feasible anchor
+        D_min = np.maximum(0.0, D0 - prim.spread_lo)
+        D_max = D0 + prim.spread_hi
+        D_star = np.clip(D0 + prim.Dstar_jitter, D_min, D_max)
+        return MarketSpec(
+            N=N, neighbors=neighbors,
+            D_min=D_min, D_max=D_max, D_star=D_star,
+            G_min=Gmin, G_max=prim.Gmax, G_res=prim.G_res,
+            a_tilde=prim.a_tilde, a=prim.a, b=prim.b, c=prim.c, kappa=prim.kappa,
+        )
+
     def sample_spec(self, N: int, seed: Optional[int] = None,
                     rng: Optional[np.random.Generator] = None,
                     neighbors: Optional[Dict[int, List[int]]] = None
@@ -308,48 +386,49 @@ class MarketGenerator:
         if neighbors is None:
             neighbors = _sample_graph(N, cfg, rng)
 
-        def U(lohi):
-            return rng.uniform(lohi[0], lohi[1], size=N)
+        prim = self._sample_primitives(N, neighbors, rng)
+        return self._build_spec(N, neighbors, prim)
 
-        # generation cost coefficients
-        a = U(cfg.a_range)
-        b = U(cfg.b_range)
-        Gmax = U(cfg.Gmax_range)
-        margin = U(cfg.Gmin_margin_range)
-        Gmin = -b / a - margin                     # ensures -b/a >= Gmin
+    def perturb_spec(self, ref_primitives: MarketPrimitives,
+                     neighbors: Dict[int, List[int]], pct: float,
+                     rng: np.random.Generator) -> MarketSpec:
+        """A new MarketSpec whose PRIMITIVES are `ref_primitives`, each
+        independently scaled by a factor drawn uniformly in
+        [1-pct, 1+pct] -- e.g. pct=0.1 for +/-10%. Reuses `_build_spec`
+        (the exact derivation `sample_spec` uses), so the regularity
+        condition, the D_star/box containment, and the balance anchor all
+        still hold, by construction -- not just approximately.
 
-        # operating point (>= 0) and renewable injection
-        G0 = U(cfg.G0_frac_range) * Gmax           # in (0, Gmax)
-        G_res = U(cfg.G_res_range)
+        `kappa` is perturbed once PER UNDIRECTED PAIR (not once per
+        directed entry) so the result stays symmetric, matching how
+        `_sample_primitives` draws it in the first place.
+        """
+        def jitter(x: np.ndarray) -> np.ndarray:
+            x = np.asarray(x, dtype=float)
+            return x * rng.uniform(1.0 - pct, 1.0 + pct, size=x.shape)
 
-        # demand box placed around D0 = G0 + G_res  (feasible anchor)
-        D0 = G0 + G_res
-        spread_lo = U(cfg.D_spread_lo_range)
-        spread_hi = U(cfg.D_spread_hi_range)
-        D_min = np.maximum(0.0, D0 - spread_lo)
-        D_max = D0 + spread_hi
-        # target demand somewhere inside the box (bias toward D0)
-        D_star = np.clip(D0 + rng.uniform(-0.5, 0.5, size=N), D_min, D_max)
-
-        a_tilde = U(cfg.a_tilde_range)
-
-        # per-edge parameters
-        c: Dict[Tuple[int, int], float] = {}
+        pairs = _undirected_pairs(neighbors)
         kappa: Dict[Tuple[int, int], float] = {}
-        for n in range(N):
-            for m in neighbors[n]:
-                c[(m, n)] = float(rng.uniform(*cfg.c_range))
-        for (i, j) in _undirected_pairs(neighbors):
-            cap = float(rng.uniform(*cfg.kappa_range))   # symmetric per edge
+        for (i, j) in pairs:
+            cap = float(ref_primitives.kappa[(i, j)]
+                       * rng.uniform(1.0 - pct, 1.0 + pct))
             kappa[(i, j)] = cap
             kappa[(j, i)] = cap
+        c = {k: float(v * rng.uniform(1.0 - pct, 1.0 + pct))
+            for k, v in ref_primitives.c.items()}
 
-        return MarketSpec(
-            N=N, neighbors=neighbors,
-            D_min=D_min, D_max=D_max, D_star=D_star,
-            G_min=Gmin, G_max=Gmax, G_res=G_res,
-            a_tilde=a_tilde, a=a, b=b, c=c, kappa=kappa,
+        prim = MarketPrimitives(
+            a=jitter(ref_primitives.a), b=jitter(ref_primitives.b),
+            Gmax=jitter(ref_primitives.Gmax), margin=jitter(ref_primitives.margin),
+            G0_frac=np.clip(jitter(ref_primitives.G0_frac), 0.01, 0.99),
+            G_res=jitter(ref_primitives.G_res),
+            spread_lo=jitter(ref_primitives.spread_lo),
+            spread_hi=jitter(ref_primitives.spread_hi),
+            Dstar_jitter=jitter(ref_primitives.Dstar_jitter),
+            a_tilde=jitter(ref_primitives.a_tilde), c=c, kappa=kappa,
         )
+        N = len(ref_primitives.a)
+        return self._build_spec(N, neighbors, prim)
 
     # --- stage 2: build torch objects ---------------------------------
     def build(self, spec: MarketSpec, device=None, init: bool = True,
@@ -541,3 +620,89 @@ class MarketDataset:
         s = self.summary()
         return (f"MarketDataset(instances={s['instances']}, "
                 f"N={s['N']}, edges={s['undirected_edges']})")
+
+
+# ======================================================================
+# Clustered dataset: a few REFERENCE markets, each expanded by small
+# (+/- pct) perturbations -- a more realistic alternative to the fully
+# iid sampling `DatasetConfig` uses, where every instance's parameters are
+# independent draws over the WHOLE MarketConfig range regardless of any
+# other instance. Here every instance instead belongs to one of a handful
+# of "clusters" (one physical grid, a handful of typical operating
+# regimes, small day-to-day variation within each) -- closer to how a
+# deployed market would actually vary from one clearing round to the next.
+# ======================================================================
+@dataclass
+class ClusteredDatasetConfig:
+    """See module-level note above. Train and test share the SAME
+    `n_references` reference markets (graph fixed, drawn once) but use
+    DISJOINT perturbed instances -- distinct rng streams, so no perturbed
+    instance is ever shared between train and test, only the reference
+    "cluster centre" is. This tests generalisation to new day-to-day
+    variation on a market whose character the network has already seen,
+    not generalisation to an unseen market character (see
+    `MarketGenerator.perturb_spec` for how a cluster member is drawn).
+    """
+    n_references: int = 5
+    n_train_per_ref: int = 10
+    n_test_per_ref: int = 2
+    pct: float = 0.10           # +/- fraction perturbation around each reference
+    N: int = 10
+    density: float = 0.7
+    graph_model: str = "sparse"
+    seed: int = 42
+
+
+def build_clustered_datasets(
+    cfg: ClusteredDatasetConfig, market_config: Optional[MarketConfig] = None
+) -> Tuple[MarketDataset, MarketDataset, List[MarketSpec]]:
+    """Build (train_ds, test_ds, reference_specs) per `ClusteredDatasetConfig`.
+
+    ONE graph, drawn once and shared by every reference and every
+    perturbed instance (train and test alike) -- same convention as
+    `DatasetConfig(fixed_graph=True)`, so results are directly comparable
+    to the existing fixed-graph experiments. `reference_specs` is returned
+    too (not used downstream, but handy for diagnostics/plots that want to
+    show "how far is this test instance from its own reference").
+    """
+    mc = replace(market_config if market_config is not None else MarketConfig(),
+                graph_model=cfg.graph_model, density=cfg.density)
+    gen = MarketGenerator(mc)
+
+    graph_rng = np.random.default_rng(cfg.seed)
+    neighbors = _sample_graph(cfg.N, mc, graph_rng)
+
+    # distinct, non-overlapping rng streams: references, then train
+    # perturbations, then test perturbations -- so "new perturbation,
+    # same reference" for test is never a draw train could also have made.
+    ref_rng = np.random.default_rng(cfg.seed + 1)
+    train_rng = np.random.default_rng(cfg.seed + 1_000_001)
+    test_rng = np.random.default_rng(cfg.seed + 2_000_001)
+
+    references: List[MarketPrimitives] = []
+    reference_specs: List[MarketSpec] = []
+    for _ in range(cfg.n_references):
+        prim = gen._sample_primitives(cfg.N, neighbors, ref_rng)
+        references.append(prim)
+        reference_specs.append(gen._build_spec(cfg.N, neighbors, prim))
+
+    train_specs: List[MarketSpec] = []
+    test_specs: List[MarketSpec] = []
+    for prim in references:
+        for _ in range(cfg.n_train_per_ref):
+            train_specs.append(gen.perturb_spec(prim, neighbors, cfg.pct, train_rng))
+        for _ in range(cfg.n_test_per_ref):
+            test_specs.append(gen.perturb_spec(prim, neighbors, cfg.pct, test_rng))
+
+    def _wrap(specs: List[MarketSpec], n_instances: int) -> MarketDataset:
+        ds = MarketDataset.__new__(MarketDataset)
+        ds.cfg = DatasetConfig(n_instances=n_instances, N=cfg.N, density=cfg.density,
+                               graph_models=(cfg.graph_model,), seed=cfg.seed,
+                               fixed_graph=True)
+        ds.market_config = mc
+        ds.specs = specs
+        return ds
+
+    train_ds = _wrap(train_specs, len(train_specs))
+    test_ds = _wrap(test_specs, len(test_specs))
+    return train_ds, test_ds, reference_specs

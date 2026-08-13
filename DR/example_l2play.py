@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 
 from market_generator import MarketConfig, MarketDataset, DatasetConfig
 from gnn import PerturbationGNN, GNNConfig, deploy
-from training import (TrainConfig, Trainer, compare, Reporter, residual_curves,
+from training import (TrainConfig, Trainer, compare, Reporter,
                      histories, optimal_costs)
 from plot_style import set_paper_style, show_or_save_many, PALETTE, plot_band
 
@@ -197,7 +197,8 @@ def train(train_ds, market_cfg, val_ds=None, rep=None, *,
          hidden=HIDDEN, rho=RHO, train_scale=TRAIN_SCALE,
          unroll=UNROLL, tbptt_segment=TBPTT_SEGMENT,
          gamma=GAMMA, lam=LAM, bisect=BISECT,
-         epochs=EPOCHS, lr=LR, seed=SEED):
+         epochs=EPOCHS, lr=LR, seed=SEED,
+         decay="geometric", poly_p=1.5):
     """Centralised training. All hyperparameters are explicit keyword
     arguments (defaulting to this module's own CONFIG constants) so a
     CALLER's own values are actually used -- a plain module-global lookup
@@ -205,13 +206,20 @@ def train(train_ds, market_cfg, val_ds=None, rep=None, *,
     called from a different file with same-named but different constants
     (this bit a real run: example_fixedgraph.py's own EPOCHS/LR were being
     ignored in favour of this module's, undetected until the saved
-    checkpoint's metadata was checked)."""
+    checkpoint's metadata was checked).
+
+    `decay`/`poly_p`: see gnn.GNNConfig's `decay` docstring -- "geometric"
+    (default, unchanged behaviour) or "polynomial" (documentation.txt
+    sec. 10's follow-up experiment: a much slower but still summable
+    decay, meant to extend the perturbation's non-negligible influence out
+    to the horizon plain DR actually needs on hard instances)."""
     torch.manual_seed(seed)
     gnn = PerturbationGNN(GNNConfig.from_market_config(
-        market_cfg, hidden_dim=hidden, rho=rho, scale=train_scale))
+        market_cfg, hidden_dim=hidden, rho=rho, scale=train_scale,
+        decay=decay, poly_p=poly_p))
     cfg = TrainConfig(gamma=gamma, lam=lam, prox_bisect=bisect,
                       unroll=unroll, rho=rho, scale=train_scale,
-                      tbptt_segment=tbptt_segment,
+                      tbptt_segment=tbptt_segment, decay=decay, poly_p=poly_p,
                       epochs=epochs, lr=lr, seed=seed, verbose=True)
     tr = Trainer(gnn, cfg)
     hist = tr.fit(train_ds, val_dataset=val_ds, reporter=rep)
@@ -400,7 +408,7 @@ def cost_gap_figure(hist_dr, hist_learned, J_stars, ncols=4):
     return fig
 
 
-def band_figure(curves_dr, curves_learned, tol, gamma, lam, rho, min_fraction=0.2):
+def band_figure(curves_dr, curves_learned, tol, gamma, lam, decay_label, min_fraction=0.2):
     """Single plot: median + shaded inter-quartile band across ALL test
     instances. Quick aggregate read of the overall trend; see
     `per_instance_figure`'s docstring for why it can be misleading in
@@ -419,7 +427,7 @@ def band_figure(curves_dr, curves_learned, tol, gamma, lam, rho, min_fraction=0.
     ax.set_xlabel(r"iteration $k$")
     ax.set_ylabel(r"shadow residual $\|\bar x_{k+1}-\bar x_k\|_2$")
     ax.set_title(rf"distributed DR vs DR+$\Phi_\theta$ over the test set "
-                rf"($\gamma={gamma}$, $\lambda={lam}$, $\rho={rho}$) "
+                rf"($\gamma={gamma}$, $\lambda={lam}$, {decay_label}) "
                 rf"-- median $\pm$ IQR")
     ax.set_xlim(left=0)
     ax.legend(loc="upper right")
@@ -527,9 +535,17 @@ def main():
 
     # ---------------- phase 4: basic figures ----------------
     rep.phase(4, 5, "basic figures")
-    rep.kv("curves", f"recording residuals on all {len(test_ds)} test instances")
-    curves_dr = residual_curves(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
-    curves_learned = residual_curves(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
+    # `histories()` records the exact same distributed run `residual_curves()`
+    # would (same dataset, same x0, same solver config -- dataset.build(i) is
+    # deterministic), just keeping every diagnostic field instead of only
+    # "residual". Computing it once here and reusing it in phase 5 avoids
+    # re-running the whole distributed solve a second time for identical
+    # results.
+    rep.kv("curves", f"recording full histories on all {len(test_ds)} test instances")
+    hist_dr = histories(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
+    hist_learned = histories(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
+    curves_dr = [np.asarray(h["residual"]) for h in hist_dr]
+    curves_learned = [np.asarray(h["residual"]) for h in hist_learned]
 
     set_paper_style()
     figures = []
@@ -539,7 +555,7 @@ def main():
         rep.line("(no training loss to plot -- model was loaded, not trained)")
     figures.append((per_instance_figure(curves_dr, curves_learned, TOL),
                     "l2play_residual"))
-    figures.append((band_figure(curves_dr, curves_learned, TOL, GAMMA, LAM, RHO),
+    figures.append((band_figure(curves_dr, curves_learned, TOL, GAMMA, LAM, rf"$\rho={RHO}$"),
                     "l2play_residual_band"))
     figures.append((scatter_figure(res), "l2play_scatter"))
     figures.append((improvement_histogram(res), "l2play_improvement_hist"))
@@ -548,11 +564,9 @@ def main():
 
     # ---------------- phase 5: extended diagnostics ----------------
     rep.phase(5, 5, "extended diagnostics")
-    rep.line("recomputing full per-iteration histories (DR and DR+model)")
-    hist_dr = histories(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
-    hist_learned = histories(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
-    rep.line("estimating J* per instance (tol=1e-7)")
-    J_stars = optimal_costs(test_ds, cfg, tol=1e-7, max_iter=30000)
+    rep.line("reusing per-iteration histories recorded in phase 4")
+    rep.line("solving equilibrium QP per instance (exact)")
+    J_stars = optimal_costs(test_ds)
 
     figures2 = [(aux_residual_figure(hist_dr, hist_learned), "l2play_auxresidual"),
                (z_residual_figure(hist_dr, hist_learned), "l2play_zresidual"),

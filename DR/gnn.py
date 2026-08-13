@@ -135,9 +135,25 @@ class GNNConfig:
     """
     hidden_dim: int = 32              # d_h -- fixed, independent of N and |E|
     rho: float = 0.9                  # perturbation decay in (0,1) -> summability
+                                      # (used only when decay == "geometric")
     scale: float = 1.0                # amplitude, as a FRACTION of the local
                                       # physical range (box width / capacity)
     activation: str = "tanh"          # hidden activation: tanh | relu
+
+    # decay schedule a_k multiplying `scale` at iteration k, k=0,1,2,...
+    # Combettes' perturbed-KM result (see module docstring, sec. 03 of
+    # documentation.txt) only requires sum_k a_k < infinity for a FIXED
+    # (theta-independent) sequence -- geometric is not special, just the
+    # family used so far. "polynomial" decays far more slowly (a_k ~
+    # (k+1)^-poly_p instead of rho^k), so the perturbation stays
+    # non-negligible out to iteration counts a fixed rho=0.9 schedule
+    # cannot reach (rho^k is already ~0 by k~150-200; see
+    # documentation.txt sec. 10's "DIAGNOSTIC" for why this matters --
+    # plain DR's own convergence horizon on some instances is 10-15x
+    # longer than that). Still summable for ANY poly_p > 1 (Riemann
+    # zeta), so the safety guarantee is unaffected by the choice.
+    decay: str = "geometric"          # "geometric" | "polynomial"
+    poly_p: float = 1.5               # exponent for "polynomial" (> 1 required)
 
     # reference ranges for feature normalisation -- MUST match (or bound)
     # the MarketConfig the training data is drawn from. Defaults mirror
@@ -154,6 +170,10 @@ class GNNConfig:
             raise ValueError("hidden_dim must be positive")
         if not (self.scale > 0):
             raise ValueError("scale must be > 0")
+        if self.decay not in ("geometric", "polynomial"):
+            raise ValueError('decay must be "geometric" or "polynomial"')
+        if self.decay == "polynomial" and not (self.poly_p > 1.0):
+            raise ValueError("poly_p must be > 1 for summability (Riemann zeta)")
 
     @classmethod
     def from_market_config(cls, market_cfg, **kwargs) -> "GNNConfig":
@@ -443,15 +463,16 @@ class PerturbationGNN(nn.Module):
             delta_node = torch.tanh(self.phi_node(mem_new)) * gate
             return (delta_node[0] * (dD / 2.0), delta_node[1] * (dG / 2.0), {}, mem_new)
 
-        rows = []
-        for m in s.neighbors:
-            kap = torch.clamp(s.kappa[m], min=1e-6)
-            q_own = s.q_own[m] / kap
-            q_recv = s.q_recv[m] / kap
-            h_c = _norm(s.c[m], cfg.c_range)
-            rows.append(torch.stack([q_own.reshape(()), q_recv.reshape(()),
-                                     h_c.reshape(())]))
-        e = torch.stack(rows)                                          # (k, D_EDGE)
+        # Build the (k, D_EDGE) edge-feature matrix with one stack + one set
+        # of elementwise ops instead of a per-neighbour Python loop -- same
+        # values, since _norm and the division are purely elementwise (no
+        # reduction whose order could change a result).
+        kappa_vec = torch.clamp(
+            torch.stack([s.kappa[m] for m in s.neighbors]), min=1e-6)
+        q_own_vec = torch.stack([s.q_own[m] for m in s.neighbors]) / kappa_vec
+        q_recv_vec = torch.stack([s.q_recv[m] for m in s.neighbors]) / kappa_vec
+        h_c_vec = _norm(torch.stack([s.c[m] for m in s.neighbors]), cfg.c_range)
+        e = torch.stack([q_own_vec, q_recv_vec, h_c_vec], dim=1)        # (k, D_EDGE)
 
         msg = self.phi_msg(e)                                          # message
         agg = msg.sum(dim=0) / float(k_nb) ** 0.5                      # aggregate
@@ -462,10 +483,17 @@ class PerturbationGNN(nn.Module):
         delta_D = delta_node[0] * (dD / 2.0)
         delta_G = delta_node[1] * (dG / 2.0)
 
+        # NOTE: batching this phi_edge call across neighbours (one GEMM
+        # instead of k GEMV calls) was tried and reverted -- it is
+        # mathematically the same MLP but batched matmul rounds differently
+        # at the ULP level than per-row calls, and that tiny difference was
+        # observed to shift the exact convergence iteration on some
+        # instances (a real behaviour change, not just a speed one), so the
+        # per-neighbour loop is kept here despite being slower.
         delta_q = {}
         for i, m in enumerate(s.neighbors):
             out = torch.tanh(self.phi_edge(torch.cat([mem_new, e[i]]))) * gate
-            delta_q[m] = out.reshape(()) * torch.clamp(s.kappa[m], min=1e-6)
+            delta_q[m] = out.reshape(()) * kappa_vec[i]
 
         return delta_D, delta_G, delta_q, mem_new
 
@@ -479,12 +507,59 @@ class PerturbationGNN(nn.Module):
     def summability_bound(self, net: EnergyNetwork) -> float:
         """Upper bound on sum_k ||v^k|| for this instance.
 
-        scale * ||physical_scale(net)||_2 / (1 - rho): finite for any
-        trained (or untrained) weights, since the bound never uses theta.
+        scale * ||physical_scale(net)||_2 * (sum_k a_k): finite for any
+        trained (or untrained) weights, since the bound never uses theta,
+        and for either decay family (`decay_budget` below), since both are
+        fixed, theta-independent, summable sequences.
         """
         with torch.no_grad():
             norm = torch.linalg.vector_norm(self.physical_scale(net))
-        return float(self.cfg.scale * norm / (1.0 - self.cfg.rho))
+        return float(self.cfg.scale * norm * decay_budget(self.cfg))
+
+
+# ======================================================================
+# Amplitude schedule a_k -- ONE definition, used by both the centralised
+# (training) and distributed (deployment) paths, exactly like `direction`
+# / `local_forward` are one function computed two ways. See GNNConfig's
+# `decay` docstring: Combettes' perturbed-KM result only needs
+# sum_k a_k < infinity for a FIXED, theta-independent sequence -- geometric
+# is not privileged, just what was used until now.
+# ======================================================================
+def decay_amplitude(cfg: GNNConfig, k: int,
+                    rho: Optional[float] = None,
+                    poly_p: Optional[float] = None) -> float:
+    """a_k at iteration k, k=0,1,2,... (v^k = scale * a_k * direction(x^k)).
+
+    `rho`/`poly_p` let a caller override the config's own value (mirrors
+    the existing `LocalAgent(rho=...)` deploy-time-override pattern) --
+    None (default) uses `cfg.rho` / `cfg.poly_p`.
+    """
+    if cfg.decay == "geometric":
+        r = cfg.rho if rho is None else rho
+        return r ** k
+    p = cfg.poly_p if poly_p is None else poly_p
+    return (k + 1) ** (-p)
+
+
+def decay_budget(cfg: GNNConfig) -> float:
+    """sum_{k=0}^infty a_k, a finite upper bound for either decay family.
+
+    Geometric: closed form 1/(1-rho). Polynomial: a partial sum over a
+    large but finite N plus a rigorous tail bound from the integral test
+    (a_k is positive and decreasing in k for poly_p > 1):
+        sum_{k=N}^infty a_k <= integral_{N-1}^infty (x+1)^-poly_p dx
+                             =  N^{1-poly_p} / (poly_p - 1)
+    so `partial + tail` over-estimates the true (finite) sum -- a valid,
+    checkable bound, not an approximation the summability guarantee
+    depends on being tight.
+    """
+    if cfg.decay == "geometric":
+        return 1.0 / (1.0 - cfg.rho)
+    N = 100_000
+    ks = torch.arange(N, dtype=torch.float64)
+    partial = float(((ks + 1.0) ** (-cfg.poly_p)).sum())
+    tail = float(N) ** (1.0 - cfg.poly_p) / (cfg.poly_p - 1.0)
+    return partial + tail
 
 
 # ======================================================================
@@ -493,10 +568,10 @@ class PerturbationGNN(nn.Module):
 def perturbation_vector(gnn: PerturbationGNN, net: EnergyNetwork, x: torch.Tensor,
                         k: int, mem: torch.Tensor, prev_residual: torch.Tensor
                         ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """v^k = scale * rho^k * direction(x): the centralised mirror of what
+    """v^k = scale * a_k * direction(x): the centralised mirror of what
     `LocalAgent.perturbation` computes distributedly, used by the
     differentiable training rollout in training.py. Returns (v, mem_new)."""
-    amp = gnn.cfg.scale * (gnn.cfg.rho ** k)
+    amp = gnn.cfg.scale * decay_amplitude(gnn.cfg, k)
     d, mem_new = gnn.direction(net, x, mem, prev_residual)
     return amp * d, mem_new
 
@@ -513,10 +588,16 @@ class LocalAgent:
     """
 
     def __init__(self, gnn: PerturbationGNN, node_id: int,
-                 rho: Optional[float] = None, scale: Optional[float] = None):
+                 rho: Optional[float] = None, scale: Optional[float] = None,
+                 poly_p: Optional[float] = None):
         self.gnn = gnn
         self.node_id = int(node_id)
+        # rho/poly_p overrides only apply to the matching decay family
+        # (geometric / polynomial respectively); kept as separate optional
+        # knobs for deploy-time-only experiments, mirroring the existing
+        # deploy-time rho-override pattern (documentation.txt sec. 10).
         self.rho = gnn.cfg.rho if rho is None else rho
+        self.poly_p = gnn.cfg.poly_p if poly_p is None else poly_p
         self.scale = gnn.cfg.scale if scale is None else scale
 
     @torch.no_grad()
@@ -528,7 +609,8 @@ class LocalAgent:
         node's own recurrent history, untouched by the amplitude schedule
         (only the direction is scaled, not the memory).
         """
-        amp = self.scale * (self.rho ** k)
+        amp = self.scale * decay_amplitude(self.gnn.cfg, k, rho=self.rho,
+                                           poly_p=self.poly_p)
         dD, dG, dq, mem_new = self.gnn.local_forward(state)
         return amp * dD, amp * dG, {m: amp * v for m, v in dq.items()}, mem_new
 

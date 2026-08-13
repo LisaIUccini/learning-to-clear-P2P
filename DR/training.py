@@ -62,8 +62,8 @@ from the very algorithm being accelerated, not an external oracle. Set
 aside to keep training strictly self-supervised: no reference solution,
 precomputed or otherwise, enters the loss at all.
 
-This design (attempt 4) uses only the perturbed trajectory's own r_k
-sequence and a STATIC, zero-computation per-instance scale (the same
+This design (attempt 4, current) uses only the perturbed trajectory's own
+r_k sequence and a STATIC, zero-computation per-instance scale (the same
 `gnn.physical_scale` used to size the perturbation itself -- half the D/G
 box, the trade capacity kappa -- no DR steps of any kind needed to obtain
 it). Writing rho_k = r_k / (||physical_scale|| + eps):
@@ -95,8 +95,56 @@ same dead ends are not re-walked:
     "ATTEMPTS TO EXTEND REACH" in example_l2play.py) -- disabling it alone
     did not fix that collapse either, so it was just complexity with no
     longer any justification, not a working safeguard.
-  - Monotonicity term measured on the wrong residual (shadow instead of
-    auxiliary): FIXED, see above.
+
+Attempt 5 (TRIED AND REVERTED): both terms measured on a residual computed
+BEFORE v^k instead of after -- d^k = ||z^k-xbar^k||, the classic DR/KM
+fixed-point residual (line 6's prox output minus line 4's shadow). The
+motivation was real: both r_k and the auxiliary residual above are
+measured AFTER v^k is added (x^{k+1} already includes it), so in principle
+the network could choose v^k ~= -lam*(z^k-xbar^k) to cancel DR's own step
+and "freeze" the trajectory, shrinking the measured residual without
+genuine progress -- the same failure mode as attempt 1, just not gamed via
+an unbounded log reward this time. d^k cannot be touched by v^k at the
+same index at all, closing that door, and has a clean theoretical
+reading (d^k=0 iff x^k is a DR fixed point; metric subregularity gives
+dist(x^k,Fix) <= kappa*d^k for this problem's polyhedral/quadratic
+structure, so it is a legitimate distance surrogate, not just a heuristic).
+Despite the sound theory, it measured WORSE end-to-end on two independent
+datasets: 2.12x->1.45x (30-instance varying-graph set, regressions
+7/30->13/30) and 1.23x->1.10x (a denser fixed graph, regressions
+2/10->6/10). Best-guess reason: precisely because d^k excludes v^k at the
+same index, v^k gets NO direct gradient signal from the current step's
+loss term -- only an indirect, diluted one through v^k's effect on later
+steps' state. The theoretically cleaner, exploit-proof signal turned out
+to be a practically weaker training signal for the actual decision
+variable, and that cost outweighed the benefit of closing a vulnerability
+gradient descent may not have been exploiting from this initialisation
+anyway. Reverted to the post-v^k residuals above.
+
+Attempt 6 (TRIED AND REVERTED): rather than replacing the post-v^k
+residuals with d^k (attempt 5), ADD d^k as a third term on top of them,
+so the decay term keeps giving v^k a direct gradient signal while d^k
+guards against the same freezing exploit. Tested two ways on the fixed
+graph N10D07 dataset, both with gamma=1.0 (no change) but two different
+gamma_mono settings, all else (rho=0.9, unroll=400, 40 epochs, lr=3e-3)
+identical to the validated recipe:
+  - gamma_mono=0 (drop the monotonicity penalty entirely, on the theory
+    that a genuinely convergent policy should have monotonicity emerge on
+    its own rather than being forced) + w_fix=1: WORSE (1.23x->1.13x mean
+    on the original 10-instance test set, regressions 2/10->5/10, with the
+    single best instance collapsing from 1.79x to 0.45x -- slower than
+    plain DR, using more than double DR's own iteration count).
+  - gamma_mono=2 (kept, UNCHANGED) + w_fix=1, re-tested on a larger
+    30-instance test set (to rule out the 10-instance set just being too
+    noisy -- a single instance flipping moved the mean by ~0.1-0.15x in
+    both experiments above): STILL worse, 1.23x->1.11x.
+Conclusion: the monotonicity penalty is not merely blocking useful
+aggressive trajectories (the original hypothesis) -- it is doing real
+stabilising work. Removing or diluting it, even while adding a
+theoretically well-motivated extra term (d^k, which IS exploit-proof by
+construction and has a clean theoretical reading -- see attempt 5), costs
+more in variance across instances than it gains. Reverted; `rollout` no
+longer computes d^k at all.
 
 Truncated BPTT (`TrainConfig.tbptt_segment`, `Trainer._fit_instance_tbptt`)
 addresses a DIFFERENT problem than the loss shape: training rho/unroll
@@ -143,9 +191,20 @@ class TrainConfig:
     # trajectory behaves once the perturbation has switched off, not only
     # while it is active.
     unroll: int = 120           # K: iterations differentiated through
-    rho: float = 0.9            # decay of the perturbation (summability)
+    rho: float = 0.9            # decay of the perturbation (summability;
+                                # used only when decay == "geometric")
     scale: float = 1.0          # amplitude, as a fraction of the local
                                 # physical range (see gnn.PerturbationGNN)
+    decay: str = "geometric"    # "geometric" | "polynomial" -- see
+                                # gnn.GNNConfig's `decay` docstring. Both
+                                # are fixed, theta-independent, summable
+                                # sequences, so either preserves Theorem 1;
+                                # "polynomial" decays far more slowly,
+                                # trading a smaller per-step amplitude for
+                                # a much longer horizon of non-negligible
+                                # influence (see documentation.txt sec. 10,
+                                # "DIAGNOSTIC").
+    poly_p: float = 1.5         # exponent for "polynomial" (> 1 required)
 
     # Truncated BPTT: if set, `unroll` is covered in consecutive windows of
     # this length instead of one single differentiable rollout. The state
@@ -186,8 +245,12 @@ class TrainConfig:
     verbose: bool = True
 
     def __post_init__(self):
-        if not (0.0 < self.rho < 1.0):
+        if self.decay not in ("geometric", "polynomial"):
+            raise ValueError('decay must be "geometric" or "polynomial"')
+        if self.decay == "geometric" and not (0.0 < self.rho < 1.0):
             raise ValueError("rho must lie in (0,1)")
+        if self.decay == "polynomial" and not (self.poly_p > 1.0):
+            raise ValueError("poly_p must be > 1 for summability (Riemann zeta)")
         if self.unroll <= 0:
             raise ValueError("unroll must be positive")
         if not (0.0 <= self.loss_start_frac < 1.0):
@@ -249,20 +312,26 @@ class Reporter:
                       f"{s['undirected_edges'][1]}")
 
     def setup(self, gnn: PerturbationGNN, cfg: "TrainConfig", n_instances: int) -> None:
-        k99 = int(np.ceil(np.log(0.01) / np.log(cfg.rho)))
+        if cfg.decay == "geometric":
+            k99 = int(np.ceil(np.log(0.01) / np.log(cfg.rho)))
+            decay_desc = f"rho={cfg.rho:.2f}"
+            summ_desc = "x physical scale x rho^k"
+        else:
+            k99 = int(np.ceil(100.0 ** (1.0 / cfg.poly_p) - 1.0))
+            decay_desc = f"poly_p={cfg.poly_p:.2f}"
+            summ_desc = "x physical scale x (k+1)^-poly_p"
         self.kv("baseline DR", f"gamma={cfg.gamma}  lambda={cfg.lam}  "
                                f"bisect={cfg.prox_bisect}")
         self.kv("model", f"d_h={gnn.cfg.hidden_dim} | {gnn.n_parameters()} "
                          f"parameters (independent of N and |E|)")
-        self.kv("unrolling", f"K={cfg.unroll} steps | rho={cfg.rho:.2f} "
-                             f"(amplitude below 1% after k={k99})")
+        self.kv("unrolling", f"K={cfg.unroll} steps | {cfg.decay} decay, "
+                             f"{decay_desc} (amplitude below 1% after k={k99})")
         if cfg.tbptt_segment:
             n_seg = int(np.ceil(cfg.unroll / cfg.tbptt_segment))
             self.kv("tbptt", f"truncated BPTT: {n_seg} windows of "
                             f"{cfg.tbptt_segment} steps (state persists, "
                             f"gradient does not cross window boundaries)")
-        self.kv("summability", "guaranteed by construction: tanh output "
-                               "x physical scale x rho^k")
+        self.kv("summability", f"guaranteed by construction: tanh output {summ_desc}")
         self.kv("loss", f"self-referential: normalised residual + "
                        f"gamma_mono={cfg.loss_gamma_mono:g} monotonicity "
                        f"(on the auxiliary residual), window "
@@ -309,8 +378,12 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
       - `residuals_aux` : auxiliary residuals ||x^{k+1}-x^k|| -- the
                           quantity DR's own theory guarantees is
                           (near-exactly) non-increasing
-    both kept as tensors so they can carry gradients back to theta when
-    `differentiable=True`.
+    both measured AFTER v^k is added on line 8, and kept as tensors so
+    they can carry gradients back to theta when `differentiable=True`.
+
+    (Two revisions of this loss were tried and reverted -- see training.py's
+    module docstring for the full writeup ("attempt 5" and "attempt 6"),
+    kept there rather than deleted so the same dead ends are not re-walked.)
 
     `mem0`/`prev_res0`/`k_start` let a caller resume a previously-run
     prefix instead of always starting "cold" at k=0 -- used by truncated
@@ -391,6 +464,12 @@ def stability_loss(residuals: List[torch.Tensor], residuals_aux: List[torch.Tens
     for plain, unperturbed DR (verified: ~1 in 6 steps increases on a
     typical instance) -- so penalising ITS increases would partly punish
     ordinary DR behaviour instead of perturbation-induced damage.
+
+    (An "attempt 9" adding a third, pre-perturbation d^k term on top of
+    this loss -- with and without dropping gamma_mono to let monotonicity
+    emerge on its own -- was tried and reverted: worse on both a 10- and a
+    30-instance fixed-graph test set. See `rollout`'s docstring for the
+    full numbers and writeup.)
     """
     denom = torch.linalg.vector_norm(scale) + eps
 
@@ -420,6 +499,8 @@ class Trainer:
         # keep the deployed amplitude schedule consistent with training
         self.gnn.cfg.rho = self.cfg.rho
         self.gnn.cfg.scale = self.cfg.scale
+        self.gnn.cfg.decay = self.cfg.decay
+        self.gnn.cfg.poly_p = self.cfg.poly_p
         self.opt = torch.optim.Adam(gnn.parameters(), lr=self.cfg.lr,
                                     weight_decay=self.cfg.weight_decay)
         self.history: Dict[str, List[float]] = {"loss": [], "val": []}
@@ -647,28 +728,24 @@ def histories(dataset, gnn: Optional[PerturbationGNN], cfg: TrainConfig,
     return out
 
 
-def optimal_costs(dataset, cfg: TrainConfig, tol: float = 1e-7,
-                  max_iter: int = 30000, device=None) -> List[float]:
-    """Estimate J* per instance: plain (undeployed) DR run to a tight tol.
+def optimal_costs(dataset, cfg: Optional[TrainConfig] = None, device=None) -> List[float]:
+    """Exact J* per instance via the centralised QP (see equilibrium_qp.py).
 
-    The market's equilibrium set need not be a singleton, but every
-    equilibrium shares the same aggregate cost J* -- so the converged cost
-    of a long plain-DR run is a valid estimate regardless of which
-    equilibrium point it actually lands on. `tol` is tighter than the
-    standard stopping tolerance (1e-6) used elsewhere so the estimate is
-    accurate enough to plot |J*-J(x^k)| well below that floor.
+    Every prosumer's cost is separable (no cross terms), so this GNEP is a
+    potential game and its v-GNE coincide with the minimisers of one
+    convex QP over all constraints at once -- solved exactly, in
+    milliseconds, instead of the tens of thousands of (sometimes
+    non-converging) DR iterations the previous long-plain-DR-rollout
+    estimate needed. `cfg` is accepted for backward-compatible call sites
+    but unused (the QP needs no DR hyperparameters at all).
     """
-    from dr_solver import DRSolver, DRConfig
+    from equilibrium_qp import solve_equilibrium_qp
 
-    solver = DRSolver(DRConfig(gamma=cfg.gamma, lam=cfg.lam, n_iter=max_iter,
-                               stop_tol=tol, prox_bisect=cfg.prox_bisect))
     out = []
     for i in range(len(dataset)):
         net = dataset.build(i, device=device)
-        undeploy(net)
-        solver.solve(net, record=False, write_back=False)
-        shadow = net.project_reciprocity(net.flatten())
-        out.append(float(net.cost_at(shadow)))
+        _, J_star = solve_equilibrium_qp(net)
+        out.append(J_star)
     return out
 
 

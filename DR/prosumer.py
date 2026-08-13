@@ -353,11 +353,25 @@ class Prosumer:
             return {m: torch.minimum(rq[m] - g * self.c[m] - nu, self.k[m])
                     for m in self.neighbors}
 
+        # Search loop below only needs the SUM of q_m(nu), not the individual
+        # values -- precompute rq/c/k as vectors once so `balance(nu)` is a
+        # single vectorised op per bisection call instead of rebuilding and
+        # stacking a Python dict ~80+n_bisect times. The per-neighbour dict
+        # is only materialised once, at the end, via q_of(nu) (identical
+        # computation to before, so the returned values are unchanged).
+        if self.neighbors:
+            rq_vec = torch.stack([rq[m] for m in self.neighbors])
+            c_vec = torch.stack([self.c[m] for m in self.neighbors])
+            k_vec = torch.stack([self.k[m] for m in self.neighbors])
+
+            def q_sum(nu):
+                return torch.minimum(rq_vec - g * c_vec - nu, k_vec).sum()
+        else:
+            def q_sum(nu):
+                return torch.zeros((), device=self.device)
+
         def balance(nu):
-            qs = q_of(nu)
-            tot = (torch.stack(list(qs.values())).sum() if qs
-                   else torch.zeros((), device=self.device))
-            return D_of(nu) - G_of(nu) - self.G_res - tot
+            return D_of(nu) - G_of(nu) - self.G_res - q_sum(nu)
 
         lo = -torch.ones((), device=self.device)
         hi = torch.ones((), device=self.device)

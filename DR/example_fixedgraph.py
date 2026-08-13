@@ -23,7 +23,7 @@ import numpy as np
 import torch
 
 from market_generator import MarketConfig, MarketDataset, DatasetConfig
-from training import (TrainConfig, Trainer, compare, Reporter, residual_curves,
+from training import (TrainConfig, Trainer, compare, Reporter,
                      histories, optimal_costs)
 from plot_style import set_paper_style, show_or_save_many
 
@@ -46,17 +46,40 @@ DENSITY         = 0.7          # more connected than the first fixed-graph
                                # interacting), which the 0.3 draw did not show
 GRAPH_MODELS    = ("sparse",)
 
-GAMMA, LAM, BISECT = 2.0, 1.0, 25
+# gamma RETUNED for this dataset (was 2.0, inherited unchanged from the
+# N10/density=0.3 sweep in example_l2play.py). Direct check of PLAIN DR
+# (no GNN) on this denser N10/density=0.7 graph's 10 test instances:
+# gamma=2.0 fails to converge within MAX_ITER on 1/10 instances; gamma=1.0
+# (same lambda, same bisect) converges on all 10, at the cost of roughly
+# 2x more iterations on the instances that were already easy. Since the
+# learned perturbation decays to ~0 by k~150-200 (rho=0.9 below) while the
+# failing instance needed thousands of iterations, no amount of retraining
+# the GNN could have fixed it -- the 1.23x figure measured at gamma=2.0
+# (see failed_experiments_log.md) was measured against a baseline that
+# was not reliable on this dataset in the first place. See
+# documentation.txt sec. 10 ("CONFOUND FOUND") for the full writeup.
+GAMMA, LAM, BISECT = 1.0, 1.0, 25
 TOL, MAX_ITER = 1e-6, 20000
 
 # --- model / training
-# REVERTED to the known-good recipe (rho=0.9, unroll=400, no TBPTT). Every
-# attempt to extend reach past this (deploy-time rho override, full
-# retrain, curriculum, TBPTT -- all documented in example_l2play.py's
-# "ATTEMPTS TO EXTEND REACH" note) ended up worse, down to a 0.56x mean
-# with the TBPTT/rho=0.997 run on this very dataset. Going back to the
-# configuration that is actually proven to work while we re-examine the
-# fundamentals, rather than stacking another attempt on top.
+# REVERTED to the known-good recipe (rho=0.9, unroll=400, no TBPTT, 40
+# epochs, constant lr=3e-3, gamma_mono=2.0, no extra loss terms). Every
+# attempt to improve on this has come out worse, all documented (with
+# exact numbers) either in example_l2play.py's "ATTEMPTS TO EXTEND REACH"
+# note or in training.py's module docstring:
+#   - extending reach (deploy-time rho override, full retrain, curriculum,
+#     TBPTT) -- down to a 0.56x mean with the TBPTT/rho=0.997 run on this
+#     very dataset;
+#   - more epochs (80) + cosine lr-decay (3e-3->3e-4): loss kept
+#     decreasing cleanly, but mean speed-up still dropped 1.23x->1.19x --
+#     a lower self-referential loss did not translate into a faster
+#     deployed policy here;
+#   - adding the pre-perturbation d^k loss term (training.py's "attempt
+#     6"), both with monotonicity dropped (1.23x->1.13x, regressions
+#     2/10->5/10) and with monotonicity kept (re-tested on 30 instances
+#     for statistical stability: 1.23x->1.11x, still worse).
+# This is the configuration that is actually proven to work; re-examine
+# the fundamentals before stacking another attempt on top.
 HIDDEN = 32
 RHO = 0.9
 TRAIN_SCALE = 0.3
@@ -67,8 +90,10 @@ EPOCHS, LR = 40, 3e-3
 SEED = 42
 
 MODEL_PATH = "fixedgraph_phi_theta.pt"
-OUT_DIR = "FixedGraphN10D07test"
-FORCE_RETRAIN = True   # True always retrains, even if MODEL_PATH exists
+# NEW directory (not the old "FixedGraphN10D07test") so this retuned-gamma
+# run does not overwrite the gamma=2.0 baseline results kept for comparison.
+OUT_DIR = "FixedGraphN10D07test_gamma1"
+FORCE_RETRAIN = False   # True always retrains, even if MODEL_PATH exists
 # =====================================================================
 
 
@@ -137,9 +162,17 @@ def main():
 
     # ---------------- phase 4: basic figures ----------------
     rep.phase(4, 5, "basic figures")
-    rep.kv("curves", f"recording residuals on all {len(test_ds)} test instances")
-    curves_dr = residual_curves(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
-    curves_learned = residual_curves(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
+    # `histories()` records the exact same distributed run `residual_curves()`
+    # would (same dataset, same x0, same solver config -- dataset.build(i) is
+    # deterministic), just keeping every diagnostic field instead of only
+    # "residual". Computing it once here and reusing it in phase 5 avoids
+    # re-running the whole distributed solve a second time for identical
+    # results.
+    rep.kv("curves", f"recording full histories on all {len(test_ds)} test instances")
+    hist_dr = histories(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
+    hist_learned = histories(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
+    curves_dr = [np.asarray(h["residual"]) for h in hist_dr]
+    curves_learned = [np.asarray(h["residual"]) for h in hist_learned]
 
     set_paper_style()
     figures = []
@@ -149,7 +182,7 @@ def main():
         rep.line("(no training loss to plot -- model was loaded, not trained)")
     figures.append((per_instance_figure(curves_dr, curves_learned, TOL),
                     os.path.join(OUT_DIR, "l2play_residual")))
-    figures.append((band_figure(curves_dr, curves_learned, TOL, GAMMA, LAM, RHO),
+    figures.append((band_figure(curves_dr, curves_learned, TOL, GAMMA, LAM, rf"$\rho={RHO}$"),
                     os.path.join(OUT_DIR, "l2play_residual_band")))
     figures.append((scatter_figure(res), os.path.join(OUT_DIR, "l2play_scatter")))
     figures.append((improvement_histogram(res), os.path.join(OUT_DIR, "l2play_improvement_hist")))
@@ -158,11 +191,9 @@ def main():
 
     # ---------------- phase 5: extended diagnostics (z-residual, cost gap) ----------------
     rep.phase(5, 5, "extended diagnostics")
-    rep.line("recomputing full per-iteration histories (DR and DR+model)")
-    hist_dr = histories(test_ds, None, cfg, tol=TOL, max_iter=MAX_ITER)
-    hist_learned = histories(test_ds, gnn, cfg, tol=TOL, max_iter=MAX_ITER)
-    rep.line("estimating J* per instance (tol=1e-7)")
-    J_stars = optimal_costs(test_ds, cfg, tol=1e-7, max_iter=30000)
+    rep.line("reusing per-iteration histories recorded in phase 4")
+    rep.line("solving equilibrium QP per instance (exact)")
+    J_stars = optimal_costs(test_ds)
     rep.kv("J*", ", ".join(f"{j:.3f}" for j in J_stars))
 
     fig_aux = aux_residual_figure(hist_dr, hist_learned)
