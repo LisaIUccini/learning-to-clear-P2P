@@ -242,16 +242,25 @@ class LocalNodeState:
     kappa: Dict[int, torch.Tensor]
     mem: torch.Tensor            # (hidden_dim,) recurrent state, own private history
     prev_residual: torch.Tensor  # 0-dim, local move on the PREVIOUS iteration
+    d_k: torch.Tensor            # 0-dim, PRE-perturbation local fixed-point
+                                 # residual ||[zD,zG,zq]-[D,G,qbar]|| -- see
+                                 # Prosumer.dr_step's docstring on why this
+                                 # is safe to expose as a feature (not a
+                                 # loss term)
 
 
 def extract_local_state(net: EnergyNetwork, x: torch.Tensor, n: int,
-                        mem: torch.Tensor, prev_residual: torch.Tensor
+                        mem: torch.Tensor, prev_residual: torch.Tensor,
+                        d_k: torch.Tensor
                         ) -> LocalNodeState:
     """Build node n's local view from a global iterate.
 
     Used for testing/cross-checking `direction` against `local_forward`: in
     a real deployment each prosumer assembles this from its own memory plus
     the messages it received (`Prosumer.local_gnn_state`), never from x.
+    `d_k` must be supplied by the caller (computed from the local prox
+    output, e.g. `training.rollout`'s per-node fixed-point residual) --
+    unlike the other fields, it is not recoverable from `x` alone.
     """
     D, G, Q = net.get_DGQ(x)
     nb = net.neighbors[n]
@@ -265,7 +274,7 @@ def extract_local_state(net: EnergyNetwork, x: torch.Tensor, n: int,
         q_own={m: Q[idx[m]] for m in nb},                 # q_{mn}
         q_recv={m: Q[net.inv_idx[idx[m]]] for m in nb},   # q_{nm}
         c={m: p.c[m] for m in nb}, kappa={m: p.k[m] for m in nb},
-        mem=mem, prev_residual=prev_residual,
+        mem=mem, prev_residual=prev_residual, d_k=d_k,
     )
 
 
@@ -289,7 +298,7 @@ class PerturbationGNN(nn.Module):
     memory" section) -- purely a private history, no communication.
     """
 
-    D_NODE = 8   # h_D, h_G, h_Dstar, h_bal, h_atilde, h_a, h_b, h_prev_res
+    D_NODE = 9   # h_D, h_G, h_Dstar, h_bal, h_atilde, h_a, h_b, h_prev_res, h_dk
     D_EDGE = 3   # e_qown, e_qrecv, e_c
 
     def __init__(self, config: Optional[GNNConfig] = None):
@@ -318,7 +327,7 @@ class PerturbationGNN(nn.Module):
     # CENTRALISED PATH  (training / fast simulation)
     # ==================================================================
     def build_features(self, net: EnergyNetwork, x: torch.Tensor,
-                       prev_residual: torch.Tensor):
+                       prev_residual: torch.Tensor, d_k: torch.Tensor):
         """Node and edge features from the global iterate x.
 
         Every entry is computed from quantities the corresponding node
@@ -326,7 +335,10 @@ class PerturbationGNN(nn.Module):
         of the distributed computation `local_forward` performs.
         `prev_residual` is (N,), the local move on the PREVIOUS iteration
         (zeros on the very first call, see `init_mem`'s counterpart at the
-        call site).
+        call site). `d_k` is (N,), the PRE-perturbation local fixed-point
+        residual of THIS step (see `Prosumer.dr_step`'s docstring) --
+        unlike `prev_residual` it is not delayed by one iteration, giving
+        the gate a same-instant "does DR still want to move here" signal.
         """
         cfg = self.cfg
         D, G, Q = net.get_DGQ(x)
@@ -338,10 +350,11 @@ class PerturbationGNN(nn.Module):
         h_Dstar = 2.0 * (net.D_star_vec - net.D_min_vec) / dD - 1.0
         h_bal = net.balance_at(x) / dD
         h_prev = prev_residual / dD
+        h_dk = d_k / dD
         h_at = _norm(net.a_tilde_vec, cfg.a_tilde_range)
         h_a = _norm(net.a_vec, cfg.a_range)
         h_b = _norm(net.b_vec, cfg.b_range)
-        h = torch.stack([h_D, h_G, h_Dstar, h_bal, h_prev, h_at, h_a, h_b],
+        h = torch.stack([h_D, h_G, h_Dstar, h_bal, h_prev, h_dk, h_at, h_a, h_b],
                         dim=1)                                       # (N, D_NODE)
 
         if net.E == 0:
@@ -355,7 +368,8 @@ class PerturbationGNN(nn.Module):
         return h, e
 
     def forward(self, net: EnergyNetwork, x: torch.Tensor, mem: torch.Tensor,
-               prev_residual: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+               prev_residual: torch.Tensor, d_k: torch.Tensor
+               ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Bounded direction Phi_theta(x) for the whole network, shape (dim,).
 
         Components lie in [-1, 1] (normalised units); `direction` rescales
@@ -364,7 +378,7 @@ class PerturbationGNN(nn.Module):
         `mem_new` must be fed back in as `mem` on the NEXT call for the
         same rollout (see `init_mem`).
         """
-        h, e = self.build_features(net, x, prev_residual)
+        h, e = self.build_features(net, x, prev_residual, d_k)
         N, d_h = net.N, self.cfg.hidden_dim
 
         if net.E > 0:
@@ -408,14 +422,15 @@ class PerturbationGNN(nn.Module):
         return torch.cat([half_D, half_G, net.k_edge])
 
     def direction(self, net: EnergyNetwork, x: torch.Tensor, mem: torch.Tensor,
-                 prev_residual: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                 prev_residual: torch.Tensor, d_k: torch.Tensor
+                 ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Bounded perturbation direction in PHYSICAL units, shape (dim,).
 
         |direction_i| <= physical_scale_i componentwise: this is the
         quantity `perturbation_vector` multiplies by scale * rho^k.
         Returns (direction, mem_new).
         """
-        d, mem_new = self.forward(net, x, mem, prev_residual)
+        d, mem_new = self.forward(net, x, mem, prev_residual, d_k)
         return d * self.physical_scale(net), mem_new
 
     # ==================================================================
@@ -445,12 +460,13 @@ class PerturbationGNN(nn.Module):
                     if s.neighbors else torch.zeros((), dtype=s.D.dtype))
         h_bal = (s.D - s.G - s.G_res - q_own_sum) / dD
         h_prev = s.prev_residual / dD
+        h_dk = s.d_k / dD
         h_at = _norm(s.a_tilde, cfg.a_tilde_range)
         h_a = _norm(s.a, cfg.a_range)
         h_b = _norm(s.b, cfg.b_range)
         h = torch.stack([h_D.reshape(()), h_G.reshape(()), h_Dstar.reshape(()),
-                         h_bal.reshape(()), h_prev.reshape(()), h_at.reshape(()),
-                         h_a.reshape(()), h_b.reshape(())])              # (D_NODE,)
+                         h_bal.reshape(()), h_prev.reshape(()), h_dk.reshape(()),
+                         h_at.reshape(()), h_a.reshape(()), h_b.reshape(())])  # (D_NODE,)
 
         d_h = self.cfg.hidden_dim
         k_nb = len(s.neighbors)
@@ -566,13 +582,19 @@ def decay_budget(cfg: GNNConfig) -> float:
 # Wiring into the DR solver (centralised simulation / training)
 # ======================================================================
 def perturbation_vector(gnn: PerturbationGNN, net: EnergyNetwork, x: torch.Tensor,
-                        k: int, mem: torch.Tensor, prev_residual: torch.Tensor
+                        k: int, mem: torch.Tensor, prev_residual: torch.Tensor,
+                        d_k: torch.Tensor
                         ) -> Tuple[torch.Tensor, torch.Tensor]:
     """v^k = scale * a_k * direction(x): the centralised mirror of what
     `LocalAgent.perturbation` computes distributedly, used by the
-    differentiable training rollout in training.py. Returns (v, mem_new)."""
+    differentiable training rollout in training.py. `d_k` is (N,), the
+    PRE-perturbation local fixed-point residual for THIS step (see
+    `Prosumer.dr_step`'s docstring) -- computed by the caller from the
+    prox output, which must therefore be available before this is called
+    (unlike before, when direction() only needed x and prev_residual).
+    Returns (v, mem_new)."""
     amp = gnn.cfg.scale * decay_amplitude(gnn.cfg, k)
-    d, mem_new = gnn.direction(net, x, mem, prev_residual)
+    d, mem_new = gnn.direction(net, x, mem, prev_residual, d_k)
     return amp * d, mem_new
 
 

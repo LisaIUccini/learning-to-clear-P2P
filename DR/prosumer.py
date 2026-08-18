@@ -393,15 +393,16 @@ class Prosumer:
         nu = 0.5 * (lo + hi)
         return D_of(nu), G_of(nu), q_of(nu)
 
-    def local_gnn_state(self):
+    def local_gnn_state(self, d_k: torch.Tensor):
         """Assemble the strictly local input of the perturbation model.
 
         Contains only this prosumer's own state, own fixed cost/box
         parameters, its own recurrent memory and previous-residual signal,
-        and the q_{nm} received during line 3 -- nothing belonging to a
-        non-neighbour. Built BEFORE the DR update, so the learned map
-        consumes exactly the information already on hand right after the
-        communication round: no second exchange.
+        the q_{nm} received during line 3, and `d_k` (see `dr_step`) --
+        nothing belonging to a non-neighbour. Built right after line 6, so
+        the learned map consumes exactly the information already on hand
+        after the communication round PLUS this node's own local prox
+        result: no second exchange.
         """
         from gnn import LocalNodeState
         if self._mem is None:
@@ -416,7 +417,7 @@ class Prosumer:
             q_recv={m: self.q_received[m] for m in self.neighbors},
             c={m: self.c[m] for m in self.neighbors},
             kappa={m: self.k[m] for m in self.neighbors},
-            mem=self._mem, prev_residual=self._prev_residual,
+            mem=self._mem, prev_residual=self._prev_residual, d_k=d_k,
         )
 
     def dr_step(self, gamma: float, lam: float = 1.0,
@@ -434,19 +435,6 @@ class Prosumer:
                 "EnergyNetwork.communicate() before dr_step()."
             )
 
-        # --- line 8 is EVALUATED HERE, on the pre-update state -----------
-        # The features must be the ones available right after line 3; the
-        # value is applied after the DR update, as in Algorithm 1. `_round`
-        # is this node's OWN count of completed dr_step calls -- it equals
-        # the global iteration index k with no communication needed, since
-        # every node is called exactly once per synchronous round.
-        v = None
-        new_mem = None
-        if self.gnn_agent is not None:
-            v_D, v_G, v_q, new_mem = self.gnn_agent.perturbation(
-                self.local_gnn_state(), self._round)
-            v = (v_D, v_G, v_q)
-
         # --- line 4: shadow of the CURRENT iterate (exact, uses received q)
         qbar = self.shadow_q()
         self._update_shadow_residual(qbar)          # monitoring only
@@ -457,6 +445,32 @@ class Prosumer:
 
         # --- line 6: local prox
         zD, zG, zq = self.local_prox(gamma, rD, rG, rq, n_bisect=n_bisect)
+
+        # --- line 8 is EVALUATED HERE, right after the local prox --------
+        # This matches the paper's own Algorithm 1 ordering (line 9, the
+        # prox, precedes line 11, the GNN call) and makes the PRE-
+        # PERTURBATION local fixed-point residual
+        #     d_k = ||[zD,zG,zq] - [D,G,qbar]||   (this node's share of the
+        #                                           classic DR/KM residual)
+        # available to the gate as an extra input feature, at zero extra
+        # communication cost (zD/zG/zq/qbar are already local quantities).
+        # NOTE: this is a FEATURE, not a loss term -- d_k does not depend
+        # on v^k (it is computed from PRE-perturbation quantities only,
+        # same as it would be), so this does not reopen the gradient-
+        # dilution failure mode that sank using d^k IN THE LOSS (training.py
+        # "attempt 5"/"attempt 6") -- v^k still gets its gradient signal
+        # from the residual/monotonicity/cost-gap loss terms exactly as
+        # before; d_k only gives the network more information to act on.
+        d_parts = [(zD - self.D) ** 2, (zG - self.G) ** 2]
+        d_parts += [(zq[m] - qbar[m]) ** 2 for m in self.neighbors]
+        d_k = torch.sqrt(torch.stack(d_parts).sum() + 1e-12)
+
+        v = None
+        new_mem = None
+        if self.gnn_agent is not None:
+            v_D, v_G, v_q, new_mem = self.gnn_agent.perturbation(
+                self.local_gnn_state(d_k), self._round)
+            v = (v_D, v_G, v_q)
 
         # --- line 7 of Algorithm 1: fully-relaxed DR update -------------
         # The Douglas-Rachford recursion is

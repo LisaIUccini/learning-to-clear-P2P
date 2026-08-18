@@ -1,0 +1,49 @@
+writing all artifacts to runs/fixed_market_on_topology_scale_n30/  (n_test=30)
+======================================================================
+loading the fixed_market model (trained on ZERO diversity,
+never saw topology variation) -- NO retraining here
+======================================================================
+
+dataset: market parameters EXACTLY fixed; graph varies via ONE
+shared +/-10% factor applied to node count AND edge count together
+
+evaluating: plain DR vs DR + Phi_w (fixed_market weights), zero-shot
+----------------------------------------------------------------------
+  [fixed-model-on-topology-scale]  1/30  N= 10  DR   266 it  |  learned   261 it  |  x 1.02 (+1.9%)
+  [fixed-model-on-topology-scale]  2/30  N= 10  DR   522 it  |  learned   483 it  |  x 1.08 (+7.5%)
+  [fixed-model-on-topology-scale]  3/30  N= 11  DR   322 it  |  learned   260 it  |  x 1.24 (+19.3%)
+  [fixed-model-on-topology-scale]  4/30  N= 10  DR   564 it  |  learned   431 it  |  x 1.31 (+23.6%)
+  [fixed-model-on-topology-scale]  5/30  N= 10  DR   372 it  |  learned   265 it  |  x 1.40 (+28.8%)
+  [fixed-model-on-topology-scale]  6/30  N= 10  DR   366 it  |  learned   278 it  |  x 1.32 (+24.0%)
+  [fixed-model-on-topology-scale]  7/30  N= 11  DR  1963 it  |  learned  2046 it  |  x 0.96 (-4.2%)
+  [fixed-model-on-topology-scale]  8/30  N= 10  DR   327 it  |  learned   278 it  |  x 1.18 (+15.0%)
+  [fixed-model-on-topology-scale]  9/30  N= 10  DR   344 it  |  learned   270 it  |  x 1.27 (+21.5%)
+  [fixed-model-on-topology-scale] 10/30  N= 10  DR   313 it  |  learned   293 it  |  x 1.07 (+6.4%)
+  [fixed-model-on-topology-scale] 11/30  N= 10  DR   602 it  |  learned   359 it  |  x 1.68 (+40.4%)
+  [fixed-model-on-topology-scale] 12/30  N= 10  DR   250 it  |  learned   256 it  |  x 0.98 (-2.4%)
+  [fixed-model-on-topology-scale] 13/30  N= 10  DR   410 it  |  learned   397 it  |  x 1.03 (+3.2%)
+  [fixed-model-on-topology-scale] 14/30  N= 11  DR   351 it  |  learned   547 it  |  x 0.64 (-55.8%)
+  [fixed-model-on-topology-scale] 15/30  N= 10  DR   386 it  |  learned   338 it  |  x 1.14 (+12.4%)
+  [fixed-model-on-topology-scale] 16/30  N= 10  DR   438 it  |  learned   267 it  |  x 1.64 (+39.0%)
+  [fixed-model-on-topology-scale] 17/30  N=  9  DR   369 it  |  learned   273 it  |  x 1.35 (+26.0%)
+  [fixed-model-on-topology-scale] 18/30  N= 10  DR   433 it  |  learned   262 it  |  x 1.65 (+39.5%)
+  [fixed-model-on-topology-scale] 19/30  N= 11  DR   302 it  |  learned   261 it  |  x 1.16 (+13.6%)
+  [fixed-model-on-topology-scale] 20/30  N=  9  DR   196 it  |  learned   253 it  |  x 0.77 (-29.1%)
+  [fixed-model-on-topology-scale] 21/30  N= 10  DR   274 it  |  learned   298 it  |  x 0.92 (-8.8%)
+  [fixed-model-on-topology-scale] 22/30  N= 10  DR   294 it  |  learned   261 it  |  x 1.13 (+11.2%)
+  [fixed-model-on-topology-scale] 23/30  N= 10  DR   519 it  |  learned   351 it  |  x 1.48 (+32.4%)
+  [fixed-model-on-topology-scale] 24/30  N= 10  DR   388 it  |  learned   284 it  |  x 1.37 (+26.8%)
+  [fixed-model-on-topology-scale] 25/30  N=  9  DR   522 it  |  learned   342 it  |  x 1.53 (+34.5%)
+  [fixed-model-on-topology-scale] 26/30  N=  9  DR   466 it  |  learned   344 it  |  x 1.35 (+26.2%)
+  [fixed-model-on-topology-scale] 27/30  N=  9  DR   554 it  |  learned   435 it  |  x 1.27 (+21.5%)
+  [fixed-model-on-topology-scale] 28/30  N=  9  DR   556 it  |  learned   392 it  |  x 1.42 (+29.5%)
+  [fixed-model-on-topology-scale] 29/30  N= 10  DR   424 it  |  learned   294 it  |  x 1.44 (+30.7%)
+  [fixed-model-on-topology-scale] 30/30  N= 10  DR   445 it  |  learned   300 it  |  x 1.48 (+32.6%)
+  [fixed-model-on-topology-scale] mean speed-up 1.24x   median 1.27x   min 0.64x   max 1.68x   win-rate 83% (25/30)
+
+recording residual curves...
+saved runs/fixed_market_on_topology_scale_n30/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/fixed_market_on_topology_scale_n30/instance_plots/
+saved runs/fixed_market_on_topology_scale_n30/NOTES.md

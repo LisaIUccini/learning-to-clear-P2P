@@ -49,13 +49,13 @@ def _build_net(density, seed, N=10):
     return net, gnn
 
 
-def _distributed_direction(gnn, net, x, mem, prev_res):
+def _distributed_direction(gnn, net, x, mem, prev_res, d_k):
     """Mirror of what every prosumer computes on its own, assembled here
     only for the cross-check (a real deployment never does this centrally)."""
     d = torch.zeros(net.dim)
     mem_new = torch.zeros_like(mem)
     for n in range(net.N):
-        s = extract_local_state(net, x, n, mem[n], prev_res[n])
+        s = extract_local_state(net, x, n, mem[n], prev_res[n], d_k[n])
         with torch.no_grad():
             dD, dG, dq, mem_new_n = gnn.local_forward(s)
         d[n] = dD
@@ -70,11 +70,13 @@ def _check_parity(net, gnn, n_steps=5):
     x = net.flatten()
     mem = gnn.init_mem(net)
     prev_res = torch.zeros(net.N)
+    d_k = torch.zeros(net.N)   # d_k=0 on the very first call, same convention
+                               # as prev_res (see Prosumer.reset_residuals)
 
     for step in range(n_steps):
         with torch.no_grad():
-            d_central, mem_new_central = gnn.direction(net, x, mem, prev_res)
-        d_dist, mem_new_dist = _distributed_direction(gnn, net, x, mem, prev_res)
+            d_central, mem_new_central = gnn.direction(net, x, mem, prev_res, d_k)
+        d_dist, mem_new_dist = _distributed_direction(gnn, net, x, mem, prev_res, d_k)
 
         diff_d = (d_central - d_dist).abs().max().item()
         diff_mem = (mem_new_central - mem_new_dist).abs().max().item()
@@ -94,6 +96,7 @@ def _check_parity(net, gnn, n_steps=5):
         # inputs, the way it is across real dr_step calls
         x = x + 0.01 * torch.randn_like(x)
         mem, prev_res = mem_new_central, torch.rand(net.N)
+        d_k = torch.rand(net.N)
 
 
 def test_parity_sparse_graph():
@@ -128,7 +131,7 @@ def test_parity_isolated_node():
         G_min=net.prosumers[n].G_min, G_max=net.prosumers[n].G_max,
         a_tilde=net.prosumers[n].a_tilde, a=net.prosumers[n].a,
         b=net.prosumers[n].b, q_own={}, q_recv={}, c={}, kappa={},
-        mem=mem[n], prev_residual=prev_res[n],
+        mem=mem[n], prev_residual=prev_res[n], d_k=torch.zeros(()),
     )
     with torch.no_grad():
         dD, dG, dq, mem_new = gnn.local_forward(s)

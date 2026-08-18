@@ -1,0 +1,51 @@
+writing all artifacts to runs/fixed_market_bigtest/  (n_test=30)
+======================================================================
+loading the fixed_market model (trained on ZERO diversity,
+only x0 varied during training) -- NO retraining here
+======================================================================
+
+dataset: the SAME spec as fixed_market's own base market (graph
+and every parameter identical), repeated n_test times -- only the
+random initial state x0 varies, exactly like demo_fixed_market.py's
+own test set but bigger (fresh draws, not the original 12)
+
+evaluating: plain DR vs DR + Phi_w (fixed_market weights), zero-shot
+----------------------------------------------------------------------
+  [fixed-model-bigtest]  1/30  N= 10  DR   196 it  |  learned   261 it  |  x 0.75 (-33.2%)
+  [fixed-model-bigtest]  2/30  N= 10  DR   545 it  |  learned   376 it  |  x 1.45 (+31.0%)
+  [fixed-model-bigtest]  3/30  N= 10  DR   327 it  |  learned   277 it  |  x 1.18 (+15.3%)
+  [fixed-model-bigtest]  4/30  N= 10  DR   478 it  |  learned   302 it  |  x 1.58 (+36.8%)
+  [fixed-model-bigtest]  5/30  N= 10  DR   414 it  |  learned   271 it  |  x 1.53 (+34.5%)
+  [fixed-model-bigtest]  6/30  N= 10  DR   460 it  |  learned   308 it  |  x 1.49 (+33.0%)
+  [fixed-model-bigtest]  7/30  N= 10  DR   338 it  |  learned   267 it  |  x 1.27 (+21.0%)
+  [fixed-model-bigtest]  8/30  N= 10  DR   383 it  |  learned   282 it  |  x 1.36 (+26.4%)
+  [fixed-model-bigtest]  9/30  N= 10  DR   536 it  |  learned   345 it  |  x 1.55 (+35.6%)
+  [fixed-model-bigtest] 10/30  N= 10  DR   515 it  |  learned   300 it  |  x 1.72 (+41.7%)
+  [fixed-model-bigtest] 11/30  N= 10  DR   386 it  |  learned   263 it  |  x 1.47 (+31.9%)
+  [fixed-model-bigtest] 12/30  N= 10  DR   417 it  |  learned   280 it  |  x 1.49 (+32.9%)
+  [fixed-model-bigtest] 13/30  N= 10  DR   389 it  |  learned   274 it  |  x 1.42 (+29.6%)
+  [fixed-model-bigtest] 14/30  N= 10  DR   353 it  |  learned   258 it  |  x 1.37 (+26.9%)
+  [fixed-model-bigtest] 15/30  N= 10  DR   547 it  |  learned   330 it  |  x 1.66 (+39.7%)
+  [fixed-model-bigtest] 16/30  N= 10  DR   276 it  |  learned   259 it  |  x 1.07 (+6.2%)
+  [fixed-model-bigtest] 17/30  N= 10  DR   493 it  |  learned   319 it  |  x 1.55 (+35.3%)
+  [fixed-model-bigtest] 18/30  N= 10  DR   560 it  |  learned   348 it  |  x 1.61 (+37.9%)
+  [fixed-model-bigtest] 19/30  N= 10  DR   315 it  |  learned   270 it  |  x 1.17 (+14.3%)
+  [fixed-model-bigtest] 20/30  N= 10  DR   392 it  |  learned   288 it  |  x 1.36 (+26.5%)
+  [fixed-model-bigtest] 21/30  N= 10  DR   557 it  |  learned   374 it  |  x 1.49 (+32.9%)
+  [fixed-model-bigtest] 22/30  N= 10  DR   360 it  |  learned   272 it  |  x 1.32 (+24.4%)
+  [fixed-model-bigtest] 23/30  N= 10  DR   418 it  |  learned   280 it  |  x 1.49 (+33.0%)
+  [fixed-model-bigtest] 24/30  N= 10  DR   283 it  |  learned   265 it  |  x 1.07 (+6.4%)
+  [fixed-model-bigtest] 25/30  N= 10  DR   311 it  |  learned   267 it  |  x 1.16 (+14.1%)
+  [fixed-model-bigtest] 26/30  N= 10  DR   527 it  |  learned   322 it  |  x 1.64 (+38.9%)
+  [fixed-model-bigtest] 27/30  N= 10  DR   441 it  |  learned   296 it  |  x 1.49 (+32.9%)
+  [fixed-model-bigtest] 28/30  N= 10  DR   487 it  |  learned   327 it  |  x 1.49 (+32.9%)
+  [fixed-model-bigtest] 29/30  N= 10  DR   389 it  |  learned   264 it  |  x 1.47 (+32.1%)
+  [fixed-model-bigtest] 30/30  N= 10  DR   510 it  |  learned   328 it  |  x 1.55 (+35.7%)
+  [fixed-model-bigtest] mean speed-up 1.41x   median 1.48x   min 0.75x   max 1.72x   win-rate 97% (29/30)
+
+recording residual curves...
+saved runs/fixed_market_bigtest/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/fixed_market_bigtest/instance_plots/
+saved runs/fixed_market_bigtest/NOTES.md

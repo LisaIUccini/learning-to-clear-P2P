@@ -232,6 +232,19 @@ class TrainConfig:
     loss_gamma_mono: float = 2.0
     loss_start_frac: float = 0.0
 
+    # Optional third term, OFF by default (0.0 reproduces the loss above
+    # exactly): |J(xbar^k)-J*| / (|J(xbar^0)-J*|+eps), weighted by
+    # loss_gamma_cost. Deliberately NOT strictly self-supervised (uses
+    # the true optimal cost J*, `equilibrium_qp.solve_equilibrium_qp`) --
+    # see `stability_loss`'s docstring for the full reasoning (why J* and
+    # not a specific equilibrium point, why absolute value, why this
+    # normalisation). Kept small relative to loss_gamma_mono by design:
+    # the trading-cost term is LINEAR in q, so cost alone under-
+    # determines where the trade variables should be -- meant as a
+    # secondary nudge on top of the residual term (which has no such
+    # blind spot), not a replacement for it.
+    loss_gamma_cost: float = 0.0
+
     # --- optimisation ---
     epochs: int = 30
     lr: float = 1e-3
@@ -332,12 +345,20 @@ class Reporter:
                             f"{cfg.tbptt_segment} steps (state persists, "
                             f"gradient does not cross window boundaries)")
         self.kv("summability", f"guaranteed by construction: tanh output {summ_desc}")
-        self.kv("loss", f"self-referential: normalised residual + "
-                       f"gamma_mono={cfg.loss_gamma_mono:g} monotonicity "
-                       f"(on the auxiliary residual), window "
-                       f"k=[{cfg.loss_start},{cfg.unroll})")
-        self.kv("no target", "no baseline rollout, no precomputed equilibrium -- "
-                             "strictly self-supervised")
+        loss_desc = (f"normalised residual + gamma_mono={cfg.loss_gamma_mono:g} "
+                    f"monotonicity (on the auxiliary residual), window "
+                    f"k=[{cfg.loss_start},{cfg.unroll})")
+        if cfg.loss_gamma_cost > 0.0:
+            loss_desc += f" + gamma_cost={cfg.loss_gamma_cost:g} cost-gap-to-J*"
+        self.kv("loss", loss_desc)
+        if cfg.loss_gamma_cost > 0.0:
+            self.kv("target", "NOT strictly self-supervised: cost-gap term uses "
+                              "J* (exact QP solve, cached, ms per instance) -- "
+                              "training only; deployment safety (Theorem 1) is "
+                              "unaffected by this, it holds for any theta")
+        else:
+            self.kv("no target", "no baseline rollout, no precomputed equilibrium -- "
+                                 "strictly self-supervised")
         self.kv("optimiser", f"Adam lr={cfg.lr:g} clip={cfg.grad_clip} | "
                              f"{cfg.epochs} epochs x {n_instances} instances")
         if cfg.unroll < k99:
@@ -362,9 +383,9 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
             cfg: TrainConfig, x0: Optional[torch.Tensor] = None,
             n_iter: Optional[int] = None, differentiable: bool = True,
             mem0=None, prev_res0: Optional[torch.Tensor] = None,
-            k_start: int = 0
+            k_start: int = 0, cost0: Optional[torch.Tensor] = None
             ) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor],
-                      object, torch.Tensor]:
+                      object, torch.Tensor, List[torch.Tensor], torch.Tensor]:
     """Unroll the DR iteration, optionally perturbed by `gnn`.
 
     Mirrors `Prosumer.dr_step` line by line (shadow -> reflection -> prox
@@ -373,13 +394,29 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
     with `gnn.direction` playing the role of every prosumer's own
     `gnn_agent.perturbation` call, evaluated on the SAME pre-update state.
 
-    Returns `(x, residuals, residuals_aux, mem, prev_res)`:
+    Returns `(x, residuals, residuals_aux, mem, prev_res, costs, cost0)`:
       - `residuals`     : shadow residuals r_k = ||xbar^{k+1}-xbar^k||
       - `residuals_aux` : auxiliary residuals ||x^{k+1}-x^k|| -- the
                           quantity DR's own theory guarantees is
                           (near-exactly) non-increasing
-    both measured AFTER v^k is added on line 8, and kept as tensors so
-    they can carry gradients back to theta when `differentiable=True`.
+      - `costs`         : J(xbar^{k+1}) = net.cost_at(xbar_new), one per
+                          step -- feeds the optional cost-gap-to-J* loss
+                          term (`stability_loss`'s `gamma_cost`); always
+                          tracked (the cost formula is a cheap elementwise
+                          computation, not an iterative solve), so callers
+                          that don't use it simply ignore the list.
+      - `cost0`         : J(xbar^0), the cost at THIS rollout's own
+                          starting shadow iterate -- the self-referential
+                          normalisation anchor for the cost-gap term (see
+                          `stability_loss`). `cost0` PARAMETER lets a
+                          caller pass in the anchor from the FIRST TBPTT
+                          window instead of recomputing it fresh at every
+                          window (which would reset "how far did I start"
+                          at each window boundary instead of measuring it
+                          against the true start of the whole trajectory).
+    residuals/residuals_aux/costs are measured AFTER v^k is added on line
+    8, and kept as tensors so they can carry gradients back to theta when
+    `differentiable=True`.
 
     (Two revisions of this loss were tried and reverted -- see training.py's
     module docstring for the full writeup ("attempt 5" and "attempt 6"),
@@ -397,6 +434,8 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
     if not differentiable:
         x = x.detach()
     xbar = net.project_reciprocity(x)
+    if cost0 is None:
+        cost0 = net.cost_at(xbar)
 
     if gnn is not None:
         mem = gnn.init_mem(net) if mem0 is None else mem0
@@ -407,18 +446,31 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
 
     residuals: List[torch.Tensor] = []
     residuals_aux: List[torch.Tensor] = []
+    costs: List[torch.Tensor] = []
     ctx = torch.enable_grad() if differentiable else torch.no_grad()
     with ctx:
         for local_k in range(K):
             k = k_start + local_k
-            # line 8: evaluated on the PRE-update state, as every prosumer does
-            v = None
-            if gnn is not None:
-                v, mem = perturbation_vector(gnn, net, x, k, mem, prev_res)
-
             refl = 2.0 * xbar - x                                  # line 5
             z = net.prox_local(cfg.gamma, refl,
                                n_bisect=cfg.prox_bisect)           # line 6
+
+            # line 8 (evaluated HERE, right after the prox -- matches the
+            # paper's own Algorithm 1 ordering, line 9 before line 11, and
+            # gnn.py's Prosumer.dr_step mirror). d_k is the PRE-perturbation
+            # local fixed-point residual per node, ||[zD,zG,zq]-[D,G,xbar_q]||
+            # -- a FEATURE, not a loss input (see Prosumer.dr_step's note on
+            # why this does not reopen the attempt-5/6 gradient-dilution
+            # failure mode).
+            v = None
+            if gnn is not None:
+                D_z, G_z, Q_z = net.get_DGQ(z)
+                D_xbar, G_xbar, Q_xbar = net.get_DGQ(xbar)
+                d_k_sq = ((D_z - D_xbar) ** 2 + (G_z - G_xbar) ** 2
+                         + net._node_sum((Q_z - Q_xbar) ** 2))
+                d_k = torch.sqrt(d_k_sq + 1e-12)
+                v, mem = perturbation_vector(gnn, net, x, k, mem, prev_res, d_k)
+
             x_new = x + cfg.lam * (z - xbar)                       # line 7
             if v is not None:
                 x_new = x_new + v                                  # line 8
@@ -426,6 +478,7 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
             xbar_new = net.project_reciprocity(x_new)              # line 4 (next)
             residuals.append(torch.linalg.vector_norm(xbar_new - xbar))
             residuals_aux.append(torch.linalg.vector_norm(x_new - x))
+            costs.append(net.cost_at(xbar_new))
 
             if gnn is not None:
                 D_old, G_old, Q_old = net.get_DGQ(x)
@@ -436,17 +489,24 @@ def rollout(net: EnergyNetwork, gnn: Optional[PerturbationGNN],
 
             x, xbar = x_new, xbar_new
 
-    return x, residuals, residuals_aux, mem, prev_res
+    return x, residuals, residuals_aux, mem, prev_res, costs, cost0
 
 
 def stability_loss(residuals: List[torch.Tensor], residuals_aux: List[torch.Tensor],
                    scale: torch.Tensor, gamma_mono: float = 2.0,
-                   eps: float = 1e-9, start: int = 0) -> torch.Tensor:
-    """Strictly self-referential loss -- no baseline rollout, no target.
+                   eps: float = 1e-9, start: int = 0,
+                   costs: Optional[List[torch.Tensor]] = None,
+                   cost0: Optional[torch.Tensor] = None,
+                   j_star: Optional[torch.Tensor] = None,
+                   gamma_cost: float = 0.0) -> torch.Tensor:
+    """Strictly self-referential loss -- no baseline rollout, no target --
+    PLUS an optional cost-gap-to-J* term (see below; this one DOES use
+    external information, deliberately: see its own note).
 
         rho_k     = r_k     / (||scale|| + eps)      (shadow residual)
         rho_k_aux = r_k_aux / (||scale|| + eps)      (auxiliary residual)
         L = mean_k[rho_k]  +  gamma_mono * mean_k[relu(rho_{k+1,aux}-rho_{k,aux})]
+            + gamma_cost * mean_k[ |J(xbar^k)-J*| / (|J(xbar^0)-J*|+eps) ]
 
     `scale` is `gnn.PerturbationGNN.physical_scale(net)`, a static,
     zero-computation per-instance normalisation. See the module docstring
@@ -470,6 +530,46 @@ def stability_loss(residuals: List[torch.Tensor], residuals_aux: List[torch.Tens
     emerge on its own -- was tried and reverted: worse on both a 10- and a
     30-instance fixed-graph test set. See `rollout`'s docstring for the
     full numbers and writeup.)
+
+    Cost-gap term (gamma_cost, off by default: gamma_cost=0 reproduces
+    the loss above EXACTLY, unchanged)
+    -----------------------------------------------------------------
+    J* (the market's true optimal aggregate cost, `equilibrium_qp.
+    solve_equilibrium_qp`) is used here DELIBERATELY, breaking strict
+    self-supervision -- but only in a way that costs milliseconds (one QP
+    solve per instance, cached, NOT a long DR rollout to convergence like
+    the "attempt 3" anchor this replaces) and stays deployment-safe: J*
+    never enters inference, only training, and Theorem 1's convergence
+    guarantee holds for ANY theta regardless of how it was trained, so
+    this cannot weaken the safety argument.
+
+    Why J* and not a specific point x* (attempt 3's anchor, which worked
+    empirically but was set aside on principle): this game is a POTENTIAL
+    game (separable costs, see equilibrium_qp.py), so EVERY v-GNE shares
+    the same J*, even if the equilibrium set is not a singleton. Anchoring
+    to J* therefore does not penalise a trajectory for converging to a
+    DIFFERENT valid equilibrium than whichever one a specific x* happens
+    to be -- only x*-anchoring has that failure mode.
+
+    Why |.| (absolute value), not a one-sided penalty: measured directly
+    on trained models (gamma=1.0 baseline), J(xbar^k) UNDERSHOOTS J* by a
+    large margin (40-54% below, on EVERY test instance, under PLAIN DR
+    too -- not something the learned perturbation introduces) during the
+    transient, because the balance equality is not enforced pointwise on
+    intermediate iterates, only asymptotically. A one-sided term such as
+    relu(J-J*) would actively REWARD that undershoot (free loss reduction
+    for landing in a cheap-looking but not-yet-feasible region) -- exactly
+    the kind of exploitable asymmetry that sank "attempt 1". |J-J*| does
+    not have this hole: overshoot and undershoot cost exactly the same.
+
+    Why normalise by |J(xbar^0)-J*| and not by |J*|: measured directly,
+    the RAW cost gap does not scale with |J*| (one instance had J*=2.98
+    with a gap up to ~69, another J*=12.10 with a smaller gap ~40) -- a
+    small J* does not mean an easy instance, so dividing by it would
+    distort the relative weight given to different instances for a reason
+    unrelated to how hard they actually are. `cost0` -- THIS rollout's own
+    starting gap, free to obtain (no extra DR steps) -- gives each
+    instance a natural, comparable 0-to-~1 scale instead.
     """
     denom = torch.linalg.vector_norm(scale) + eps
 
@@ -484,7 +584,15 @@ def stability_loss(residuals: List[torch.Tensor], residuals_aux: List[torch.Tens
     else:
         mono = torch.zeros((), dtype=rho.dtype, device=rho.device)
 
-    return decay + gamma_mono * mono
+    loss = decay + gamma_mono * mono
+
+    if gamma_cost > 0.0 and costs is not None and cost0 is not None and j_star is not None:
+        c = torch.stack(costs[start:])
+        gap0 = torch.abs(cost0 - j_star) + eps
+        cost_gap = torch.abs(c - j_star) / gap0
+        loss = loss + gamma_cost * cost_gap.mean()
+
+    return loss
 
 
 # ======================================================================
@@ -504,10 +612,36 @@ class Trainer:
         self.opt = torch.optim.Adam(gnn.parameters(), lr=self.cfg.lr,
                                     weight_decay=self.cfg.weight_decay)
         self.history: Dict[str, List[float]] = {"loss": [], "val": []}
+        # J* per instance, keyed by id(dataset) then instance index -- one
+        # QP solve per instance, ever (not per epoch): J* depends only on
+        # the market spec, not on the epoch-varying initial state x0, so
+        # it is identical across every epoch for a given instance. Only
+        # populated when cfg.loss_gamma_cost > 0 (see `_j_stars`).
+        self._j_star_cache: Dict[int, List[float]] = {}
 
     # ------------------------------------------------------------------
-    def _instance_loss(self, net: EnergyNetwork,
-                       differentiable: bool = True) -> torch.Tensor:
+    def _j_stars(self, dataset) -> List[float]:
+        """J* for every instance in `dataset`, computed once and cached.
+
+        Cheap (milliseconds per instance, exact QP -- see
+        `equilibrium_qp.py`), but still wasteful to redo every epoch for
+        the same dataset, hence the cache keyed by `id(dataset)`.
+        """
+        key = id(dataset)
+        if key not in self._j_star_cache:
+            from equilibrium_qp import solve_equilibrium_qp
+            device = torch.device(self.cfg.device)
+            vals = []
+            for i in range(len(dataset)):
+                net = dataset.build(i, device=device)
+                _, j_star = solve_equilibrium_qp(net)
+                vals.append(j_star)
+            self._j_star_cache[key] = vals
+        return self._j_star_cache[key]
+
+    # ------------------------------------------------------------------
+    def _instance_loss(self, net: EnergyNetwork, differentiable: bool = True,
+                       j_star: Optional[float] = None) -> torch.Tensor:
         """Single-shot loss over the whole `cfg.unroll` window.
 
         Used for validation/evaluation always, and for training whenever
@@ -516,17 +650,25 @@ class Trainer:
         `_fit_instance_tbptt` instead -- backpropagating through the whole
         window at once is exactly the failure mode truncated BPTT exists
         to avoid.
+
+        `j_star`: this instance's true optimal cost, for the optional
+        cost-gap term (`TrainConfig.loss_gamma_cost`); ignored (and never
+        computed by the caller) when that weight is 0.
         """
         cfg = self.cfg
         x0 = net.flatten().detach()
-        _, res, res_aux, _, _ = rollout(net, self.gnn, cfg, x0=x0,
-                                        differentiable=differentiable)
+        _, res, res_aux, _, _, costs, cost0 = rollout(net, self.gnn, cfg, x0=x0,
+                                                       differentiable=differentiable)
         scale = self.gnn.physical_scale(net)
+        j_star_t = (torch.as_tensor(j_star, dtype=cost0.dtype, device=cost0.device)
+                   if (cfg.loss_gamma_cost > 0.0 and j_star is not None) else None)
         return stability_loss(res, res_aux, scale, cfg.loss_gamma_mono, cfg.eps,
-                              start=cfg.loss_start)
+                              start=cfg.loss_start, costs=costs, cost0=cost0,
+                              j_star=j_star_t, gamma_cost=cfg.loss_gamma_cost)
 
     # ------------------------------------------------------------------
-    def _fit_instance_tbptt(self, net: EnergyNetwork) -> float:
+    def _fit_instance_tbptt(self, net: EnergyNetwork,
+                            j_star: Optional[float] = None) -> float:
         """One instance's worth of TRUNCATED BPTT training.
 
         Covers the whole `cfg.unroll` horizon as consecutive windows of
@@ -535,6 +677,12 @@ class Trainer:
         window gets its own zero_grad/backward/step, and the state handed
         to the next window is `.detach()`-ed first. Returns the mean loss
         across windows (float, for reporting only).
+
+        The cost-gap anchor `cost0` (see `rollout`) is computed ONCE, on
+        the very first window, and threaded through every later window
+        undetached-then-detached like `mem`/`prev_res` -- so "how far did
+        I start" is always measured against the TRUE start of the whole
+        trajectory, not reset at every window boundary.
         """
         cfg = self.cfg
         seg = cfg.tbptt_segment
@@ -544,16 +692,24 @@ class Trainer:
         x = net.flatten().detach()
         mem = self.gnn.init_mem(net)
         prev_res = torch.zeros(net.N, device=net.device)
+        cost0 = None
+        j_star_t = None
 
         k_start = 0
         losses: List[float] = []
         while k_start < total_k:
             n = min(seg, total_k - k_start)
             self.opt.zero_grad()
-            x_new, res, res_aux, mem_new, prev_res_new = rollout(
+            x_new, res, res_aux, mem_new, prev_res_new, costs, cost0_new = rollout(
                 net, self.gnn, cfg, x0=x, n_iter=n, differentiable=True,
-                mem0=mem, prev_res0=prev_res, k_start=k_start)
-            loss = stability_loss(res, res_aux, scale, cfg.loss_gamma_mono, cfg.eps)
+                mem0=mem, prev_res0=prev_res, k_start=k_start, cost0=cost0)
+            if cost0 is None:
+                cost0 = cost0_new.detach()
+                if cfg.loss_gamma_cost > 0.0 and j_star is not None:
+                    j_star_t = torch.as_tensor(j_star, dtype=cost0.dtype, device=cost0.device)
+            loss = stability_loss(res, res_aux, scale, cfg.loss_gamma_mono, cfg.eps,
+                                  costs=costs, cost0=cost0, j_star=j_star_t,
+                                  gamma_cost=cfg.loss_gamma_cost)
             loss.backward()
             if cfg.grad_clip:
                 torch.nn.utils.clip_grad_norm_(self.gnn.parameters(), cfg.grad_clip)
@@ -589,6 +745,14 @@ class Trainer:
         rep.setup(self.gnn, cfg, len(dataset))
         rep.line("")
 
+        # J* per instance -- computed once here (not inside the epoch loop:
+        # it does not depend on the epoch-varying x0), only if the cost-gap
+        # term is actually enabled.
+        j_stars = self._j_stars(dataset) if cfg.loss_gamma_cost > 0.0 else None
+        val_j_stars = (self._j_stars(val_dataset)
+                      if (cfg.loss_gamma_cost > 0.0 and val_dataset is not None)
+                      else None)
+
         for epoch in range(cfg.epochs):
             t0 = _time.time()
             self.gnn.train()
@@ -596,11 +760,12 @@ class Trainer:
             for i in range(len(dataset)):
                 seed = cfg.seed * 1_000_003 + epoch * 7_919 + i
                 net = dataset.build(i, device=device, seed=seed)
+                j_star = j_stars[i] if j_stars is not None else None
                 if cfg.tbptt_segment:
-                    total += self._fit_instance_tbptt(net)
+                    total += self._fit_instance_tbptt(net, j_star=j_star)
                 else:
                     self.opt.zero_grad()
-                    loss = self._instance_loss(net, differentiable=True)
+                    loss = self._instance_loss(net, differentiable=True, j_star=j_star)
                     loss.backward()
                     if cfg.grad_clip:
                         torch.nn.utils.clip_grad_norm_(self.gnn.parameters(),
@@ -612,21 +777,28 @@ class Trainer:
 
             v = None
             if val_dataset is not None:
-                v = self.evaluate_loss(val_dataset)
+                v = self.evaluate_loss(val_dataset, j_stars=val_j_stars)
                 self.history["val"].append(v)
             rep.epoch(epoch + 1, cfg.epochs, mean_loss, v, _time.time() - t0)
         return self.history
 
     # ------------------------------------------------------------------
     @torch.no_grad()
-    def evaluate_loss(self, dataset) -> float:
-        """Same loss, on fixed (non-epoch-varying) initial states, no grad."""
+    def evaluate_loss(self, dataset, j_stars: Optional[List[float]] = None) -> float:
+        """Same loss, on fixed (non-epoch-varying) initial states, no grad.
+
+        `j_stars`: precomputed per-instance J* (see `fit`); if omitted and
+        the cost-gap term is enabled, computed (and cached) here instead.
+        """
         self.gnn.eval()
         device = torch.device(self.cfg.device)
+        if j_stars is None and self.cfg.loss_gamma_cost > 0.0:
+            j_stars = self._j_stars(dataset)
         tot = 0.0
         for i in range(len(dataset)):
             net = dataset.build(i, device=device)
-            tot += float(self._instance_loss(net, differentiable=False))
+            j_star = j_stars[i] if j_stars is not None else None
+            tot += float(self._instance_loss(net, differentiable=False, j_star=j_star))
         return tot / max(len(dataset), 1)
 
     # ------------------------------------------------------------------

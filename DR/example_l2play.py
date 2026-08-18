@@ -198,7 +198,7 @@ def train(train_ds, market_cfg, val_ds=None, rep=None, *,
          unroll=UNROLL, tbptt_segment=TBPTT_SEGMENT,
          gamma=GAMMA, lam=LAM, bisect=BISECT,
          epochs=EPOCHS, lr=LR, seed=SEED,
-         decay="geometric", poly_p=1.5):
+         decay="geometric", poly_p=1.5, loss_gamma_cost=0.0):
     """Centralised training. All hyperparameters are explicit keyword
     arguments (defaulting to this module's own CONFIG constants) so a
     CALLER's own values are actually used -- a plain module-global lookup
@@ -212,7 +212,11 @@ def train(train_ds, market_cfg, val_ds=None, rep=None, *,
     (default, unchanged behaviour) or "polynomial" (documentation.txt
     sec. 10's follow-up experiment: a much slower but still summable
     decay, meant to extend the perturbation's non-negligible influence out
-    to the horizon plain DR actually needs on hard instances)."""
+    to the horizon plain DR actually needs on hard instances).
+
+    `loss_gamma_cost`: weight of the optional cost-gap-to-J* loss term
+    (`TrainConfig.loss_gamma_cost` / `training.stability_loss`); 0.0
+    (default) reproduces the strictly self-supervised loss unchanged."""
     torch.manual_seed(seed)
     gnn = PerturbationGNN(GNNConfig.from_market_config(
         market_cfg, hidden_dim=hidden, rho=rho, scale=train_scale,
@@ -220,6 +224,7 @@ def train(train_ds, market_cfg, val_ds=None, rep=None, *,
     cfg = TrainConfig(gamma=gamma, lam=lam, prox_bisect=bisect,
                       unroll=unroll, rho=rho, scale=train_scale,
                       tbptt_segment=tbptt_segment, decay=decay, poly_p=poly_p,
+                      loss_gamma_cost=loss_gamma_cost,
                       epochs=epochs, lr=lr, seed=seed, verbose=True)
     tr = Trainer(gnn, cfg)
     hist = tr.fit(train_ds, val_dataset=val_ds, reporter=rep)

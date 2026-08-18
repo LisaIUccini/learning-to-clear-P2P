@@ -1,0 +1,60 @@
+======================================================================
+dataset: ONE reference market (N0=10), all other instances are
++/- 10% perturbations of it (topology, size, and parameters);
+out-of-cluster set: fully independent instances, N in [14,18]
+======================================================================
+
+sanity check: plain DR converges on a few training instances
+  N= 10  iters=  430  converged=True  feasible=True
+  N= 10  iters=  372  converged=True  feasible=True
+  N= 11  iters= 1373  converged=True  feasible=True
+
+training Phi_w (centralised, self-supervised, loss_mode='hinge')
+  epoch   1/20 | train +0.0016 | val +0.0015
+  epoch   2/20 | train +0.0014 | val +0.0012
+  epoch   3/20 | train +0.0012 | val +0.0012
+  epoch   4/20 | train +0.0011 | val +0.0011
+  epoch   5/20 | train +0.0010 | val +0.0011
+  epoch   6/20 | train +0.0010 | val +0.0011
+  epoch   7/20 | train +0.0010 | val +0.0009
+  epoch   8/20 | train +0.0009 | val +0.0010
+  epoch   9/20 | train +0.0010 | val +0.0008
+  epoch  10/20 | train +0.0010 | val +0.0009
+  epoch  11/20 | train +0.0010 | val +0.0009
+  epoch  12/20 | train +0.0009 | val +0.0008
+  epoch  13/20 | train +0.0009 | val +0.0007
+  epoch  14/20 | train +0.0008 | val +0.0008
+  epoch  15/20 | train +0.0009 | val +0.0007
+  epoch  16/20 | train +0.0008 | val +0.0008
+  epoch  17/20 | train +0.0009 | val +0.0009
+  epoch  18/20 | train +0.0008 | val +0.0008
+  epoch  19/20 | train +0.0009 | val +0.0006
+  epoch  20/20 | train +0.0008 | val +0.0007
+
+evaluating: plain DR vs DR + Phi_w, fully distributed inference
+----------------------------------------------------------------------
+  [in-cluster]  1/12  N= 11  DR   269 it  |  learned   266 it  |  x 1.01
+  [in-cluster]  2/12  N= 10  DR   446 it  |  learned   635 it  |  x 0.70
+  [in-cluster]  3/12  N=  9  DR  3442 it  |  learned  3005 it  |  x 1.15
+  [in-cluster]  4/12  N= 10  DR  1253 it  |  learned  1115 it  |  x 1.12
+  [in-cluster]  5/12  N= 11  DR   273 it  |  learned   285 it  |  x 0.96
+  [in-cluster]  6/12  N= 10  DR   362 it  |  learned   311 it  |  x 1.16
+  [in-cluster]  7/12  N=  9  DR   834 it  |  learned   642 it  |  x 1.30
+  [in-cluster]  8/12  N= 11  DR   346 it  |  learned   346 it  |  x 1.00
+  [in-cluster]  9/12  N= 11  DR  1024 it  |  learned   925 it  |  x 1.11
+  [in-cluster] 10/12  N= 10  DR   290 it  |  learned   322 it  |  x 0.90
+  [in-cluster] 11/12  N= 10  DR   370 it  |  learned   341 it  |  x 1.09
+  [in-cluster] 12/12  N= 10  DR   380 it  |  learned   347 it  |  x 1.10
+  [in-cluster] mean speed-up 1.05x   median 1.09x   min 0.70x   max 1.30x   win-rate 75% (9/12)
+
+  [out-of-cluster]  1/6  N= 18  DR  1372 it  |  learned  1330 it  |  x 1.03
+  [out-of-cluster]  2/6  N= 14  DR  1001 it  |  learned   800 it  |  x 1.25
+  [out-of-cluster]  3/6  N= 14  DR  2488 it  |  learned  2981 it  |  x 0.83
+  [out-of-cluster]  4/6  N= 15  DR   360 it  |  learned   383 it  |  x 0.94
+  [out-of-cluster]  5/6  N= 14  DR   379 it  |  learned   377 it  |  x 1.01
+  [out-of-cluster]  6/6  N= 18  DR   512 it  |  learned   458 it  |  x 1.12
+  [out-of-cluster] mean speed-up 1.03x   median 1.02x   min 0.83x   max 1.25x   win-rate 67% (4/6)
+
+recording residual curves on the in-cluster test set...
+saved results.png
+saved trained weights to phi_w.pt

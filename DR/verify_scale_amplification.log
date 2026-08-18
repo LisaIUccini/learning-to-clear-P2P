@@ -1,0 +1,124 @@
+fresh test set: 30 instances (same as verify_costgap_30.py)
+
+=== DEPLOY_SCALE = 1.0 ===
+  mode          : each prosumer: communicate -> DR lines 4-7 -> own model (line 8)
+  stopping      : shadow residual < 1e-06 (cap 20000 iterations)
+  
+  instance   1/30 | DR   3564 it | learned   2611 it | x1.36
+  instance   2/30 | DR    519 it | learned    520 it | x1.00
+  instance   3/30 | DR    771 it | learned    946 it | x0.82
+  instance   4/30 | DR   1021 it | learned   1120 it | x0.91
+  instance   5/30 | DR   8433 it | learned   5849 it | x1.44
+  instance   6/30 | DR   1891 it | learned    514 it | x3.68
+  instance   7/30 | DR   1445 it | learned    788 it | x1.83
+  instance   8/30 | DR   2282 it | learned   1191 it | x1.92
+  instance   9/30 | DR    666 it | learned    444 it | x1.50
+  instance  10/30 | DR   5558 it | learned   2952 it | x1.88
+  instance  11/30 | DR    414 it | learned    359 it | x1.15
+  instance  12/30 | DR    683 it | learned    444 it | x1.54
+  instance  13/30 | DR   4926 it | learned   4828 it | x1.02
+  instance  14/30 | DR    444 it | learned    284 it | x1.56
+  instance  15/30 | DR    767 it | learned    571 it | x1.34
+  instance  16/30 | DR    543 it | learned    319 it | x1.70
+  instance  17/30 | DR   5425 it | learned   3403 it | x1.59
+  instance  18/30 | DR    724 it | learned    413 it | x1.75
+  instance  19/30 | DR    508 it | learned    650 it | x0.78
+  instance  20/30 | DR  20000 it | learned  20000 it | x1.00
+  instance  21/30 | DR  10335 it | learned    619 it | x16.70
+  instance  22/30 | DR    347 it | learned    530 it | x0.65
+  instance  23/30 | DR   1107 it | learned    520 it | x2.13
+  instance  24/30 | DR    795 it | learned    756 it | x1.05
+  instance  25/30 | DR   2469 it | learned   1517 it | x1.63
+  instance  26/30 | DR    518 it | learned    645 it | x0.80
+  instance  27/30 | DR   6252 it | learned   5782 it | x1.08
+  instance  28/30 | DR    975 it | learned    364 it | x2.68
+  instance  29/30 | DR    810 it | learned   2189 it | x0.37
+  instance  30/30 | DR   2726 it | learned    571 it | x4.77
+
+scale=1.0 (30 instances)
+  mean=2.055  median=1.471  std=2.855  min=0.370  max=16.696  regressed=7/30
+
+=== DEPLOY_SCALE = 1.5 ===
+  mode          : each prosumer: communicate -> DR lines 4-7 -> own model (line 8)
+  stopping      : shadow residual < 1e-06 (cap 20000 iterations)
+  
+  instance   1/30 | DR   3564 it | learned   3039 it | x1.17
+  instance   2/30 | DR    519 it | learned    606 it | x0.86
+  instance   3/30 | DR    771 it | learned    923 it | x0.84
+  instance   4/30 | DR   1021 it | learned   1101 it | x0.93
+  instance   5/30 | DR   8433 it | learned   6404 it | x1.32
+  instance   6/30 | DR   1891 it | learned    595 it | x3.18
+  instance   7/30 | DR   1445 it | learned    679 it | x2.13
+  instance   8/30 | DR   2282 it | learned   1108 it | x2.06
+  instance   9/30 | DR    666 it | learned    433 it | x1.54
+  instance  10/30 | DR   5558 it | learned   2868 it | x1.94
+  instance  11/30 | DR    414 it | learned    370 it | x1.12
+  instance  12/30 | DR    683 it | learned    569 it | x1.20
+  instance  13/30 | DR   4926 it | learned   4808 it | x1.02
+  instance  14/30 | DR    444 it | learned    321 it | x1.38
+  instance  15/30 | DR    767 it | learned    564 it | x1.36
+  instance  16/30 | DR    543 it | learned    347 it | x1.56
+  instance  17/30 | DR   5425 it | learned   3625 it | x1.50
+  instance  18/30 | DR    724 it | learned    361 it | x2.01
+  instance  19/30 | DR    508 it | learned    657 it | x0.77
+  instance  20/30 | DR  20000 it | learned  20000 it | x1.00
+  instance  21/30 | DR  10335 it | learned    820 it | x12.60
+  instance  22/30 | DR    347 it | learned    481 it | x0.72
+  instance  23/30 | DR   1107 it | learned    501 it | x2.21
+  instance  24/30 | DR    795 it | learned    768 it | x1.04
+  instance  25/30 | DR   2469 it | learned   1221 it | x2.02
+  instance  26/30 | DR    518 it | learned    661 it | x0.78
+  instance  27/30 | DR   6252 it | learned   5519 it | x1.13
+  instance  28/30 | DR    975 it | learned    384 it | x2.54
+  instance  29/30 | DR    810 it | learned   2457 it | x0.33
+  instance  30/30 | DR   2726 it | learned    708 it | x3.85
+
+scale=1.5 (30 instances)
+  mean=1.870  median=1.338  std=2.129  min=0.330  max=12.604  regressed=7/30
+
+=== DEPLOY_SCALE = 2.0 ===
+  mode          : each prosumer: communicate -> DR lines 4-7 -> own model (line 8)
+  stopping      : shadow residual < 1e-06 (cap 20000 iterations)
+  
+  instance   1/30 | DR   3564 it | learned   3144 it | x1.13
+  instance   2/30 | DR    519 it | learned    628 it | x0.83
+  instance   3/30 | DR    771 it | learned    905 it | x0.85
+  instance   4/30 | DR   1021 it | learned   1143 it | x0.89
+  instance   5/30 | DR   8433 it | learned   6500 it | x1.30
+  instance   6/30 | DR   1891 it | learned    634 it | x2.98
+  instance   7/30 | DR   1445 it | learned    714 it | x2.02
+  instance   8/30 | DR   2282 it | learned   1034 it | x2.21
+  instance   9/30 | DR    666 it | learned    437 it | x1.52
+  instance  10/30 | DR   5558 it | learned   2900 it | x1.92
+  instance  11/30 | DR    414 it | learned    383 it | x1.08
+  instance  12/30 | DR    683 it | learned    547 it | x1.25
+  instance  13/30 | DR   4926 it | learned   4805 it | x1.03
+  instance  14/30 | DR    444 it | learned    393 it | x1.13
+  instance  15/30 | DR    767 it | learned    511 it | x1.50
+  instance  16/30 | DR    543 it | learned    383 it | x1.42
+  instance  17/30 | DR   5425 it | learned   3736 it | x1.45
+  instance  18/30 | DR    724 it | learned    350 it | x2.07
+  instance  19/30 | DR    508 it | learned    605 it | x0.84
+  instance  20/30 | DR  20000 it | learned  20000 it | x1.00
+  instance  21/30 | DR  10335 it | learned    680 it | x15.20
+  instance  22/30 | DR    347 it | learned    457 it | x0.76
+  instance  23/30 | DR   1107 it | learned    480 it | x2.31
+  instance  24/30 | DR    795 it | learned    789 it | x1.01
+  instance  25/30 | DR   2469 it | learned    901 it | x2.74
+  instance  26/30 | DR    518 it | learned    571 it | x0.91
+  instance  27/30 | DR   6252 it | learned   5650 it | x1.11
+  instance  28/30 | DR    975 it | learned    421 it | x2.32
+  instance  29/30 | DR    810 it | learned   2537 it | x0.32
+  instance  30/30 | DR   2726 it | learned   1530 it | x1.78
+
+scale=2.0 (30 instances)
+  mean=1.895  median=1.273  std=2.548  min=0.319  max=15.199  regressed=7/30
+
+=== SUMMARY across scales ===
+metric           scale=1.0     scale=1.5     scale=2.0
+mean                 2.055         1.870         1.895
+median               1.471         1.338         1.273
+std                  2.855         2.129         2.548
+min                  0.370         0.330         0.319
+max                 16.696        12.604        15.199
+regressed            7.000         7.000         7.000

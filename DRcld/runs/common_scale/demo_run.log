@@ -1,0 +1,58 @@
+writing all artifacts to runs/common_scale/
+======================================================================
+dataset: graph EXACTLY fixed; per instance, ONE shared scale
+factor in [1-0.1, 1+0.1] is applied to the
+WHOLE parameter set together (not one independent factor per
+parameter) -- the entire market shifts coherently
+======================================================================
+  N=10  edges=20
+
+sanity check: plain DR converges on a few training instances
+  N= 10  iters=  430  converged=True  feasible=True
+  N= 10  iters=  260  converged=True  feasible=True
+  N= 10  iters=  294  converged=True  feasible=True
+
+training Phi_w (centralised, self-supervised, loss_mode='hinge')
+  epoch   1/20 | train +0.0015 | val +0.0015
+  epoch   2/20 | train +0.0012 | val +0.0013
+  epoch   3/20 | train +0.0011 | val +0.0011
+  epoch   4/20 | train +0.0010 | val +0.0011
+  epoch   5/20 | train +0.0009 | val +0.0009
+  epoch   6/20 | train +0.0009 | val +0.0008
+  epoch   7/20 | train +0.0007 | val +0.0008
+  epoch   8/20 | train +0.0008 | val +0.0009
+  epoch   9/20 | train +0.0007 | val +0.0008
+  epoch  10/20 | train +0.0007 | val +0.0007
+  epoch  11/20 | train +0.0007 | val +0.0007
+  epoch  12/20 | train +0.0007 | val +0.0009
+  epoch  13/20 | train +0.0008 | val +0.0008
+  epoch  14/20 | train +0.0006 | val +0.0006
+  epoch  15/20 | train +0.0007 | val +0.0009
+  epoch  16/20 | train +0.0007 | val +0.0008
+  epoch  17/20 | train +0.0007 | val +0.0006
+  epoch  18/20 | train +0.0006 | val +0.0008
+  epoch  19/20 | train +0.0006 | val +0.0008
+  epoch  20/20 | train +0.0007 | val +0.0008
+
+evaluating: plain DR vs DR + Phi_w, fully distributed inference
+----------------------------------------------------------------------
+  [common-scale]  1/12  N= 10  DR   198 it  |  learned   327 it  |  x 0.61 (-65.2%)
+  [common-scale]  2/12  N= 10  DR   549 it  |  learned   401 it  |  x 1.37 (+27.0%)
+  [common-scale]  3/12  N= 10  DR   343 it  |  learned   361 it  |  x 0.95 (-5.2%)
+  [common-scale]  4/12  N= 10  DR   485 it  |  learned   373 it  |  x 1.30 (+23.1%)
+  [common-scale]  5/12  N= 10  DR   418 it  |  learned   353 it  |  x 1.18 (+15.6%)
+  [common-scale]  6/12  N= 10  DR   467 it  |  learned   361 it  |  x 1.29 (+22.7%)
+  [common-scale]  7/12  N= 10  DR   351 it  |  learned   363 it  |  x 0.97 (-3.4%)
+  [common-scale]  8/12  N= 10  DR   382 it  |  learned   355 it  |  x 1.08 (+7.1%)
+  [common-scale]  9/12  N= 10  DR   540 it  |  learned   359 it  |  x 1.50 (+33.5%)
+  [common-scale] 10/12  N= 10  DR   522 it  |  learned   358 it  |  x 1.46 (+31.4%)
+  [common-scale] 11/12  N= 10  DR   386 it  |  learned   323 it  |  x 1.20 (+16.3%)
+  [common-scale] 12/12  N= 10  DR   408 it  |  learned   336 it  |  x 1.21 (+17.6%)
+  [common-scale] mean speed-up 1.18x   median 1.20x   min 0.61x   max 1.50x   win-rate 75% (9/12)
+
+recording residual curves on the test set...
+saved runs/common_scale/results.png
+
+generating per-instance diagnostic plots...
+saved 12 per-instance diagnostic plots to runs/common_scale/instance_plots/
+saved trained weights to runs/common_scale/phi_w.pt

@@ -627,6 +627,92 @@ references in train/test) is an easier generalisation target than the
 fully iid case by construction, so the two numbers are not a strict
 apples-to-apples comparison of "harder vs easier data" alone.
 
+COST-GAP-TO-J* LOSS TERM (new): `training.stability_loss` gained an
+optional third term, OFF by default (`TrainConfig.loss_gamma_cost=0.0`
+reproduces the loss above exactly):
+
+    gamma_cost * mean_k[ |J(xbar^k)-J*| / (|J(xbar^0)-J*|+eps) ]
+
+DELIBERATELY not strictly self-supervised (uses J*, `equilibrium_qp.
+solve_equilibrium_qp` -- an exact QP solve, milliseconds, cached once per
+instance across all epochs since J* does not depend on the epoch-varying
+x0). This does NOT weaken deployment safety: J* never enters inference,
+and Theorem 1 holds for any theta regardless of how it was trained.
+
+Design reasoning (see `stability_loss`'s docstring for the full version):
+J* (not a specific equilibrium point, "attempt 3"'s anchor) because the
+game is a potential game and every v-GNE shares the same J*, so this does
+not penalise converging to a different-but-valid equilibrium. Absolute
+value, not one-sided: measured directly on trained models, J(xbar^k)
+UNDERSHOOTS J* by 40-54% on every test instance, under PLAIN DR too (the
+balance equality is not enforced pointwise on intermediate iterates) -- a
+one-sided term would have rewarded exactly that undershoot, reopening
+"attempt 1"'s exploit in a new guise. Normalised by the rollout's OWN
+starting gap |J(xbar^0)-J*|, not by |J*|: measured directly, raw cost-gap
+magnitude does not scale with |J*| (one instance had J*=2.98 with gap up
+to ~69, another J*=12.10 with gap ~40), so dividing by |J*| would weight
+instances by an accident of their parameter draw, not by how hard they
+are. Kept at a SMALL weight relative to loss_gamma_mono by design: the
+trading-cost term is LINEAR in q, so cost alone under-determines where
+the trade variables should sit -- meant as a secondary nudge alongside
+the residual term (no such blind spot), not a replacement for it.
+
+RESULT (gamma_cost=1.0, clustered dataset, gamma=1.0 baseline, otherwise
+identical to the run above -- example_clustered_costgap.py): mean
+speed-up 1.37x, essentially flat to SLIGHTLY BELOW the 1.42x without the
+term. But the mean alone is misleading here -- the full distribution
+moved in a way directly relevant to this project's actual goal (reliable
+improvement, not just a higher average):
+
+  metric                    without cost-gap   with cost-gap
+  ----------------------------------------------------------
+  mean                            1.42x             1.37x
+  median                          1.18x             1.33x   (better)
+  std across instances            1.04              0.42    (less than half)
+  worst case                      0.34x             0.71x   (much better)
+  best case                       4.36x             1.99x   (worse)
+  instances regressed (<1x)       3/10              2/10
+
+Per-instance, three previously-regressed instances flipped to solid wins
+(0.74x->1.36x, 1.00x->1.99x, and the single worst case in the whole
+project so far, 0.34x->1.96x), while two previously-good instances
+weakened (1.40x->1.00x, 1.27x->0.86x) and the single standout win shrank
+substantially (4.36x->1.68x). 5/10 instances changing category on a
+10-instance sample is itself a flag (recurring pattern 6: noisy) -- see
+the confirmatory re-run below before trusting this table.
+
+CONFIRMATORY RE-RUN (verify_costgap_30.py): re-evaluated BOTH already-
+trained checkpoints (no retraining -- this is a measurement question, not
+a training one) on a FRESH 30-instance test set drawn from the SAME 5
+references, so the two models are compared on identical, larger data:
+
+  metric                    without cost-gap   with cost-gap
+  ----------------------------------------------------------
+  mean                            2.914             2.055
+  median                          1.363             1.471   (confirmed better)
+  std across instances            7.156             2.855   (confirmed: less than half)
+  worst case                      0.350             0.370   (NOT confirmed -- a wash)
+  best case                       41.012            16.696  (confirmed: compressed a lot)
+  instances regressed (<1x)       9/30              7/30    (confirmed, modestly)
+
+The 10-instance table's "worst case improves a lot" (0.34x->0.71x) does
+NOT hold up at n=30 -- the true worst case is statistically a wash (0.35
+vs 0.37), just landing on a different instance each time (the original
+worst instance flips to one of the best; a different, previously-fine
+instance becomes the new worst, 0.50x->0.37x). That was a coincidence of
+which outlier happened to land in the 10-instance draw, not a real effect
+of the loss term. What DOES hold up, more clearly than the small sample
+suggested: median improves, variance drops sharply, regression count
+drops modestly -- driven mainly by the term compressing a heavy right
+tail (the without-cost-gap distribution has instances up to 41x), not by
+rescuing the worst instances. Revised reading: the cost-gap term makes
+the TYPICAL outcome more predictable (higher median, much lower spread),
+at a real (not negligible, ~29% relative here) cost to the mean -- but it
+is NOT a fix for the worst-case-regression problem this project set out
+to solve; that remains open. Whether the median/variance improvement is
+worth the mean cost is a judgement call, not something the numbers settle
+outright.
+
 
 --------------------------------------------------------------------------------
 11. HYPERPARAMETER REFERENCE
@@ -658,3 +744,34 @@ apples-to-apples comparison of "harder vs easier data" alone.
 ================================================================================
 End of document.
 ================================================================================
+
+DEPLOY-TIME AMPLIFICATION TESTED AND REJECTED (verify_scale_amplification.py):
+motivated by wanting the perturbation to have MORE effect (push cost
+closer to J*), tried simply deploying the ALREADY-TRAINED cost-gap model
+at a higher amplitude than the validated DEPLOY_SCALE=1.0 -- 1.5 and 2.0
+-- no retraining, same 30-instance test set as the confirmatory re-run
+above (so directly comparable). Summability stays finite for any scale
+(Theorem 1 unaffected), so this was a pure effectiveness question, not a
+safety one.
+
+  metric          scale=1.0   scale=1.5   scale=2.0
+  --------------------------------------------------
+  mean               2.055       1.870       1.895
+  median             1.471       1.338       1.273
+  min                0.370       0.330       0.319
+  max                16.696      12.604      15.199
+  regressed           7/30        7/30        7/30
+
+scale=1.0 wins on EVERY metric; median declines monotonically as scale
+increases (1.471 -> 1.338 -> 1.273, a clean trend, not noise). Reading:
+this is a DIRECT, decisive negative result for "just turn up the volume."
+Consistent with the earlier d^k diagnostic (the gate does not yet
+discriminate well between "DR needs help right now" and "DR is already
+fine") -- amplifying an indiscriminate policy amplifies the noise along
+with any genuine help, and here the noise dominates. This does NOT rule
+out gamma_cost increases (a training-time lever that reshapes WHAT the
+policy learns, not just how loud an already-fixed policy is played) --
+those remain untested at this weight and are a different kind of change.
+Lesson for this project: "more effect" achieved by raw amplitude is not
+free -- effectiveness here is bottlenecked by the POLICY'S precision, not
+by how much room it is given to act.

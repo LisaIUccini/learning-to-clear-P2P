@@ -1,0 +1,20 @@
+[in-cluster] 1: iters=  266 converged=True feasible=True gap=8.61e-05
+[in-cluster] 2: iters=  635 converged=True feasible=True gap=5.86e-06
+[in-cluster] 3: iters= 3005 converged=True feasible=True gap=4.11e-06
+[in-cluster] 4: iters= 1115 converged=True feasible=True gap=5.99e-06
+[in-cluster] 5: iters=  285 converged=True feasible=True gap=4.51e-05
+[in-cluster] 6: iters=  311 converged=True feasible=True gap=1.19e-05
+[in-cluster] 7: iters=  642 converged=True feasible=True gap=1.13e-07
+[in-cluster] 8: iters=  346 converged=True feasible=True gap=3.26e-06
+[in-cluster] 9: iters=  925 converged=True feasible=True gap=1.69e-05
+[in-cluster] 10: iters=  322 converged=True feasible=True gap=1.56e-07
+[in-cluster] 11: iters=  341 converged=True feasible=True gap=6.02e-09
+[in-cluster] 12: iters=  347 converged=True feasible=True gap=3.16e-07
+[out-of-cluster] 1: iters= 1330 converged=True feasible=True gap=1.63e-05
+[out-of-cluster] 2: iters=  800 converged=True feasible=True gap=4.21e-06
+[out-of-cluster] 3: iters= 2981 converged=True feasible=True gap=3.13e-06
+[out-of-cluster] 4: iters=  383 converged=True feasible=True gap=5.02e-08
+[out-of-cluster] 5: iters=  377 converged=True feasible=True gap=2.41e-06
+[out-of-cluster] 6: iters=  458 converged=True feasible=True gap=3.20e-07
+genuine equilibria: 18/18
+DONE

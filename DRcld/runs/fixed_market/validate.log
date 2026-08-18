@@ -1,0 +1,13 @@
+1: iters=261 converged=True feasible=True gap=8.75e-05
+2: iters=376 converged=True feasible=True gap=2.78e-07
+3: iters=277 converged=True feasible=True gap=3.89e-05
+4: iters=302 converged=True feasible=True gap=8.86e-06
+5: iters=271 converged=True feasible=True gap=5.18e-05
+6: iters=308 converged=True feasible=True gap=5.52e-06
+7: iters=267 converged=True feasible=True gap=6.89e-05
+8: iters=282 converged=True feasible=True gap=2.98e-05
+9: iters=345 converged=True feasible=True gap=2.11e-06
+10: iters=300 converged=True feasible=True gap=7.91e-06
+11: iters=263 converged=True feasible=True gap=8.61e-05
+12: iters=280 converged=True feasible=True gap=3.41e-05
+genuine equilibria: 12/12

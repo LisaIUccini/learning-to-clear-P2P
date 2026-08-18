@@ -1,0 +1,86 @@
+fresh test set: 30 instances, 5 references x 6 perturbations, same graph/references as training
+
+=== model WITHOUT cost-gap term ===
+  mode          : each prosumer: communicate -> DR lines 4-7 -> own model (line 8)
+  stopping      : shadow residual < 1e-06 (cap 20000 iterations)
+  
+  instance   1/30 | DR   3564 it | learned   4789 it | x0.74
+  instance   2/30 | DR    519 it | learned    371 it | x1.40
+  instance   3/30 | DR    771 it | learned    770 it | x1.00
+  instance   4/30 | DR   1021 it | learned    346 it | x2.95
+  instance   5/30 | DR   8433 it | learned   9174 it | x0.92
+  instance   6/30 | DR   1891 it | learned   2234 it | x0.85
+  instance   7/30 | DR   1445 it | learned    988 it | x1.46
+  instance   8/30 | DR   2282 it | learned    609 it | x3.75
+  instance   9/30 | DR    666 it | learned    239 it | x2.79
+  instance  10/30 | DR   5558 it | learned    990 it | x5.61
+  instance  11/30 | DR    414 it | learned    436 it | x0.95
+  instance  12/30 | DR    683 it | learned    427 it | x1.60
+  instance  13/30 | DR   4926 it | learned   4755 it | x1.04
+  instance  14/30 | DR    444 it | learned   1267 it | x0.35
+  instance  15/30 | DR    767 it | learned    486 it | x1.58
+  instance  16/30 | DR    543 it | learned   1262 it | x0.43
+  instance  17/30 | DR   5425 it | learned   2252 it | x2.41
+  instance  18/30 | DR    724 it | learned    302 it | x2.40
+  instance  19/30 | DR    508 it | learned    297 it | x1.71
+  instance  20/30 | DR  20000 it | learned  20000 it | x1.00
+  instance  21/30 | DR  10335 it | learned    252 it | x41.01
+  instance  22/30 | DR    347 it | learned    387 it | x0.90
+  instance  23/30 | DR   1107 it | learned    463 it | x2.39
+  instance  24/30 | DR    795 it | learned    599 it | x1.33
+  instance  25/30 | DR   2469 it | learned   2314 it | x1.07
+  instance  26/30 | DR    518 it | learned    413 it | x1.25
+  instance  27/30 | DR   6252 it | learned   4030 it | x1.55
+  instance  28/30 | DR    975 it | learned    631 it | x1.55
+  instance  29/30 | DR    810 it | learned   1618 it | x0.50
+  instance  30/30 | DR   2726 it | learned   2906 it | x0.94
+
+WITHOUT cost-gap (30 fresh instances)
+  mean=2.914  median=1.363  std=7.156  min=0.350  max=41.012  regressed=9/30
+
+=== model WITH cost-gap term (gamma_cost=1.0) ===
+  mode          : each prosumer: communicate -> DR lines 4-7 -> own model (line 8)
+  stopping      : shadow residual < 1e-06 (cap 20000 iterations)
+  
+  instance   1/30 | DR   3564 it | learned   2611 it | x1.36
+  instance   2/30 | DR    519 it | learned    520 it | x1.00
+  instance   3/30 | DR    771 it | learned    946 it | x0.82
+  instance   4/30 | DR   1021 it | learned   1120 it | x0.91
+  instance   5/30 | DR   8433 it | learned   5849 it | x1.44
+  instance   6/30 | DR   1891 it | learned    514 it | x3.68
+  instance   7/30 | DR   1445 it | learned    788 it | x1.83
+  instance   8/30 | DR   2282 it | learned   1191 it | x1.92
+  instance   9/30 | DR    666 it | learned    444 it | x1.50
+  instance  10/30 | DR   5558 it | learned   2952 it | x1.88
+  instance  11/30 | DR    414 it | learned    359 it | x1.15
+  instance  12/30 | DR    683 it | learned    444 it | x1.54
+  instance  13/30 | DR   4926 it | learned   4828 it | x1.02
+  instance  14/30 | DR    444 it | learned    284 it | x1.56
+  instance  15/30 | DR    767 it | learned    571 it | x1.34
+  instance  16/30 | DR    543 it | learned    319 it | x1.70
+  instance  17/30 | DR   5425 it | learned   3403 it | x1.59
+  instance  18/30 | DR    724 it | learned    413 it | x1.75
+  instance  19/30 | DR    508 it | learned    650 it | x0.78
+  instance  20/30 | DR  20000 it | learned  20000 it | x1.00
+  instance  21/30 | DR  10335 it | learned    619 it | x16.70
+  instance  22/30 | DR    347 it | learned    530 it | x0.65
+  instance  23/30 | DR   1107 it | learned    520 it | x2.13
+  instance  24/30 | DR    795 it | learned    756 it | x1.05
+  instance  25/30 | DR   2469 it | learned   1517 it | x1.63
+  instance  26/30 | DR    518 it | learned    645 it | x0.80
+  instance  27/30 | DR   6252 it | learned   5782 it | x1.08
+  instance  28/30 | DR    975 it | learned    364 it | x2.68
+  instance  29/30 | DR    810 it | learned   2189 it | x0.37
+  instance  30/30 | DR   2726 it | learned    571 it | x4.77
+
+WITH cost-gap (30 fresh instances)
+  mean=2.055  median=1.471  std=2.855  min=0.370  max=16.696  regressed=7/30
+
+=== SUMMARY (30 fresh instances, same test set for both) ===
+metric        no cost-gap  with cost-gap
+mean                2.914          2.055
+median              1.363          1.471
+std                 7.156          2.855
+min                 0.350          0.370
+max                41.012         16.696
+regressed           9.000          7.000

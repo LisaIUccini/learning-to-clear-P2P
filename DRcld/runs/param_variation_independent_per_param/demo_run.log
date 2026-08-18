@@ -1,0 +1,57 @@
+writing all artifacts to runs/param_variation/
+======================================================================
+dataset: graph EXACTLY fixed (identical to fixed_market's base);
+only market PARAMETERS (a,b,a~,D*,DeltaG,c,kappa) jitter +/-10%
+per instance -- isolates parameter diversity from topology
+======================================================================
+  N=10  edges=20
+
+sanity check: plain DR converges on a few training instances
+  N= 10  iters=  430  converged=True  feasible=True
+  N= 10  iters=  294  converged=True  feasible=True
+  N= 10  iters=  253  converged=True  feasible=True
+
+training Phi_w (centralised, self-supervised, loss_mode='hinge')
+  epoch   1/20 | train +0.0015 | val +0.0014
+  epoch   2/20 | train +0.0012 | val +0.0011
+  epoch   3/20 | train +0.0012 | val +0.0011
+  epoch   4/20 | train +0.0011 | val +0.0010
+  epoch   5/20 | train +0.0009 | val +0.0010
+  epoch   6/20 | train +0.0010 | val +0.0007
+  epoch   7/20 | train +0.0009 | val +0.0009
+  epoch   8/20 | train +0.0010 | val +0.0008
+  epoch   9/20 | train +0.0008 | val +0.0008
+  epoch  10/20 | train +0.0008 | val +0.0008
+  epoch  11/20 | train +0.0009 | val +0.0006
+  epoch  12/20 | train +0.0007 | val +0.0010
+  epoch  13/20 | train +0.0008 | val +0.0008
+  epoch  14/20 | train +0.0007 | val +0.0007
+  epoch  15/20 | train +0.0008 | val +0.0008
+  epoch  16/20 | train +0.0008 | val +0.0008
+  epoch  17/20 | train +0.0008 | val +0.0006
+  epoch  18/20 | train +0.0007 | val +0.0008
+  epoch  19/20 | train +0.0008 | val +0.0007
+  epoch  20/20 | train +0.0008 | val +0.0007
+
+evaluating: plain DR vs DR + Phi_w, fully distributed inference
+----------------------------------------------------------------------
+  [param-variation]  1/12  N= 10  DR   689 it  |  learned   581 it  |  x 1.19 (+15.7%)
+  [param-variation]  2/12  N= 10  DR   232 it  |  learned   314 it  |  x 0.74 (-35.3%)
+  [param-variation]  3/12  N= 10  DR  1865 it  |  learned  2448 it  |  x 0.76 (-31.3%)
+  [param-variation]  4/12  N= 10  DR  4000 it  |  learned  4000 it  |  x 1.00 (+0.0%)  [DID NOT CONVERGE]
+  [param-variation]  5/12  N= 10  DR  1044 it  |  learned  1616 it  |  x 0.65 (-54.8%)
+  [param-variation]  6/12  N= 10  DR   225 it  |  learned   256 it  |  x 0.88 (-13.8%)
+  [param-variation]  7/12  N= 10  DR   265 it  |  learned   272 it  |  x 0.97 (-2.6%)
+  [param-variation]  8/12  N= 10  DR   217 it  |  learned   264 it  |  x 0.82 (-21.7%)
+  [param-variation]  9/12  N= 10  DR   552 it  |  learned   522 it  |  x 1.06 (+5.4%)
+  [param-variation] 10/12  N= 10  DR   814 it  |  learned   557 it  |  x 1.46 (+31.6%)
+  [param-variation] 11/12  N= 10  DR   256 it  |  learned   646 it  |  x 0.40 (-152.3%)
+  [param-variation] 12/12  N= 10  DR   323 it  |  learned   316 it  |  x 1.02 (+2.2%)
+  [param-variation] mean speed-up 0.91x   median 0.93x   min 0.40x   max 1.46x   win-rate 42% (5/12)
+
+recording residual curves on the test set...
+saved runs/param_variation/results.png
+
+generating per-instance diagnostic plots...
+saved 12 per-instance diagnostic plots to runs/param_variation/instance_plots/
+saved trained weights to runs/param_variation/phi_w.pt

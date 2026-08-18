@@ -1,0 +1,139 @@
+
+====================================================================
+  phase 1/5  |  DATASET (SINGLE REFERENCE, +/-10%)
+====================================================================
+  train         : 50 instances | N=10..10 | undirected edges 34..34
+  test          : 30 instances | N=10..10 | undirected edges 34..34
+  topologies    : sparse (ONE graph, shared)
+  density       : 0.7
+  clusters      : 1 references x (+/-10%) | train 50/ref, test 30/ref
+  architecture  : NEW: d_k (pre-perturbation local fixed-point residual) added as a 9th node feature
+  done          : 0.0s
+
+====================================================================
+  phase 2/5  |  CENTRALISED TRAINING
+====================================================================
+  
+  baseline DR   : gamma=1.0  lambda=1.0  bisect=25
+  model         : d_h=32 | 11780 parameters (independent of N and |E|)
+  unrolling     : K=400 steps | geometric decay, rho=0.90 (amplitude below 1% after k=44)
+  summability   : guaranteed by construction: tanh output x physical scale x rho^k
+  loss          : normalised residual + gamma_mono=2 monotonicity (on the auxiliary residual), window k=[0,400)
+  no target     : no baseline rollout, no precomputed equilibrium -- strictly self-supervised
+  optimiser     : Adam lr=0.003 clip=1.0 | 40 epochs x 50 instances
+  
+/home/lisa/energy_market_fixed_point/DR/training.py:774: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  total += float(loss)
+  epoch   1/40 | train +0.0040 | val +0.0039 | 97.6s
+  epoch   2/40 | train +0.0038 | val +0.0038 | 98.7s
+  epoch   3/40 | train +0.0038 | val +0.0038 | 98.3s
+  epoch   4/40 | train +0.0037 | val +0.0037 | 100.0s
+  epoch   5/40 | train +0.0037 | val +0.0037 | 98.8s
+  epoch   6/40 | train +0.0037 | val +0.0037 | 97.8s
+  epoch   7/40 | train +0.0037 | val +0.0037 | 97.4s
+  epoch   8/40 | train +0.0037 | val +0.0037 | 98.6s
+  epoch   9/40 | train +0.0037 | val +0.0036 | 97.5s
+  epoch  10/40 | train +0.0036 | val +0.0036 | 97.5s
+  epoch  11/40 | train +0.0036 | val +0.0036 | 98.8s
+  epoch  12/40 | train +0.0035 | val +0.0035 | 97.1s
+  epoch  13/40 | train +0.0035 | val +0.0035 | 97.5s
+  epoch  14/40 | train +0.0035 | val +0.0035 | 97.5s
+  epoch  15/40 | train +0.0035 | val +0.0035 | 96.7s
+  epoch  16/40 | train +0.0035 | val +0.0035 | 96.9s
+  epoch  17/40 | train +0.0035 | val +0.0035 | 97.9s
+  epoch  18/40 | train +0.0034 | val +0.0035 | 98.0s
+  epoch  19/40 | train +0.0035 | val +0.0035 | 96.9s
+  epoch  20/40 | train +0.0035 | val +0.0034 | 99.5s
+  epoch  21/40 | train +0.0034 | val +0.0034 | 98.7s
+  epoch  22/40 | train +0.0035 | val +0.0035 | 97.6s
+  epoch  23/40 | train +0.0035 | val +0.0034 | 97.6s
+  epoch  24/40 | train +0.0034 | val +0.0034 | 98.0s
+  epoch  25/40 | train +0.0034 | val +0.0034 | 97.4s
+  epoch  26/40 | train +0.0034 | val +0.0034 | 97.5s
+  epoch  27/40 | train +0.0034 | val +0.0034 | 99.1s
+  epoch  28/40 | train +0.0034 | val +0.0034 | 98.9s
+  epoch  29/40 | train +0.0034 | val +0.0034 | 99.3s
+  epoch  30/40 | train +0.0034 | val +0.0034 | 98.9s
+  epoch  31/40 | train +0.0034 | val +0.0034 | 99.1s
+  epoch  32/40 | train +0.0034 | val +0.0034 | 99.9s
+  epoch  33/40 | train +0.0033 | val +0.0034 | 99.6s
+  epoch  34/40 | train +0.0034 | val +0.0034 | 99.6s
+  epoch  35/40 | train +0.0034 | val +0.0033 | 99.7s
+  epoch  36/40 | train +0.0033 | val +0.0034 | 98.3s
+  epoch  37/40 | train +0.0034 | val +0.0033 | 98.7s
+  epoch  38/40 | train +0.0033 | val +0.0033 | 99.9s
+  epoch  39/40 | train +0.0034 | val +0.0033 | 98.6s
+  epoch  40/40 | train +0.0034 | val +0.0033 | 99.0s
+  
+  saved         : FixedGraphN10D07test_single_dk/single_dk_phi_theta.pt (trained at scale=0.3)
+  done          : 3935.2s
+
+====================================================================
+  phase 3/5  |  DISTRIBUTED INFERENCE
+====================================================================
+  deployment    : weights copied to every prosumer (11780 params each), scale 0.3 (train) -> 1 (deploy)
+  mode          : each prosumer: communicate -> DR lines 4-7 -> own model (line 8)
+  stopping      : shadow residual < 1e-06 (cap 20000 iterations)
+  
+  instance   1/30 | DR   3564 it | learned   6227 it | x0.57
+  instance   2/30 | DR    519 it | learned    255 it | x2.04
+  instance   3/30 | DR    771 it | learned    503 it | x1.53
+  instance   4/30 | DR   1021 it | learned  20000 it | x0.05
+  instance   5/30 | DR   8433 it | learned   9940 it | x0.85
+  instance   6/30 | DR   1891 it | learned   2576 it | x0.73
+  instance   7/30 | DR   1215 it | learned    258 it | x4.71
+  instance   8/30 | DR   7420 it | learned    480 it | x15.46
+  instance   9/30 | DR   1079 it | learned   2600 it | x0.41
+  instance  10/30 | DR   3085 it | learned   8499 it | x0.36
+  instance  11/30 | DR   2581 it | learned    755 it | x3.42
+  instance  12/30 | DR    941 it | learned    458 it | x2.05
+  instance  13/30 | DR  15120 it | learned   1063 it | x14.22
+  instance  14/30 | DR    921 it | learned    674 it | x1.37
+  instance  15/30 | DR  20000 it | learned   4720 it | x4.24
+  instance  16/30 | DR   3538 it | learned    519 it | x6.82
+  instance  17/30 | DR   5462 it | learned   6859 it | x0.80
+  instance  18/30 | DR   1551 it | learned    298 it | x5.20
+  instance  19/30 | DR    793 it | learned    624 it | x1.27
+  instance  20/30 | DR    563 it | learned   1369 it | x0.41
+  instance  21/30 | DR   9734 it | learned  14249 it | x0.68
+  instance  22/30 | DR   3140 it | learned   2302 it | x1.36
+  instance  23/30 | DR    668 it | learned    370 it | x1.81
+  instance  24/30 | DR    673 it | learned    657 it | x1.02
+  instance  25/30 | DR   5140 it | learned    342 it | x15.03
+  instance  26/30 | DR  20000 it | learned    800 it | x25.00
+  instance  27/30 | DR   1045 it | learned    256 it | x4.08
+  instance  28/30 | DR   3847 it | learned    974 it | x3.95
+  instance  29/30 | DR   3932 it | learned   3115 it | x1.26
+  instance  30/30 | DR   1113 it | learned    416 it | x2.68
+  
+  median DR     : 2581 iterations
+  median learned: 800 iterations
+  mean speed-up : 4.11x
+  full stats    : median=1.669 std=5.699 min=0.051 max=25.000 regressed=9/30
+  (compare against example_single_costgap.py -- same single reference, cost-gap instead of d_k)
+  done          : 3077.1s | total 7012.3s
+
+====================================================================
+  phase 4/5  |  BASIC FIGURES
+====================================================================
+  curves        : recording full histories on all 30 test instances
+(no interactive display detected -> saving without showing)
+saved FixedGraphN10D07test_single_dk/l2play_training_loss.pdf, png
+saved FixedGraphN10D07test_single_dk/l2play_residual.pdf, png
+saved FixedGraphN10D07test_single_dk/l2play_residual_band.pdf, png
+saved FixedGraphN10D07test_single_dk/l2play_scatter.pdf, png
+saved FixedGraphN10D07test_single_dk/l2play_improvement_hist.pdf, png
+  done          : 3086.3s
+
+====================================================================
+  phase 5/5  |  EXTENDED DIAGNOSTICS
+====================================================================
+  reusing per-iteration histories recorded in phase 4
+  solving equilibrium QP per instance (exact)
+  J*            : 14.648, 14.768, 13.089, 13.716, 10.725, 11.726, 13.263, 14.749, 13.307, 11.309, 13.850, 10.761, 14.282, 13.387, 13.046, 12.606, 13.755, 13.656, 13.462, 13.096, 14.481, 15.010, 13.864, 12.801, 13.515, 12.786, 11.698, 11.050, 13.587, 11.761
+(no interactive display detected -> saving without showing)
+saved FixedGraphN10D07test_single_dk/l2play_auxresidual.pdf, png
+saved FixedGraphN10D07test_single_dk/l2play_zresidual.pdf, png
+saved FixedGraphN10D07test_single_dk/l2play_costgap.pdf, png
+  done          : 31.7s | grand total 10130.3s
