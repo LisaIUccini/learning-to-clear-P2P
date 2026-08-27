@@ -1,0 +1,49 @@
+writing all artifacts to runs/fixed_market_on_combined_scale/  (n_test=30  weights=runs/fixed_market/phi_w.pt)
+======================================================================
+loading runs/fixed_market/phi_w.pt (trained on ZERO diversity,
+never saw parameter OR topology variation) -- NO retraining here
+======================================================================
+
+dataset: BOTH axes vary together -- graph AND parameters each
+shift via their OWN independent shared +/-10% factor per instance
+
+evaluating: plain DR vs DR + Phi_w, zero-shot
+----------------------------------------------------------------------
+  [fixed-model-on-combined-scale]  1/30  N= 10  DR   357 it  |  learned   295 it  |  x 1.21 (+17.4%)
+  [fixed-model-on-combined-scale]  2/30  N= 10  DR   381 it  |  learned   287 it  |  x 1.33 (+24.7%)
+  [fixed-model-on-combined-scale]  3/30  N= 11  DR   334 it  |  learned   274 it  |  x 1.22 (+18.0%)
+  [fixed-model-on-combined-scale]  4/30  N= 10  DR   403 it  |  learned   340 it  |  x 1.19 (+15.6%)
+  [fixed-model-on-combined-scale]  5/30  N= 10  DR   380 it  |  learned   356 it  |  x 1.07 (+6.3%)
+  [fixed-model-on-combined-scale]  6/30  N= 10  DR   497 it  |  learned   298 it  |  x 1.67 (+40.0%)
+  [fixed-model-on-combined-scale]  7/30  N= 11  DR   442 it  |  learned   411 it  |  x 1.08 (+7.0%)
+  [fixed-model-on-combined-scale]  8/30  N= 10  DR   319 it  |  learned   281 it  |  x 1.14 (+11.9%)
+  [fixed-model-on-combined-scale]  9/30  N= 10  DR   342 it  |  learned   279 it  |  x 1.23 (+18.4%)
+  [fixed-model-on-combined-scale] 10/30  N= 10  DR   344 it  |  learned   285 it  |  x 1.21 (+17.2%)
+  [fixed-model-on-combined-scale] 11/30  N= 10  DR   587 it  |  learned   359 it  |  x 1.64 (+38.8%)
+  [fixed-model-on-combined-scale] 12/30  N= 10  DR   473 it  |  learned   269 it  |  x 1.76 (+43.1%)
+  [fixed-model-on-combined-scale] 13/30  N= 10  DR   441 it  |  learned   380 it  |  x 1.16 (+13.8%)
+  [fixed-model-on-combined-scale] 14/30  N= 11  DR   364 it  |  learned   256 it  |  x 1.42 (+29.7%)
+  [fixed-model-on-combined-scale] 15/30  N= 10  DR   427 it  |  learned   303 it  |  x 1.41 (+29.0%)
+  [fixed-model-on-combined-scale] 16/30  N= 10  DR   261 it  |  learned   273 it  |  x 0.96 (-4.6%)
+  [fixed-model-on-combined-scale] 17/30  N=  9  DR  3250 it  |  learned  3719 it  |  x 0.87 (-14.4%)
+  [fixed-model-on-combined-scale] 18/30  N= 10  DR   364 it  |  learned   283 it  |  x 1.29 (+22.3%)
+  [fixed-model-on-combined-scale] 19/30  N= 11  DR   300 it  |  learned   255 it  |  x 1.18 (+15.0%)
+  [fixed-model-on-combined-scale] 20/30  N=  9  DR   445 it  |  learned   337 it  |  x 1.32 (+24.3%)
+  [fixed-model-on-combined-scale] 21/30  N= 10  DR   544 it  |  learned   352 it  |  x 1.55 (+35.3%)
+  [fixed-model-on-combined-scale] 22/30  N= 10  DR   285 it  |  learned   251 it  |  x 1.14 (+11.9%)
+  [fixed-model-on-combined-scale] 23/30  N= 10  DR   400 it  |  learned   274 it  |  x 1.46 (+31.5%)
+  [fixed-model-on-combined-scale] 24/30  N= 10  DR   409 it  |  learned   289 it  |  x 1.42 (+29.3%)
+  [fixed-model-on-combined-scale] 25/30  N=  9  DR   235 it  |  learned   216 it  |  x 1.09 (+8.1%)
+  [fixed-model-on-combined-scale] 26/30  N=  9  DR   488 it  |  learned   319 it  |  x 1.53 (+34.6%)
+  [fixed-model-on-combined-scale] 27/30  N=  9  DR   290 it  |  learned   316 it  |  x 0.92 (-9.0%)
+  [fixed-model-on-combined-scale] 28/30  N=  9  DR   534 it  |  learned   359 it  |  x 1.49 (+32.8%)
+  [fixed-model-on-combined-scale] 29/30  N= 10  DR   499 it  |  learned   352 it  |  x 1.42 (+29.5%)
+  [fixed-model-on-combined-scale] 30/30  N= 10  DR   227 it  |  learned   247 it  |  x 0.92 (-8.8%)
+  [fixed-model-on-combined-scale] mean speed-up 1.27x   median 1.22x   min 0.87x   max 1.76x   win-rate 87% (26/30)
+
+recording residual curves...
+saved runs/fixed_market_on_combined_scale/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/fixed_market_on_combined_scale/instance_plots/
+saved runs/fixed_market_on_combined_scale/NOTES.md

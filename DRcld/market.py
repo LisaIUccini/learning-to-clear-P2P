@@ -384,9 +384,18 @@ def sample_common_scale_topology_dataset(base_neighbors: Dict[int, List[int]],
 def _perturb_primitives(base_neighbors: Dict[int, List[int]], prim0: MarketPrimitives,
                          N_new: int, neighbors_new: Dict[int, List[int]],
                          origin: Dict[int, Optional[int]], cfg: MarketConfig,
-                         pct: float, rng: np.random.Generator) -> MarketPrimitives:
+                         pct: float, rng: np.random.Generator,
+                         factor: Optional[float] = None) -> MarketPrimitives:
+    """If `factor` is given, every inherited value is scaled by that SAME
+    pre-drawn factor (the shared-factor mode, `pct` is then ignored) --
+    used by `sample_common_scale_combined_dataset` to apply one coherent
+    parameter-wide shift, the primitives analogue of
+    `_perturb_topology_shared_factor`. Otherwise (`factor=None`, the
+    default) every value draws its OWN independent factor in
+    [1-pct, 1+pct], as used by `sample_cluster_dataset`/`sample_param_only_dataset`."""
     def jitter(x: float) -> float:
-        return float(x * rng.uniform(1.0 - pct, 1.0 + pct))
+        f = factor if factor is not None else rng.uniform(1.0 - pct, 1.0 + pct)
+        return float(x * f)
 
     fields = ["a_tilde", "a", "b", "G_max", "G_min_raw", "G_res", "G0_frac", "D_spread",
               "D_star_jitter"]
@@ -526,6 +535,34 @@ def sample_common_scale_dataset(base_neighbors: Dict[int, List[int]], base_prim:
             kappa={k: v * factor for k, v in base_prim.kappa.items()},
         )
         specs.append(build_spec(N0, base_neighbors, prim_new))
+    return specs
+
+
+def sample_common_scale_combined_dataset(base_neighbors: Dict[int, List[int]],
+                                          base_prim: MarketPrimitives, cfg: MarketConfig,
+                                          n_instances: int, pct: float, seed: int
+                                          ) -> List[MarketSpec]:
+    """Combines `sample_common_scale_dataset` (shared parameter factor) and
+    `sample_common_scale_topology_dataset` (shared topology factor): BOTH
+    axes vary together, per instance -- but via TWO separately-drawn
+    shared factors (one for topology, one for parameters), not one factor
+    driving both. Topology and parameter scale are conceptually different
+    kinds of shift (structural vs. numeric), so coupling them to the same
+    draw would be an arbitrary correlation, not a real constraint of the
+    problem. Genuinely new nodes/edges (from topology growth) have no base
+    value to scale and draw fresh from `cfg`'s ranges, same as
+    `sample_common_scale_topology_dataset`.
+    """
+    N0 = len(base_neighbors)
+    specs = []
+    for i in range(n_instances):
+        rng = np.random.default_rng(seed * 100_003 + i)
+        topo_factor = 1.0 + float(rng.uniform(-pct, pct))
+        param_factor = 1.0 + float(rng.uniform(-pct, pct))
+        N_new, neighbors_new, origin = _perturb_topology_shared_factor(base_neighbors, N0, topo_factor, rng)
+        prim_new = _perturb_primitives(base_neighbors, base_prim, N_new, neighbors_new,
+                                        origin, cfg, 0.0, rng, factor=param_factor)
+        specs.append(build_spec(N_new, neighbors_new, prim_new))
     return specs
 
 

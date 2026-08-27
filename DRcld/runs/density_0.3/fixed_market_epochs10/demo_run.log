@@ -1,0 +1,67 @@
+writing all artifacts to runs/fixed_market_epochs10/  (n_train=25  n_test=30  epochs=10)
+======================================================================
+dataset: ONE fixed market (graph + every parameter identical
+across all instances) -- only the random initial state x^0
+varies, for both training and the held-out test set
+======================================================================
+  N=10  edges=20
+
+sanity check: plain DR converges from a few random starts
+  start 0  iters=  430  converged=True  feasible=True
+  start 1  iters=  271  converged=True  feasible=True
+  start 2  iters=  391  converged=True  feasible=True
+
+training Phi_w (centralised, self-supervised, loss_mode='hinge')
+  epoch   1/10 | train +0.0014 | val +0.0013
+  epoch   2/10 | train +0.0011 | val +0.0010
+  epoch   3/10 | train +0.0011 | val +0.0010
+  epoch   4/10 | train +0.0010 | val +0.0009
+  epoch   5/10 | train +0.0009 | val +0.0008
+  epoch   6/10 | train +0.0009 | val +0.0007
+  epoch   7/10 | train +0.0008 | val +0.0008
+  epoch   8/10 | train +0.0009 | val +0.0008
+  epoch   9/10 | train +0.0007 | val +0.0007
+  epoch  10/10 | train +0.0007 | val +0.0008
+
+evaluating: plain DR vs DR + Phi_w, fully distributed inference
+----------------------------------------------------------------------
+  [fixed-market]  1/30  N= 10  DR   196 it  |  learned   270 it  |  x 0.73 (-37.8%)
+  [fixed-market]  2/30  N= 10  DR   545 it  |  learned   408 it  |  x 1.34 (+25.1%)
+  [fixed-market]  3/30  N= 10  DR   327 it  |  learned   332 it  |  x 0.98 (-1.5%)
+  [fixed-market]  4/30  N= 10  DR   478 it  |  learned   351 it  |  x 1.36 (+26.6%)
+  [fixed-market]  5/30  N= 10  DR   414 it  |  learned   311 it  |  x 1.33 (+24.9%)
+  [fixed-market]  6/30  N= 10  DR   460 it  |  learned   345 it  |  x 1.33 (+25.0%)
+  [fixed-market]  7/30  N= 10  DR   338 it  |  learned   327 it  |  x 1.03 (+3.3%)
+  [fixed-market]  8/30  N= 10  DR   383 it  |  learned   330 it  |  x 1.16 (+13.8%)
+  [fixed-market]  9/30  N= 10  DR   536 it  |  learned   361 it  |  x 1.48 (+32.6%)
+  [fixed-market] 10/30  N= 10  DR   515 it  |  learned   329 it  |  x 1.57 (+36.1%)
+  [fixed-market] 11/30  N= 10  DR   386 it  |  learned   267 it  |  x 1.45 (+30.8%)
+  [fixed-market] 12/30  N= 10  DR   417 it  |  learned   315 it  |  x 1.32 (+24.5%)
+  [fixed-market] 13/30  N= 10  DR   389 it  |  learned   314 it  |  x 1.24 (+19.3%)
+  [fixed-market] 14/30  N= 10  DR   353 it  |  learned   285 it  |  x 1.24 (+19.3%)
+  [fixed-market] 15/30  N= 10  DR   547 it  |  learned   340 it  |  x 1.61 (+37.8%)
+  [fixed-market] 16/30  N= 10  DR   276 it  |  learned   303 it  |  x 0.91 (-9.8%)
+  [fixed-market] 17/30  N= 10  DR   493 it  |  learned   357 it  |  x 1.38 (+27.6%)
+  [fixed-market] 18/30  N= 10  DR   560 it  |  learned   374 it  |  x 1.50 (+33.2%)
+  [fixed-market] 19/30  N= 10  DR   315 it  |  learned   320 it  |  x 0.98 (-1.6%)
+  [fixed-market] 20/30  N= 10  DR   392 it  |  learned   323 it  |  x 1.21 (+17.6%)
+  [fixed-market] 21/30  N= 10  DR   557 it  |  learned   401 it  |  x 1.39 (+28.0%)
+  [fixed-market] 22/30  N= 10  DR   360 it  |  learned   313 it  |  x 1.15 (+13.1%)
+  [fixed-market] 23/30  N= 10  DR   418 it  |  learned   324 it  |  x 1.29 (+22.5%)
+  [fixed-market] 24/30  N= 10  DR   283 it  |  learned   318 it  |  x 0.89 (-12.4%)
+  [fixed-market] 25/30  N= 10  DR   311 it  |  learned   314 it  |  x 0.99 (-1.0%)
+  [fixed-market] 26/30  N= 10  DR   527 it  |  learned   350 it  |  x 1.51 (+33.6%)
+  [fixed-market] 27/30  N= 10  DR   441 it  |  learned   336 it  |  x 1.31 (+23.8%)
+  [fixed-market] 28/30  N= 10  DR   487 it  |  learned   345 it  |  x 1.41 (+29.2%)
+  [fixed-market] 29/30  N= 10  DR   389 it  |  learned   300 it  |  x 1.30 (+22.9%)
+  [fixed-market] 30/30  N= 10  DR   510 it  |  learned   369 it  |  x 1.38 (+27.6%)
+  [fixed-market] mean speed-up 1.26x   median 1.32x   min 0.73x   max 1.61x   win-rate 80% (24/30)
+
+recording residual curves on the test set...
+saved runs/fixed_market_epochs10/results.png
+saved runs/fixed_market_epochs10/training_loss.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/fixed_market_epochs10/instance_plots/
+saved trained weights to runs/fixed_market_epochs10/phi_w.pt
+saved runs/fixed_market_epochs10/NOTES.md

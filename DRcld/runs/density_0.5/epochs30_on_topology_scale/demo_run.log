@@ -1,0 +1,49 @@
+writing all artifacts to runs/density_0.5/epochs30_on_topology_scale/  (n_test=30  weights=runs/density_0.5/epochs30/phi_w.pt  density=0.5)
+======================================================================
+loading runs/density_0.5/epochs30/phi_w.pt (trained on ZERO diversity,
+never saw topology variation) -- NO retraining here
+======================================================================
+
+dataset: market parameters EXACTLY fixed; graph varies via ONE
+shared +/-10% factor applied to node count AND edge count together
+
+evaluating: plain DR vs DR + Phi_w (fixed_market weights), zero-shot
+----------------------------------------------------------------------
+  [fixed-model-on-topology-scale]  1/30  N= 10  DR   651 it  |  learned   788 it  |  x 0.83 (-21.0%)
+  [fixed-model-on-topology-scale]  2/30  N= 10  DR   399 it  |  learned   292 it  |  x 1.37 (+26.8%)
+  [fixed-model-on-topology-scale]  3/30  N= 11  DR   733 it  |  learned   658 it  |  x 1.11 (+10.2%)
+  [fixed-model-on-topology-scale]  4/30  N= 10  DR   369 it  |  learned   304 it  |  x 1.21 (+17.6%)
+  [fixed-model-on-topology-scale]  5/30  N= 10  DR   749 it  |  learned   701 it  |  x 1.07 (+6.4%)
+  [fixed-model-on-topology-scale]  6/30  N= 10  DR  3041 it  |  learned   778 it  |  x 3.91 (+74.4%)
+  [fixed-model-on-topology-scale]  7/30  N= 11  DR   343 it  |  learned   300 it  |  x 1.14 (+12.5%)
+  [fixed-model-on-topology-scale]  8/30  N= 10  DR   748 it  |  learned   788 it  |  x 0.95 (-5.3%)
+  [fixed-model-on-topology-scale]  9/30  N= 10  DR   914 it  |  learned   798 it  |  x 1.15 (+12.7%)
+  [fixed-model-on-topology-scale] 10/30  N= 10  DR   770 it  |  learned   766 it  |  x 1.01 (+0.5%)
+  [fixed-model-on-topology-scale] 11/30  N= 10  DR   904 it  |  learned   799 it  |  x 1.13 (+11.6%)
+  [fixed-model-on-topology-scale] 12/30  N= 10  DR   686 it  |  learned   325 it  |  x 2.11 (+52.6%)
+  [fixed-model-on-topology-scale] 13/30  N= 10  DR   398 it  |  learned   380 it  |  x 1.05 (+4.5%)
+  [fixed-model-on-topology-scale] 14/30  N= 11  DR   452 it  |  learned   358 it  |  x 1.26 (+20.8%)
+  [fixed-model-on-topology-scale] 15/30  N= 10  DR   323 it  |  learned   758 it  |  x 0.43 (-134.7%)
+  [fixed-model-on-topology-scale] 16/30  N= 10  DR   746 it  |  learned   713 it  |  x 1.05 (+4.4%)
+  [fixed-model-on-topology-scale] 17/30  N=  9  DR   735 it  |  learned   658 it  |  x 1.12 (+10.5%)
+  [fixed-model-on-topology-scale] 18/30  N= 10  DR   357 it  |  learned   665 it  |  x 0.54 (-86.3%)
+  [fixed-model-on-topology-scale] 19/30  N= 11  DR   569 it  |  learned   521 it  |  x 1.09 (+8.4%)
+  [fixed-model-on-topology-scale] 20/30  N=  9  DR   293 it  |  learned   327 it  |  x 0.90 (-11.6%)
+  [fixed-model-on-topology-scale] 21/30  N= 10  DR   819 it  |  learned   788 it  |  x 1.04 (+3.8%)
+  [fixed-model-on-topology-scale] 22/30  N= 10  DR   785 it  |  learned   791 it  |  x 0.99 (-0.8%)
+  [fixed-model-on-topology-scale] 23/30  N= 10  DR   918 it  |  learned   401 it  |  x 2.29 (+56.3%)
+  [fixed-model-on-topology-scale] 24/30  N= 10  DR   821 it  |  learned   790 it  |  x 1.04 (+3.8%)
+  [fixed-model-on-topology-scale] 25/30  N=  9  DR   412 it  |  learned   326 it  |  x 1.26 (+20.9%)
+  [fixed-model-on-topology-scale] 26/30  N=  9  DR  4000 it  |  learned  4000 it  |  x 1.00 (+0.0%)  [DID NOT CONVERGE]
+  [fixed-model-on-topology-scale] 27/30  N=  9  DR   868 it  |  learned   847 it  |  x 1.02 (+2.4%)
+  [fixed-model-on-topology-scale] 28/30  N=  9  DR   309 it  |  learned   294 it  |  x 1.05 (+4.9%)
+  [fixed-model-on-topology-scale] 29/30  N= 10  DR   349 it  |  learned   322 it  |  x 1.08 (+7.7%)
+  [fixed-model-on-topology-scale] 30/30  N= 10  DR   762 it  |  learned   776 it  |  x 0.98 (-1.8%)
+  [fixed-model-on-topology-scale] mean speed-up 1.21x   median 1.06x   min 0.43x   max 3.91x   win-rate 77% (23/30)
+
+recording residual curves...
+saved runs/density_0.5/epochs30_on_topology_scale/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/density_0.5/epochs30_on_topology_scale/instance_plots/
+saved runs/density_0.5/epochs30_on_topology_scale/NOTES.md

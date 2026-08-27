@@ -1,0 +1,7 @@
+[14:38:48] training epochs=100...
+[16:23:04] training done
+  [fixed-market] mean speed-up 1.28x   median 1.31x   min 0.97x   max 1.55x   win-rate 97% (29/30)
+[16:23:04] running D*/G_res zero-shot inference on epochs=100 checkpoint...
+[16:51:40] D*/G_res inference done
+  [dstar-gres-scale] mean speed-up 1.29x   median 1.25x   min 0.93x   max 1.73x   win-rate 97% (29/30)
+[16:51:40] ALL DONE

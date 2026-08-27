@@ -1,0 +1,87 @@
+writing all artifacts to runs/density_1.0/epochs30_gamma10_unroll373_scale07_eta025/  (n_train=25  n_test=30  epochs=30  density=1.0  eta=0.25  gamma=10.0  unroll=373  gnn_rho=0.9729  gnn_scale=0.7  base_seed=0)
+======================================================================
+dataset: ONE fixed market (graph + every parameter identical
+across all instances) -- only the random initial state x^0
+varies, for both training and the held-out test set
+======================================================================
+  N=10  edges=45
+
+sanity check: plain DR converges from a few random starts
+  start 0  iters=  757  converged=True  feasible=True
+  start 1  iters=  741  converged=True  feasible=True
+  start 2  iters=  752  converged=True  feasible=True
+
+training Phi_w (centralised, self-supervised, loss_mode='hinge')
+  epoch   1/30 | train +0.0031 | val +0.0027
+  epoch   2/30 | train +0.0024 | val +0.0023
+  epoch   3/30 | train +0.0023 | val +0.0022
+  epoch   4/30 | train +0.0023 | val +0.0022
+  epoch   5/30 | train +0.0021 | val +0.0022
+  epoch   6/30 | train +0.0022 | val +0.0021
+  epoch   7/30 | train +0.0021 | val +0.0023
+  epoch   8/30 | train +0.0022 | val +0.0021
+  epoch   9/30 | train +0.0021 | val +0.0021
+  epoch  10/30 | train +0.0021 | val +0.0021
+  epoch  11/30 | train +0.0020 | val +0.0021
+  epoch  12/30 | train +0.0021 | val +0.0021
+  epoch  13/30 | train +0.0020 | val +0.0019
+  epoch  14/30 | train +0.0020 | val +0.0020
+  epoch  15/30 | train +0.0020 | val +0.0019
+  epoch  16/30 | train +0.0021 | val +0.0020
+  epoch  17/30 | train +0.0021 | val +0.0020
+  epoch  18/30 | train +0.0020 | val +0.0020
+  epoch  19/30 | train +0.0020 | val +0.0019
+  epoch  20/30 | train +0.0020 | val +0.0019
+  epoch  21/30 | train +0.0020 | val +0.0019
+  epoch  22/30 | train +0.0020 | val +0.0021
+  epoch  23/30 | train +0.0020 | val +0.0019
+  epoch  24/30 | train +0.0020 | val +0.0018
+  epoch  25/30 | train +0.0019 | val +0.0020
+  epoch  26/30 | train +0.0020 | val +0.0019
+  epoch  27/30 | train +0.0020 | val +0.0020
+  epoch  28/30 | train +0.0019 | val +0.0019
+  epoch  29/30 | train +0.0019 | val +0.0019
+  epoch  30/30 | train +0.0020 | val +0.0018
+
+evaluating: plain DR vs DR + Phi_w, fully distributed inference
+----------------------------------------------------------------------
+  [fixed-market]  1/30  N= 10  DR   738 it  |  learned   738 it  |  x 1.00 (+0.0%)
+  [fixed-market]  2/30  N= 10  DR   752 it  |  learned   737 it  |  x 1.02 (+2.0%)
+  [fixed-market]  3/30  N= 10  DR   749 it  |  learned   739 it  |  x 1.01 (+1.3%)
+  [fixed-market]  4/30  N= 10  DR   739 it  |  learned   733 it  |  x 1.01 (+0.8%)
+  [fixed-market]  5/30  N= 10  DR   741 it  |  learned   746 it  |  x 0.99 (-0.7%)
+  [fixed-market]  6/30  N= 10  DR   750 it  |  learned   745 it  |  x 1.01 (+0.7%)
+  [fixed-market]  7/30  N= 10  DR   778 it  |  learned   743 it  |  x 1.05 (+4.5%)
+  [fixed-market]  8/30  N= 10  DR   748 it  |  learned   743 it  |  x 1.01 (+0.7%)
+  [fixed-market]  9/30  N= 10  DR   751 it  |  learned   741 it  |  x 1.01 (+1.3%)
+  [fixed-market] 10/30  N= 10  DR   737 it  |  learned   736 it  |  x 1.00 (+0.1%)
+  [fixed-market] 11/30  N= 10  DR   742 it  |  learned   747 it  |  x 0.99 (-0.7%)
+  [fixed-market] 12/30  N= 10  DR   746 it  |  learned   743 it  |  x 1.00 (+0.4%)
+  [fixed-market] 13/30  N= 10  DR   754 it  |  learned   739 it  |  x 1.02 (+2.0%)
+  [fixed-market] 14/30  N= 10  DR   745 it  |  learned   733 it  |  x 1.02 (+1.6%)
+  [fixed-market] 15/30  N= 10  DR   746 it  |  learned   744 it  |  x 1.00 (+0.3%)
+  [fixed-market] 16/30  N= 10  DR   765 it  |  learned   743 it  |  x 1.03 (+2.9%)
+  [fixed-market] 17/30  N= 10  DR   742 it  |  learned   743 it  |  x 1.00 (-0.1%)
+  [fixed-market] 18/30  N= 10  DR   746 it  |  learned   740 it  |  x 1.01 (+0.8%)
+  [fixed-market] 19/30  N= 10  DR   746 it  |  learned   737 it  |  x 1.01 (+1.2%)
+  [fixed-market] 20/30  N= 10  DR   737 it  |  learned   743 it  |  x 0.99 (-0.8%)
+  [fixed-market] 21/30  N= 10  DR   749 it  |  learned   744 it  |  x 1.01 (+0.7%)
+  [fixed-market] 22/30  N= 10  DR   754 it  |  learned   745 it  |  x 1.01 (+1.2%)
+  [fixed-market] 23/30  N= 10  DR   750 it  |  learned   740 it  |  x 1.01 (+1.3%)
+  [fixed-market] 24/30  N= 10  DR   761 it  |  learned   744 it  |  x 1.02 (+2.2%)
+  [fixed-market] 25/30  N= 10  DR   745 it  |  learned   738 it  |  x 1.01 (+0.9%)
+  [fixed-market] 26/30  N= 10  DR   760 it  |  learned   742 it  |  x 1.02 (+2.4%)
+  [fixed-market] 27/30  N= 10  DR   766 it  |  learned   734 it  |  x 1.04 (+4.2%)
+  [fixed-market] 28/30  N= 10  DR   741 it  |  learned   742 it  |  x 1.00 (-0.1%)
+  [fixed-market] 29/30  N= 10  DR   750 it  |  learned   741 it  |  x 1.01 (+1.2%)
+  [fixed-market] 30/30  N= 10  DR   730 it  |  learned   750 it  |  x 0.97 (-2.7%)
+  [fixed-market] mean speed-up 1.01x   median 1.01x   min 0.97x   max 1.05x   win-rate 80% (24/30)
+
+recording residual curves on the test set...
+saved runs/density_1.0/epochs30_gamma10_unroll373_scale07_eta025/results.png
+saved runs/density_1.0/epochs30_gamma10_unroll373_scale07_eta025/training_loss.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/density_1.0/epochs30_gamma10_unroll373_scale07_eta025/instance_plots/
+saved trained weights to runs/density_1.0/epochs30_gamma10_unroll373_scale07_eta025/phi_w.pt
+saved runs/density_1.0/epochs30_gamma10_unroll373_scale07_eta025/NOTES.md

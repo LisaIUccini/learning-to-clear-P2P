@@ -1,0 +1,49 @@
+writing all artifacts to runs/density_0.7/epochs40_on_combined_scale/  (n_test=30  weights=runs/density_0.7/epochs40/phi_w.pt  density=0.7)
+======================================================================
+loading runs/density_0.7/epochs40/phi_w.pt (trained on ZERO diversity,
+never saw parameter OR topology variation) -- NO retraining here
+======================================================================
+
+dataset: BOTH axes vary together -- graph AND parameters each
+shift via their OWN independent shared +/-10% factor per instance
+
+evaluating: plain DR vs DR + Phi_w, zero-shot
+----------------------------------------------------------------------
+  [fixed-model-on-combined-scale]  1/30  N= 10  DR   404 it  |  learned   341 it  |  x 1.18 (+15.6%)
+  [fixed-model-on-combined-scale]  2/30  N= 10  DR   488 it  |  learned   470 it  |  x 1.04 (+3.7%)
+  [fixed-model-on-combined-scale]  3/30  N= 11  DR   529 it  |  learned   476 it  |  x 1.11 (+10.0%)
+  [fixed-model-on-combined-scale]  4/30  N= 10  DR   477 it  |  learned   353 it  |  x 1.35 (+26.0%)
+  [fixed-model-on-combined-scale]  5/30  N= 10  DR   538 it  |  learned   347 it  |  x 1.55 (+35.5%)
+  [fixed-model-on-combined-scale]  6/30  N= 10  DR   391 it  |  learned   336 it  |  x 1.16 (+14.1%)
+  [fixed-model-on-combined-scale]  7/30  N= 11  DR   999 it  |  learned  1086 it  |  x 0.92 (-8.7%)
+  [fixed-model-on-combined-scale]  8/30  N= 10  DR   373 it  |  learned   309 it  |  x 1.21 (+17.2%)
+  [fixed-model-on-combined-scale]  9/30  N= 10  DR   429 it  |  learned   402 it  |  x 1.07 (+6.3%)
+  [fixed-model-on-combined-scale] 10/30  N= 10  DR   457 it  |  learned   528 it  |  x 0.87 (-15.5%)
+  [fixed-model-on-combined-scale] 11/30  N= 10  DR   411 it  |  learned   342 it  |  x 1.20 (+16.8%)
+  [fixed-model-on-combined-scale] 12/30  N= 10  DR   463 it  |  learned   476 it  |  x 0.97 (-2.8%)
+  [fixed-model-on-combined-scale] 13/30  N= 10  DR   419 it  |  learned   343 it  |  x 1.22 (+18.1%)
+  [fixed-model-on-combined-scale] 14/30  N= 11  DR   335 it  |  learned   333 it  |  x 1.01 (+0.6%)
+  [fixed-model-on-combined-scale] 15/30  N= 10  DR   346 it  |  learned   368 it  |  x 0.94 (-6.4%)
+  [fixed-model-on-combined-scale] 16/30  N= 10  DR   593 it  |  learned   531 it  |  x 1.12 (+10.5%)
+  [fixed-model-on-combined-scale] 17/30  N=  9  DR   448 it  |  learned   554 it  |  x 0.81 (-23.7%)
+  [fixed-model-on-combined-scale] 18/30  N= 10  DR   399 it  |  learned   336 it  |  x 1.19 (+15.8%)
+  [fixed-model-on-combined-scale] 19/30  N= 11  DR   321 it  |  learned   310 it  |  x 1.04 (+3.4%)
+  [fixed-model-on-combined-scale] 20/30  N=  9  DR  1362 it  |  learned  1183 it  |  x 1.15 (+13.1%)
+  [fixed-model-on-combined-scale] 21/30  N= 10  DR   520 it  |  learned   705 it  |  x 0.74 (-35.6%)
+  [fixed-model-on-combined-scale] 22/30  N= 10  DR  1070 it  |  learned  1914 it  |  x 0.56 (-78.9%)
+  [fixed-model-on-combined-scale] 23/30  N= 10  DR   510 it  |  learned   484 it  |  x 1.05 (+5.1%)
+  [fixed-model-on-combined-scale] 24/30  N= 10  DR   422 it  |  learned   335 it  |  x 1.26 (+20.6%)
+  [fixed-model-on-combined-scale] 25/30  N=  9  DR   916 it  |  learned   626 it  |  x 1.46 (+31.7%)
+  [fixed-model-on-combined-scale] 26/30  N=  9  DR   409 it  |  learned   483 it  |  x 0.85 (-18.1%)
+  [fixed-model-on-combined-scale] 27/30  N=  9  DR   501 it  |  learned   559 it  |  x 0.90 (-11.6%)
+  [fixed-model-on-combined-scale] 28/30  N=  9  DR   549 it  |  learned   416 it  |  x 1.32 (+24.2%)
+  [fixed-model-on-combined-scale] 29/30  N= 10  DR   444 it  |  learned   389 it  |  x 1.14 (+12.4%)
+  [fixed-model-on-combined-scale] 30/30  N= 10  DR   480 it  |  learned   508 it  |  x 0.94 (-5.8%)
+  [fixed-model-on-combined-scale] mean speed-up 1.08x   median 1.09x   min 0.56x   max 1.55x   win-rate 67% (20/30)
+
+recording residual curves...
+saved runs/density_0.7/epochs40_on_combined_scale/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/density_0.7/epochs40_on_combined_scale/instance_plots/
+saved runs/density_0.7/epochs40_on_combined_scale/NOTES.md
