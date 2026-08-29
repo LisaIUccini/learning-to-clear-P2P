@@ -297,7 +297,16 @@ class PerturbationGNN(nn.Module):
             return direction * scale_vec
 
         direction_fast = _channel(self.phi_node, self.phi_edge, self.phi_gate)
-        direction_slow = _channel(self.phi_node_slow, self.phi_edge_slow, self.phi_gate_slow)
+        # scale_slow == 0 makes the caller's amp_slow * direction_slow exactly
+        # zero regardless of direction_slow's value (LocalAgent.perturbation /
+        # train.rollout) -- skip the slow channel's MLPs entirely rather than
+        # compute and then discard them; identical result, ~2x fewer linear/
+        # tanh evaluations per step when the slow channel is inactive (the
+        # validated recipe throughout this project).
+        if self.cfg.scale_slow == 0.0:
+            direction_slow = torch.zeros_like(direction_fast)
+        else:
+            direction_slow = _channel(self.phi_node_slow, self.phi_edge_slow, self.phi_gate_slow)
         return direction_fast, direction_slow, mem_new
 
     # ==================================================================
@@ -351,7 +360,10 @@ class PerturbationGNN(nn.Module):
             agg = torch.zeros(1, d_h, dtype=h.dtype)
             mem_new = self.phi_upd(torch.cat([h, agg.squeeze(0)]).unsqueeze(0), mem).squeeze(0)
             fast = _channel_empty(self.phi_node, self.phi_gate, mem_new)
-            slow = _channel_empty(self.phi_node_slow, self.phi_gate_slow, mem_new)
+            if cfg.scale_slow == 0.0:
+                slow = (torch.zeros((), dtype=h.dtype), torch.zeros((), dtype=h.dtype), {})
+            else:
+                slow = _channel_empty(self.phi_node_slow, self.phi_gate_slow, mem_new)
             return fast, slow, mem_new
 
         kappa_vec = torch.clamp(torch.stack([s.kappa[m] for m in s.neighbors]), min=1e-6)
@@ -376,7 +388,14 @@ class PerturbationGNN(nn.Module):
             return delta_D, delta_G, delta_q
 
         fast = _channel(self.phi_node, self.phi_edge, self.phi_gate)
-        slow = _channel(self.phi_node_slow, self.phi_edge_slow, self.phi_gate_slow)
+        # see forward_centralised's matching comment: scale_slow == 0 makes
+        # amp_slow * slow's-outputs exactly zero at the caller regardless of
+        # their value, so skip the slow channel's MLPs entirely in that case.
+        if cfg.scale_slow == 0.0:
+            zero = torch.zeros((), dtype=h.dtype)
+            slow = (zero, zero, {m: zero for m in s.neighbors})
+        else:
+            slow = _channel(self.phi_node_slow, self.phi_edge_slow, self.phi_gate_slow)
         return fast, slow, mem_new
 
     @staticmethod

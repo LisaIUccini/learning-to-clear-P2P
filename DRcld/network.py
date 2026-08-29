@@ -137,13 +137,21 @@ class Prosumer:
         g = float(gamma)
         denomD = 2.0 * g * self.a_tilde + 1.0
         denomG = g * self.a + 1.0
+        # D_of/G_of/q_sum are each evaluated ~30-40 times per local_prox call
+        # (bracket expansion + bisection), but only the "+ nu"/"- nu" term
+        # actually varies across those calls -- hoist the nu-INDEPENDENT part
+        # of each numerator out of the loop. Same expression, same operation
+        # order as before (nu is still the last term added/subtracted before
+        # the division/minimum), so results are bit-identical, just not
+        # recomputed 30-40x per call.
+        numer_D_const = 2.0 * g * self.a_tilde * self.D_star + rD
+        numer_G_const = rG - g * self.b
 
         def D_of(nu):
-            return torch.clamp((2.0 * g * self.a_tilde * self.D_star + rD + nu)
-                                / denomD, self.D_min, self.D_max)
+            return torch.clamp((numer_D_const + nu) / denomD, self.D_min, self.D_max)
 
         def G_of(nu):
-            return torch.clamp((rG - g * self.b - nu) / denomG, self.G_min, self.G_max)
+            return torch.clamp((numer_G_const - nu) / denomG, self.G_min, self.G_max)
 
         # The bisection loop only needs the SUM of q_m(nu) at every step, so
         # the per-neighbour dict (needed only once, at the end) is kept out
@@ -152,9 +160,10 @@ class Prosumer:
             rq_vec = torch.stack([rq[m] for m in self.neighbors])
             c_vec = torch.stack([self.c[m] for m in self.neighbors])
             k_vec = torch.stack([self.k[m] for m in self.neighbors])
+            q_const_vec = rq_vec - g * c_vec
 
             def q_sum(nu):
-                return torch.minimum(rq_vec - g * c_vec - nu, k_vec).sum()
+                return torch.minimum(q_const_vec - nu, k_vec).sum()
         else:
             def q_sum(nu):
                 return torch.zeros((), device=self.device)
