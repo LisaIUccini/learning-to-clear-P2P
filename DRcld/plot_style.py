@@ -73,7 +73,10 @@ def median_band(curves):
 
 def stats_from(test_res: dict) -> dict:
     sp = np.asarray(test_res["speedup"])
+    dr = np.asarray(test_res["dr"]); learned = np.asarray(test_res["learned"])
+    pct = (dr - learned) / dr * 100.0     # per-instance iteration reduction, in %
     return {
         "mean": sp.mean(), "median": np.median(sp), "min": sp.min(), "max": sp.max(),
+        "pct_mean": pct.mean(), "pct_median": np.median(pct), "pct_min": pct.min(), "pct_max": pct.max(),
         "win_rate": (sp >= 1.0).mean(), "n_win": int((sp >= 1.0).sum()), "n": len(sp),
     }

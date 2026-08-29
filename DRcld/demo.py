@@ -143,9 +143,9 @@ def plot_results(test_res, tol, out_path="results.png", subtitle=""):
     ax = axes[0, 0]
     ax.axis("off")
     rows = [
-        ("mean speed-up", f"{st['mean']:.2f}x", C_LEARNED),
-        ("median speed-up", f"{st['median']:.2f}x", C_LEARNED),
-        ("min / max", f"{st['min']:.2f}x / {st['max']:.2f}x", INK_MUTED),
+        ("mean reduction", f"{st['pct_mean']:+.0f}%", C_LEARNED),
+        ("median reduction", f"{st['pct_median']:+.0f}%", C_LEARNED),
+        ("min / max", f"{st['pct_min']:+.0f}% / {st['pct_max']:+.0f}%", INK_MUTED),
         ("win-rate", f"{st['win_rate']:.0%}  ({st['n_win']}/{st['n']})", C_WIN),
     ]
     y0 = 0.86
@@ -175,12 +175,13 @@ def plot_results(test_res, tol, out_path="results.png", subtitle=""):
     # bar at position N is instance N+1 everywhere -- NOT sorted by size,
     # sorting would silently break that correspondence) --
     ax = axes[1, 0]
-    speedups = np.asarray(test_res["speedup"])
-    colors = [C_WIN if s >= 1.0 else C_LOSS for s in speedups]
-    ax.bar(range(1, len(speedups) + 1), speedups, color=colors, width=0.72, zorder=3)
-    ax.axhline(1.0, color=INK_MUTED, linestyle="--", linewidth=1.1, zorder=2)
-    ax.set_xlabel("test instance"); ax.set_ylabel("speed-up (DR it / learned it)")
-    ax.set_title("per-instance speed-up")
+    dr = np.asarray(test_res["dr"]); learned = np.asarray(test_res["learned"])
+    pct = (dr - learned) / dr * 100.0
+    colors = [C_WIN if p >= 0.0 else C_LOSS for p in pct]
+    ax.bar(range(1, len(pct) + 1), pct, color=colors, width=0.72, zorder=3)
+    ax.axhline(0.0, color=INK_MUTED, linestyle="--", linewidth=1.1, zorder=2)
+    ax.set_xlabel("test instance"); ax.set_ylabel("iteration reduction (%)")
+    ax.set_title("per-instance iteration reduction")
     clean_axes(ax)
 
     # -- bottom-right: residual convergence, median + IQR band --
