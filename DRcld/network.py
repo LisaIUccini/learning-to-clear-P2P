@@ -146,12 +146,21 @@ class Prosumer:
         # recomputed 30-40x per call.
         numer_D_const = 2.0 * g * self.a_tilde * self.D_star + rD
         numer_G_const = rG - g * self.b
+        # D_of/G_of are both a plain elementwise (add-or-subtract, divide,
+        # clamp) with no reduction, so -- unlike batching phi_edge's matmuls
+        # earlier -- stacking them into one call is exact, not an
+        # approximation: each of the 2 output entries only ever depends on
+        # its own input entry, so torch.clamp on a length-2 tensor computes
+        # the identical two scalar clamps, just as one dispatch instead of
+        # two. Halves the D_of/G_of call count in the hot bisection loop.
+        DG_min = torch.stack([self.D_min, self.G_min])
+        DG_max = torch.stack([self.D_max, self.G_max])
+        DG_numer_const = torch.stack([numer_D_const, numer_G_const])
+        DG_denom = torch.stack([denomD, denomG])
+        DG_sign = torch.tensor([1.0, -1.0], device=self.device)
 
-        def D_of(nu):
-            return torch.clamp((numer_D_const + nu) / denomD, self.D_min, self.D_max)
-
-        def G_of(nu):
-            return torch.clamp((numer_G_const - nu) / denomG, self.G_min, self.G_max)
+        def DG_of(nu):
+            return torch.clamp((DG_numer_const + DG_sign * nu) / DG_denom, DG_min, DG_max)
 
         # The bisection loop only needs the SUM of q_m(nu) at every step, so
         # the per-neighbour dict (needed only once, at the end) is kept out
@@ -173,17 +182,22 @@ class Prosumer:
                     for m in self.neighbors}
 
         def balance(nu):
-            return D_of(nu) - G_of(nu) - self.G_res - q_sum(nu)
+            dg = DG_of(nu)
+            return dg[0] - dg[1] - self.G_res - q_sum(nu)
 
         with torch.no_grad():
             lo = -torch.ones((), device=self.device)
             hi = torch.ones((), device=self.device)
             for _ in range(20):
-                if bool(balance(lo) <= 0) and bool(balance(hi) >= 0):
+                # balance(lo)/balance(hi) each used twice below -- compute
+                # once and reuse, instead of recomputing (same values, same
+                # comparisons, just not redone).
+                b_lo, b_hi = balance(lo), balance(hi)
+                if bool(b_lo <= 0) and bool(b_hi >= 0):
                     break
-                if bool(balance(lo) > 0):
+                if bool(b_lo > 0):
                     lo = lo * 2.0 - 1.0
-                if bool(balance(hi) < 0):
+                if bool(b_hi < 0):
                     hi = hi * 2.0 + 1.0
             for _ in range(n_bisect):
                 mid = 0.5 * (lo + hi)
@@ -193,7 +207,8 @@ class Prosumer:
                     lo = mid
             nu = 0.5 * (lo + hi)
 
-        return D_of(nu), G_of(nu), q_of(nu)
+        dg_final = DG_of(nu)
+        return dg_final[0], dg_final[1], q_of(nu)
 
     # ------------------------------------------------------------------
     # Full local iteration (Algorithm 1, lines 4-12, this node alone)

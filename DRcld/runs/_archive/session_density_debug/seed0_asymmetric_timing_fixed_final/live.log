@@ -1,0 +1,27 @@
+timing comparison: mode=fixed  weights=runs/density_1.0/seed0_gamma4_unroll300_scale10_epochs60_asymmetric/phi_w.pt  density=1.0  base_seed=0  n_test=30  n_repeats=3
+----------------------------------------------------------------------------------------------------
+   1/30  DR   569 it / 5616.34 ms   |   learned   387 it / 5313.28 ms   |   iter x 1.47   time x 1.06
+   2/30  DR   647 it / 6148.29 ms   |   learned   388 it / 5235.71 ms   |   iter x 1.67   time x 1.17
+   3/30  DR   589 it / 5550.22 ms   |   learned   388 it / 5180.39 ms   |   iter x 1.52   time x 1.07
+   4/30  DR   632 it / 5928.25 ms   |   learned   390 it / 5160.30 ms   |   iter x 1.62   time x 1.15
+   5/30  DR   579 it / 5434.19 ms   |   learned   387 it / 5165.71 ms   |   iter x 1.50   time x 1.05
+   6/30  DR   578 it / 5397.61 ms   |   learned   388 it / 5158.93 ms   |   iter x 1.49   time x 1.05
+   7/30  DR   769 it / 7229.55 ms   |   learned   396 it / 5293.61 ms   |   iter x 1.94   time x 1.37
+   8/30  DR   646 it / 6099.85 ms   |   learned   392 it / 5244.26 ms   |   iter x 1.65   time x 1.16
+   9/30  DR   525 it / 4970.95 ms   |   learned   393 it / 5256.05 ms   |   iter x 1.34   time x 0.95
+  10/30  DR   633 it / 6011.92 ms   |   learned   390 it / 5212.67 ms   |   iter x 1.62   time x 1.15
+  11/30  DR   526 it / 4956.77 ms   |   learned   391 it / 5222.99 ms   |   iter x 1.35   time x 0.95
+  12/30  DR   579 it / 5461.22 ms   |   learned   390 it / 5238.03 ms   |   iter x 1.48   time x 1.04
+  13/30  DR   667 it / 6340.69 ms   |   learned   389 it / 5326.24 ms   |   iter x 1.71   time x 1.19
+  14/30  DR   464 it / 4491.72 ms   |   learned   390 it / 5330.19 ms   |   iter x 1.19   time x 0.84
+  15/30  DR   526 it / 5086.36 ms   |   learned   390 it / 5310.04 ms   |   iter x 1.35   time x 0.96
+  16/30  DR   743 it / 6997.11 ms   |   learned   392 it / 5256.90 ms   |   iter x 1.90   time x 1.33
+  17/30  DR   653 it / 6127.81 ms   |   learned   387 it / 5161.49 ms   |   iter x 1.69   time x 1.19
+  18/30  DR   712 it / 6705.82 ms   |   learned   390 it / 5219.13 ms   |   iter x 1.83   time x 1.28
+  19/30  DR   654 it / 6159.08 ms   |   learned   389 it / 5179.63 ms   |   iter x 1.68   time x 1.19
+  20/30  DR   634 it / 5975.56 ms   |   learned   393 it / 5235.98 ms   |   iter x 1.61   time x 1.14
+  21/30  DR   640 it / 6001.72 ms   |   learned   392 it / 5230.48 ms   |   iter x 1.63   time x 1.15
+  22/30  DR   686 it / 6450.52 ms   |   learned   393 it / 5250.08 ms   |   iter x 1.75   time x 1.23
+  23/30  DR   511 it / 4808.46 ms   |   learned   388 it / 5157.54 ms   |   iter x 1.32   time x 0.93
+  24/30  DR   725 it / 6793.17 ms   |   learned   391 it / 5206.88 ms   |   iter x 1.85   time x 1.30
+  25/30  DR   610 it / 5760.66 ms   |   learned   390 it / 5197.68 ms   |   iter x 1.56   time x 1.11

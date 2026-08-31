@@ -1,0 +1,16 @@
+writing all artifacts to runs/cross_density/seed0_density0.8_gamma8_unroll750_rho9925_mono0/  (n_train=25  n_test=30  epochs=60  density=0.8  eta=0.15  gamma=8.0  unroll=750  gnn_rho=0.9925  gnn_scale=1.0  base_seed=0  loss_mode='asymmetric'  w_behind=2.0  w_ahead=1.0  gnn_rho_slow=0.99  gnn_scale_slow=0.0  gamma_mono=0.0)
+======================================================================
+dataset: ONE fixed market (graph + every parameter identical
+across all instances) -- only the random initial state x^0
+varies, for both training and the held-out test set
+======================================================================
+  N=10  edges=38
+
+sanity check: plain DR converges from a few random starts
+  start 0  iters=  613  converged=True  feasible=True
+  start 1  iters=  749  converged=True  feasible=True
+  start 2  iters=  828  converged=True  feasible=True
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric')
+  epoch   1/60 | train +0.0000 | val -0.0000
+  epoch   2/60 | train -0.0001 | val -0.0004

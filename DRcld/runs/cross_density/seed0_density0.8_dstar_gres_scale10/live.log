@@ -1,0 +1,79 @@
+writing all artifacts to runs/cross_density/seed0_density0.8_dstar_gres_scale10/  (weights=runs/cross_density/seed0_density0.8_gamma8_unroll750_rho9925_omega1_full60/phi_w.pt  base_seed=0  density=0.8  dr_gamma=8.0  gnn_rho=0.9925  gnn_scale=1.0  n_test=30  pct=0.1)
+======================================================================
+loading runs/cross_density/seed0_density0.8_gamma8_unroll750_rho9925_omega1_full60/phi_w.pt -- NO retraining, inference only
+======================================================================
+  base market: N=10  edges=38
+
+dataset: graph/costs/capacities/boxes ALL fixed; D_star *= f_D, G_res *= f_G, f_D,f_G ~ U(0.90,1.10) independently, shared across nodes, per instance
+  0/30 instances flagged infeasible (Assumption 1 check)
+  instance  1/30  f_D=0.9224  f_G=0.9331  feasible=True
+  instance  2/30  f_D=1.0506  f_G=0.9837  feasible=True
+  instance  3/30  f_D=0.9052  f_G=0.9303  feasible=True
+  instance  4/30  f_D=1.0444  f_G=1.0185  feasible=True
+  instance  5/30  f_D=0.9397  f_G=1.0515  feasible=True
+  instance  6/30  f_D=0.9524  f_G=0.9072  feasible=True
+  instance  7/30  f_D=0.9226  f_G=0.9617  feasible=True
+  instance  8/30  f_D=1.0614  f_G=0.9955  feasible=True
+  instance  9/30  f_D=0.9079  f_G=0.9163  feasible=True
+  instance 10/30  f_D=1.0818  f_G=1.0449  feasible=True
+  instance 11/30  f_D=0.9038  f_G=1.0445  feasible=True
+  instance 12/30  f_D=1.0512  f_G=1.0667  feasible=True
+  instance 13/30  f_D=0.9362  f_G=1.0550  feasible=True
+  instance 14/30  f_D=0.9348  f_G=0.9762  feasible=True
+  instance 15/30  f_D=0.9400  f_G=1.0566  feasible=True
+  instance 16/30  f_D=0.9023  f_G=1.0024  feasible=True
+  instance 17/30  f_D=1.0432  f_G=0.9948  feasible=True
+  instance 18/30  f_D=0.9125  f_G=1.0860  feasible=True
+  instance 19/30  f_D=1.0296  f_G=0.9463  feasible=True
+  instance 20/30  f_D=1.0638  f_G=1.0601  feasible=True
+  instance 21/30  f_D=0.9228  f_G=1.0385  feasible=True
+  instance 22/30  f_D=1.0854  f_G=0.9589  feasible=True
+  instance 23/30  f_D=1.0377  f_G=0.9972  feasible=True
+  instance 24/30  f_D=1.0938  f_G=0.9525  feasible=True
+  instance 25/30  f_D=0.9982  f_G=1.0196  feasible=True
+  instance 26/30  f_D=1.0759  f_G=1.0884  feasible=True
+  instance 27/30  f_D=1.0642  f_G=0.9795  feasible=True
+  instance 28/30  f_D=1.0876  f_G=1.0883  feasible=True
+  instance 29/30  f_D=1.0510  f_G=1.0494  feasible=True
+  instance 30/30  f_D=1.0323  f_G=0.9096  feasible=True
+
+evaluating: plain DR vs DR + Phi_w, zero-shot (D*/G_res shifted, no retraining)
+----------------------------------------------------------------------
+  [dstar-gres-scale]  1/30  N= 10  DR   783 it  |  learned   723 it  |  x 1.08 (+7.7%)
+  [dstar-gres-scale]  2/30  N= 10  DR   729 it  |  learned   779 it  |  x 0.94 (-6.9%)
+  [dstar-gres-scale]  3/30  N= 10  DR   862 it  |  learned   779 it  |  x 1.11 (+9.6%)
+  [dstar-gres-scale]  4/30  N= 10  DR   749 it  |  learned   721 it  |  x 1.04 (+3.7%)
+  [dstar-gres-scale]  5/30  N= 10  DR   857 it  |  learned   861 it  |  x 1.00 (-0.5%)
+  [dstar-gres-scale]  6/30  N= 10  DR   955 it  |  learned   563 it  |  x 1.70 (+41.0%)
+  [dstar-gres-scale]  7/30  N= 10  DR   670 it  |  learned   794 it  |  x 0.84 (-18.5%)
+  [dstar-gres-scale]  8/30  N= 10  DR   893 it  |  learned   773 it  |  x 1.16 (+13.4%)
+  [dstar-gres-scale]  9/30  N= 10  DR   798 it  |  learned   752 it  |  x 1.06 (+5.8%)
+  [dstar-gres-scale] 10/30  N= 10  DR   881 it  |  learned   782 it  |  x 1.13 (+11.2%)
+  [dstar-gres-scale] 11/30  N= 10  DR   856 it  |  learned   923 it  |  x 0.93 (-7.8%)
+  [dstar-gres-scale] 12/30  N= 10  DR   843 it  |  learned   684 it  |  x 1.23 (+18.9%)
+  [dstar-gres-scale] 13/30  N= 10  DR   927 it  |  learned   871 it  |  x 1.06 (+6.0%)
+  [dstar-gres-scale] 14/30  N= 10  DR   853 it  |  learned   772 it  |  x 1.10 (+9.5%)
+  [dstar-gres-scale] 15/30  N= 10  DR   862 it  |  learned   857 it  |  x 1.01 (+0.6%)
+  [dstar-gres-scale] 16/30  N= 10  DR   873 it  |  learned   896 it  |  x 0.97 (-2.6%)
+  [dstar-gres-scale] 17/30  N= 10  DR   810 it  |  learned   768 it  |  x 1.05 (+5.2%)
+  [dstar-gres-scale] 18/30  N= 10  DR   859 it  |  learned   949 it  |  x 0.91 (-10.5%)
+  [dstar-gres-scale] 19/30  N= 10  DR   615 it  |  learned   772 it  |  x 0.80 (-25.5%)
+  [dstar-gres-scale] 20/30  N= 10  DR   778 it  |  learned   726 it  |  x 1.07 (+6.7%)
+  [dstar-gres-scale] 21/30  N= 10  DR   853 it  |  learned   884 it  |  x 0.96 (-3.6%)
+  [dstar-gres-scale] 22/30  N= 10  DR   878 it  |  learned   832 it  |  x 1.06 (+5.2%)
+  [dstar-gres-scale] 23/30  N= 10  DR   726 it  |  learned   718 it  |  x 1.01 (+1.1%)
+  [dstar-gres-scale] 24/30  N= 10  DR   739 it  |  learned   851 it  |  x 0.87 (-15.2%)
+  [dstar-gres-scale] 25/30  N= 10  DR   888 it  |  learned   546 it  |  x 1.63 (+38.5%)
+  [dstar-gres-scale] 26/30  N= 10  DR   785 it  |  learned   722 it  |  x 1.09 (+8.0%)
+  [dstar-gres-scale] 27/30  N= 10  DR   819 it  |  learned   791 it  |  x 1.04 (+3.4%)
+  [dstar-gres-scale] 28/30  N= 10  DR   926 it  |  learned   744 it  |  x 1.24 (+19.7%)
+  [dstar-gres-scale] 29/30  N= 10  DR   875 it  |  learned   708 it  |  x 1.24 (+19.1%)
+  [dstar-gres-scale] 30/30  N= 10  DR   758 it  |  learned   798 it  |  x 0.95 (-5.3%)
+  [dstar-gres-scale] mean speed-up 1.08x   median 1.05x   min 0.80x   max 1.70x   win-rate 67% (20/30)
+
+recording residual curves...
+saved runs/cross_density/seed0_density0.8_dstar_gres_scale10/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/cross_density/seed0_density0.8_dstar_gres_scale10/instance_plots/
+saved runs/cross_density/seed0_density0.8_dstar_gres_scale10/NOTES.md

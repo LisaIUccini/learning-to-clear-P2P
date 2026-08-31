@@ -7,7 +7,7 @@ counts (not just mean/cv) across several candidate gammas, so bimodality
 or other multi-modal structure is visible directly, not just inferred
 from a single cv number. Also prints a coarse histogram.
 
-Usage: python3 shape_sweep.py <density> <gamma1> <gamma2> ...
+Usage: python3 shape_sweep.py <density> <gamma1> <gamma2> ... [--seed N]
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
@@ -20,11 +20,18 @@ import config
 import market
 import algorithm
 
-DENSITY = float(sys.argv[1])
-GAMMAS = [float(g) for g in sys.argv[2:]]
+args = sys.argv[1:]
+SEED = 0
+if "--seed" in args:
+    i = args.index("--seed")
+    SEED = int(args[i + 1])
+    args = args[:i] + args[i + 2:]
+DENSITY = float(args[0])
+GAMMAS = [float(g) for g in args[1:]]
 device = torch.device("cpu")
 mc = market.MarketConfig(density=DENSITY)
-_, _, base_spec = market.sample_base(config.BASE_MARKET_N, mc, seed=0)
+_, _, base_spec = market.sample_base(config.BASE_MARKET_N, mc, seed=SEED)
+print(f"[density={DENSITY} seed={SEED}]")
 
 N_SAMPLES = 40
 for gamma in GAMMAS:

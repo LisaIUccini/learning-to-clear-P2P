@@ -1,0 +1,36 @@
+timing comparison: mode=fixed  weights=runs/density_1.0/seed0_gamma4_unroll300_scale10_epochs60_asymmetric/phi_w.pt  density=1.0  base_seed=0  n_test=30  n_repeats=3
+----------------------------------------------------------------------------------------------------
+   1/30  DR   569 it / 5571.83 ms   |   learned   386 it / 5259.24 ms   |   iter x 1.47   time x 1.06
+   2/30  DR   647 it / 6305.70 ms   |   learned   387 it / 5280.15 ms   |   iter x 1.67   time x 1.19
+   3/30  DR   589 it / 5709.85 ms   |   learned   387 it / 5277.95 ms   |   iter x 1.52   time x 1.08
+   4/30  DR   632 it / 6137.19 ms   |   learned   393 it / 5356.72 ms   |   iter x 1.61   time x 1.15
+   5/30  DR   579 it / 5558.40 ms   |   learned   387 it / 5258.07 ms   |   iter x 1.50   time x 1.06
+   6/30  DR   578 it / 5584.94 ms   |   learned   387 it / 5260.99 ms   |   iter x 1.49   time x 1.06
+   7/30  DR   769 it / 7476.08 ms   |   learned   393 it / 5360.51 ms   |   iter x 1.96   time x 1.39
+   8/30  DR   646 it / 6273.44 ms   |   learned   392 it / 5355.49 ms   |   iter x 1.65   time x 1.17
+   9/30  DR   525 it / 5112.35 ms   |   learned   394 it / 5382.16 ms   |   iter x 1.33   time x 0.95
+  10/30  DR   633 it / 6126.52 ms   |   learned   393 it / 5377.45 ms   |   iter x 1.61   time x 1.14
+  11/30  DR   526 it / 5130.31 ms   |   learned   389 it / 5323.73 ms   |   iter x 1.35   time x 0.96
+  12/30  DR   579 it / 5647.43 ms   |   learned   389 it / 5301.38 ms   |   iter x 1.49   time x 1.07
+  13/30  DR   667 it / 6480.46 ms   |   learned   391 it / 5345.50 ms   |   iter x 1.71   time x 1.21
+  14/30  DR   464 it / 4510.90 ms   |   learned   388 it / 5318.02 ms   |   iter x 1.20   time x 0.85
+  15/30  DR   526 it / 5103.01 ms   |   learned   388 it / 5306.45 ms   |   iter x 1.36   time x 0.96
+  16/30  DR   743 it / 7202.16 ms   |   learned   392 it / 5345.75 ms   |   iter x 1.90   time x 1.35
+  17/30  DR   653 it / 6358.64 ms   |   learned   391 it / 5326.33 ms   |   iter x 1.67   time x 1.19
+  18/30  DR   712 it / 6913.12 ms   |   learned   388 it / 5292.96 ms   |   iter x 1.84   time x 1.31
+  19/30  DR   654 it / 6365.10 ms   |   learned   391 it / 5345.44 ms   |   iter x 1.67   time x 1.19
+  20/30  DR   634 it / 6139.49 ms   |   learned   394 it / 5386.22 ms   |   iter x 1.61   time x 1.14
+  21/30  DR   640 it / 6214.41 ms   |   learned   388 it / 5293.76 ms   |   iter x 1.65   time x 1.17
+  22/30  DR   686 it / 6651.18 ms   |   learned   391 it / 5318.68 ms   |   iter x 1.75   time x 1.25
+  23/30  DR   511 it / 4928.13 ms   |   learned   387 it / 5283.16 ms   |   iter x 1.32   time x 0.93
+  24/30  DR   725 it / 7048.04 ms   |   learned   393 it / 5353.33 ms   |   iter x 1.84   time x 1.32
+  25/30  DR   610 it / 5894.24 ms   |   learned   392 it / 5340.37 ms   |   iter x 1.56   time x 1.10
+  26/30  DR   719 it / 6996.85 ms   |   learned   389 it / 5306.96 ms   |   iter x 1.85   time x 1.32
+  27/30  DR   750 it / 7316.45 ms   |   learned   396 it / 5404.61 ms   |   iter x 1.89   time x 1.35
+  28/30  DR   484 it / 4708.75 ms   |   learned   390 it / 5348.60 ms   |   iter x 1.24   time x 0.88
+  29/30  DR   643 it / 6242.81 ms   |   learned   391 it / 5349.25 ms   |   iter x 1.64   time x 1.17
+  30/30  DR   591 it / 5765.20 ms   |   learned   392 it / 5347.99 ms   |   iter x 1.51   time x 1.08
+----------------------------------------------------------------------------------------------------
+ITERATION speed-up:  mean 1.60x  median 1.61x  min 1.20x  max 1.96x  win-rate 100%
+WALL-CLOCK speed-up: mean 1.14x  median 1.14x  min 0.85x  max 1.39x  win-rate 80%
+saved runs/density_1.0/seed0_asymmetric_timing_truly_final/timing_summary.txt

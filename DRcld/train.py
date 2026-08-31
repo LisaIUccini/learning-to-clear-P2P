@@ -110,6 +110,12 @@ class TrainConfig:
     floor: float = 1e-3         # reward floor, normalised units ("log_ratio" mode, not recommended)
     w_behind: float = 2.0       # penalty weight for lagging plain DR ("asymmetric" mode)
     w_ahead: float = 1.0        # reward weight for beating plain DR ("asymmetric" mode)
+    omega_power: float = 0.0    # iteration-weight exponent omega_k=(k/K)^omega_power, normalised
+                                # to mean 1 ("asymmetric" mode). 0 = uniform (paper Eq. 16 default).
+                                # >0 up-weights LATE iterations -- see module docstring's note on
+                                # a uniform average letting a cheap early lead pay for a costly
+                                # late plateau that a uniform mean doesn't penalise proportionally
+                                # to how much it actually costs in total iterations.
     epochs: int = 25
     lr: float = 3e-3
     grad_clip: float = 1.0
@@ -316,7 +322,8 @@ def log_ratio_loss(residuals: List[torch.Tensor], residuals_dr: List[torch.Tenso
 
 def asymmetric_loss(residuals: List[torch.Tensor], residuals_dr: List[torch.Tensor],
                      scale: torch.Tensor, gamma_mono: float, eps: float,
-                     w_behind: float = 2.0, w_ahead: float = 1.0) -> torch.Tensor:
+                     w_behind: float = 2.0, w_ahead: float = 1.0,
+                     omega_power: float = 0.0) -> torch.Tensor:
     """Asymmetrically-weighted LINEAR difference against the plain-DR
     baseline -- continuous and uncapped like `log_ratio_loss` (no margin,
     no cutoff: still rewarded for beating DR by more, still penalised for
@@ -354,7 +361,15 @@ def asymmetric_loss(residuals: List[torch.Tensor], residuals_dr: List[torch.Tens
     rho = torch.stack(residuals) / denom
     rho_dr = (torch.stack(residuals_dr) / denom).detach()
     a = rho - rho_dr
-    decay = (w_behind * torch.relu(a) - w_ahead * torch.relu(-a)).mean()
+    per_step = w_behind * torch.relu(a) - w_ahead * torch.relu(-a)
+    if omega_power != 0.0:
+        K = rho.shape[0]
+        k_frac = torch.arange(1, K + 1, dtype=rho.dtype, device=rho.device) / K
+        omega = k_frac ** omega_power
+        omega = omega / omega.mean()          # keep overall loss scale comparable to uniform
+        decay = (omega * per_step).mean()
+    else:
+        decay = per_step.mean()
     mono = (torch.relu(rho[1:] - rho[:-1]).mean()
             if rho.numel() > 1 else torch.zeros((), dtype=rho.dtype))
     return decay + gamma_mono * mono
@@ -386,7 +401,7 @@ class Trainer:
         elif cfg.loss_mode == "asymmetric":
             _, residuals_dr = rollout(net, None, cfg, x0=x0, differentiable=False)
             return asymmetric_loss(residuals, residuals_dr, scale, cfg.gamma_mono, cfg.eps,
-                                    cfg.w_behind, cfg.w_ahead)
+                                    cfg.w_behind, cfg.w_ahead, cfg.omega_power)
         raise ValueError(f"unknown loss_mode {cfg.loss_mode!r}")
 
     def fit(self, train_specs, val_specs=None, device=None, verbose: bool = True):

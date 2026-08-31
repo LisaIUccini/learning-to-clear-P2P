@@ -1,5 +1,16 @@
 # Experiment index
 
+**2026-08-31 reorganisation**: `runs/` was cleaned up to keep only the current best
+result per density/seed at the top level. Every run this file references by name
+that isn't directly under `runs/` anymore has been moved, unmodified, into
+`runs/_archive/pre_session_history/` (everything below, predating the 2026-08-28
+density=1.0 investigation) or `runs/_archive/session_density_debug/` (superseded
+attempts from the density 1.0/0.5/0.8 cross-density debugging session, see
+`project_l2p2p_paper.md` / `feedback_gamma_variance_and_loss_cap.md` in the auto
+memory for the full story of what was tried and why each was superseded). Nothing
+was deleted. Current best results live in `runs/cross_density/` (0.3, 0.5, 0.8) and
+`runs/density_1.0/` (seed 0 and 1).
+
 Each folder is one full train+evaluate run: `demo_run.log` (console output),
 `phi_w.pt` (trained weights), `results.png` (4-panel summary),
 `instance_plots/` (per-instance diagnostics, where generated). All numbers
