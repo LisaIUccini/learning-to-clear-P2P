@@ -1,0 +1,10 @@
+[13:56:51] START seed0_density0.3_drslope (density=0.3 gamma=4.0 unroll=200 rho=0.9500 seed=0)
+[14:32:30] DONE seed0_density0.3_drslope
+  [fixed-market] mean speed-up 2.96x   median 2.94x   min 1.36x   max 4.00x   win-rate 100% (30/30)
+[14:32:30] START seed0_density0.5_drslope (density=0.5 gamma=6.0 unroll=305 rho=0.9672 seed=0)
+[15:39:53] DONE seed0_density0.5_drslope
+  [fixed-market] mean speed-up 0.82x   median 0.85x   min 0.52x   max 0.94x   win-rate 0% (0/30)
+[15:39:53] START seed0_density1.0_seed0_drslope (density=1.0 gamma=4.0 unroll=300 rho=0.9667 seed=0)
+[16:38:15] DONE seed0_density1.0_seed0_drslope
+  [fixed-market] mean speed-up 2.09x   median 2.11x   min 1.46x   max 2.60x   win-rate 100% (30/30)
+[16:38:15] START seed1_density1.0_seed1_drslope (density=1.0 gamma=4.0 unroll=349 rho=0.9714 seed=1)

@@ -1,0 +1,49 @@
+writing all artifacts to runs/cross_density/seed0_density0.5_topology_edge05/  (weights=runs/cross_density/seed0_density0.5_gamma6_unroll305_scale10_asymmetric/phi_w.pt  base_seed=0  density=0.5  dr_gamma=6.0  gnn_rho=0.9672  gnn_scale=1.0  n_test=30  pct=0.05  mode=pct)
+======================================================================
+loading runs/cross_density/seed0_density0.5_gamma6_unroll305_scale10_asymmetric/phi_w.pt -- NO retraining, inference only
+======================================================================
+  base market: N=10  edges=27
+
+dataset: market parameters EXACTLY fixed for inherited nodes/edges; graph varies via ONE shared +/-5% factor applied to node count AND edge count together
+  instance sizes: min=10  max=10  (base N=10)
+
+evaluating: plain DR vs DR + Phi_w, zero-shot (topology shifted, no retraining)
+----------------------------------------------------------------------
+  [topology-scale]  1/30  N= 10  DR   593 it  |  learned   385 it  |  x 1.54 (+35.1%)
+  [topology-scale]  2/30  N= 10  DR   442 it  |  learned   442 it  |  x 1.00 (+0.0%)
+  [topology-scale]  3/30  N= 10  DR   461 it  |  learned   894 it  |  x 0.52 (-93.9%)
+  [topology-scale]  4/30  N= 10  DR   699 it  |  learned   349 it  |  x 2.00 (+50.1%)
+  [topology-scale]  5/30  N= 10  DR   393 it  |  learned   442 it  |  x 0.89 (-12.5%)
+  [topology-scale]  6/30  N= 10  DR   643 it  |  learned   334 it  |  x 1.93 (+48.1%)
+  [topology-scale]  7/30  N= 10  DR   710 it  |  learned   327 it  |  x 2.17 (+53.9%)
+  [topology-scale]  8/30  N= 10  DR   422 it  |  learned   329 it  |  x 1.28 (+22.0%)
+  [topology-scale]  9/30  N= 10  DR   409 it  |  learned   334 it  |  x 1.22 (+18.3%)
+  [topology-scale] 10/30  N= 10  DR   418 it  |  learned   402 it  |  x 1.04 (+3.8%)
+  [topology-scale] 11/30  N= 10  DR   659 it  |  learned   339 it  |  x 1.94 (+48.6%)
+  [topology-scale] 12/30  N= 10  DR   482 it  |  learned   477 it  |  x 1.01 (+1.0%)
+  [topology-scale] 13/30  N= 10  DR   363 it  |  learned   353 it  |  x 1.03 (+2.8%)
+  [topology-scale] 14/30  N= 10  DR   451 it  |  learned   444 it  |  x 1.02 (+1.6%)
+  [topology-scale] 15/30  N= 10  DR   714 it  |  learned   336 it  |  x 2.12 (+52.9%)
+  [topology-scale] 16/30  N= 10  DR   597 it  |  learned   500 it  |  x 1.19 (+16.2%)
+  [topology-scale] 17/30  N= 10  DR   429 it  |  learned   387 it  |  x 1.11 (+9.8%)
+  [topology-scale] 18/30  N= 10  DR   696 it  |  learned   330 it  |  x 2.11 (+52.6%)
+  [topology-scale] 19/30  N= 10  DR   463 it  |  learned   340 it  |  x 1.36 (+26.6%)
+  [topology-scale] 20/30  N= 10  DR   678 it  |  learned   445 it  |  x 1.52 (+34.4%)
+  [topology-scale] 21/30  N= 10  DR   454 it  |  learned   335 it  |  x 1.36 (+26.2%)
+  [topology-scale] 22/30  N= 10  DR   677 it  |  learned   336 it  |  x 2.01 (+50.4%)
+  [topology-scale] 23/30  N= 10  DR   687 it  |  learned   340 it  |  x 2.02 (+50.5%)
+  [topology-scale] 24/30  N= 10  DR   679 it  |  learned   356 it  |  x 1.91 (+47.6%)
+  [topology-scale] 25/30  N= 10  DR   621 it  |  learned   377 it  |  x 1.65 (+39.3%)
+  [topology-scale] 26/30  N= 10  DR  1824 it  |  learned   958 it  |  x 1.90 (+47.5%)
+  [topology-scale] 27/30  N= 10  DR   672 it  |  learned   345 it  |  x 1.95 (+48.7%)
+  [topology-scale] 28/30  N= 10  DR   601 it  |  learned   342 it  |  x 1.76 (+43.1%)
+  [topology-scale] 29/30  N= 10  DR   413 it  |  learned   406 it  |  x 1.02 (+1.7%)
+  [topology-scale] 30/30  N= 10  DR   641 it  |  learned   341 it  |  x 1.88 (+46.8%)
+  [topology-scale] mean speed-up 1.52x   median 1.53x   min 0.52x   max 2.17x   win-rate 93% (28/30)
+
+recording residual curves...
+saved runs/cross_density/seed0_density0.5_topology_edge05/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/cross_density/seed0_density0.5_topology_edge05/instance_plots/
+saved runs/cross_density/seed0_density0.5_topology_edge05/NOTES.md

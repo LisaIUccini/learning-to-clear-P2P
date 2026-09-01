@@ -1,6 +1,70 @@
 # Experiment index
 
-**2026-08-31 reorganisation**: `runs/` was cleaned up to keep only the current best
+**2026-09-01 update (topology decomposition: node-only vs edge-only vs combined)**: the combined
++/-10% topology test (below) confounds node-count and edge-count changes. Isolated them: node-only
+(`market.sample_one_node_topology_dataset`, exactly +/-1 node) and edge-only (reused
+`sample_common_scale_topology_dataset` at pct=0.05, which -- verified -- never changes N for
+N0=10, so it's pure edge churn). Same 5 checkpoints, pure inference.
+
+| density | combined (+/-10%) | node-only (+/-1) | edge-only (+/-5%) |
+|---|---|---|---|
+| 0.3 | 97% / 2.28x | 87% / 2.06x | **97% / 2.47x** |
+| 0.5 | 63% / 1.31x | 80% / 1.52x | **93% / 1.52x** |
+| 0.8 | 70% / 1.32x | 67% / 1.20x | **90% / 1.56x** |
+| 1.0 seed=0 | 67% / 1.34x | 73% / 1.46x | **77% / 1.64x** |
+| 1.0 seed=1 | 70% / 1.30x | 67% / 1.21x | **77% / 1.54x** |
+
+Edge-only is well-tolerated everywhere (strongest of the 3 variants at every density). Node-only
+is intermediate. Combined is worse than either alone at every density except 0.3 -- looks like a
+genuine interaction effect, not one dominant axis. CAVEAT: the combined test's shrink mechanism
+(BFS-prefix subgraph) differs from node-only's shrink (single node removal) -- not a fully clean
+decomposition on the shrink side; growth mechanism is identical across all 3. See
+`project_l2p2p_paper.md` in the auto memory for the full write-up. Runs:
+`runs/cross_density/*_topology_scale10` / `*_topology_onenode` / `*_topology_edge05`.
+
+**2026-09-01 update (zero-shot validation completed, two axes)**: closed the D*/G_res gap for
+0.3 and 1.0 (both seeds), then ran a brand-new TOPOLOGY zero-shot axis (graph node+edge count
+shared +/-10% factor, connectivity-preserving, `market.sample_common_scale_topology_dataset`)
+across all 5 current-best checkpoints. Pure inference, no retraining.
+
+| density | D*/G_res win-rate / mean | topology win-rate / mean |
+|---|---|---|
+| 0.3 | 100% / 2.42x | 97% / 2.28x |
+| 0.5 | 100% / 1.46-1.57x | **63% / 1.31x** |
+| 0.8 | 100% / 1.34x | **70% / 1.32x** |
+| 1.0 seed=0 | 100% / 1.85x | **67% / 1.34x** |
+| 1.0 seed=1 | 100% / 1.68x | **70% / 1.30x** |
+
+**Conclusion**: parameter-shift (D*/G_res) generalisation is uniformly strong (100% everywhere).
+Topology-shift generalisation is strong ONLY at density=0.3; every other density lands at
+63-70% win-rate / ~1.3x mean -- consistently weaker than every other validation axis tested this
+session, though still >1x mean (not a total failure the way `dr_slope` on density=0.5 was). See
+`project_l2p2p_paper.md` in the auto memory for the full table and an untested hypothesis (sparser
+base graphs suffer a smaller RELATIVE structural disruption from the same +/-10% factor). Runs:
+`runs/cross_density/*_dstar_gres_scale10` and `runs/cross_density/*_topology_scale10`.
+
+**2026-08-31 update (dr_slope campaign)**: `omega_mode="dr_slope"` (instance-adaptive
+iteration weighting, see `train.asymmetric_loss`) beat the previous best recipe on every
+density except 0.5, where it fails outright (self-inflicted overshoot plateau, unresolved
+as of this writing -- full mechanism in `feedback_gamma_variance_and_loss_cap.md` point 3c
+in the auto memory). Current best per density/seed, all in `runs/cross_density/`:
+
+| density | recipe | win-rate | mean |
+|---|---|---|---|
+| 0.3 | `seed0_density0.3_drslope` | 100% | 2.96x |
+| 0.5 | `seed0_density0.5_gamma6_unroll305_scale10_asymmetric` (uniform, NOT dr_slope) | 100% | 1.81x |
+| 0.8 | `seed0_density0.8_gamma8_unroll750_rho9925_drslope` | 100% | 1.83x |
+| 1.0 seed=0 | `seed0_density1.0_seed0_drslope` | 100% | 2.09x |
+| 1.0 seed=1 | `seed1_density1.0_seed1_drslope` | 100% | 1.79x |
+
+Zero-shot D*/G_res validation exists for density=0.5 (uniform recipe, 1.46-1.57x/97-100%,
+`*_dstar_gres_scale10`) and density=0.8 (dr_slope recipe, `seed0_density0.8_drslope_dstar_gres_scale10`,
+1.34x/100%) -- **NOT yet run for density=0.3 or density=1.0 under dr_slope**, a gap in the
+validation checklist. The old (now-superseded) `runs/density_1.0/` folder and its zero-shot
+run were archived to `_archive/session_dr_slope_campaign/density_1.0_pre_drslope/` along
+with every beaten/failed dr_slope attempt from this campaign; nothing was deleted.
+
+**2026-08-31 earlier reorganisation**: `runs/` was cleaned up to keep only the current best
 result per density/seed at the top level. Every run this file references by name
 that isn't directly under `runs/` anymore has been moved, unmodified, into
 `runs/_archive/pre_session_history/` (everything below, predating the 2026-08-28
@@ -8,8 +72,7 @@ density=1.0 investigation) or `runs/_archive/session_density_debug/` (superseded
 attempts from the density 1.0/0.5/0.8 cross-density debugging session, see
 `project_l2p2p_paper.md` / `feedback_gamma_variance_and_loss_cap.md` in the auto
 memory for the full story of what was tried and why each was superseded). Nothing
-was deleted. Current best results live in `runs/cross_density/` (0.3, 0.5, 0.8) and
-`runs/density_1.0/` (seed 0 and 1).
+was deleted.
 
 Each folder is one full train+evaluate run: `demo_run.log` (console output),
 `phi_w.pt` (trained weights), `results.png` (4-panel summary),

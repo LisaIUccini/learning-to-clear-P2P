@@ -61,13 +61,15 @@ def main():
     gnn_scale_slow = float(sys.argv[16]) if len(sys.argv) > 16 else config.GNN_SCALE_SLOW
     gamma_mono = float(sys.argv[17]) if len(sys.argv) > 17 else config.TRAIN_GAMMA_MONO
     omega_power = float(sys.argv[18]) if len(sys.argv) > 18 else 0.0
+    omega_mode = sys.argv[19] if len(sys.argv) > 19 else "fixed"
     out_dir = os.path.join("runs", run_name)
     os.makedirs(out_dir, exist_ok=True)
     print(f"writing all artifacts to {out_dir}/  (n_train={n_train}  n_test={n_test}  epochs={epochs}  "
           f"density={density}  eta={eta}  gamma={dr_gamma}  unroll={unroll}  gnn_rho={gnn_rho}  "
           f"gnn_scale={gnn_scale}  base_seed={base_seed}  loss_mode={loss_mode!r}  "
           f"w_behind={w_behind}  w_ahead={w_ahead}  gnn_rho_slow={gnn_rho_slow}  "
-          f"gnn_scale_slow={gnn_scale_slow}  gamma_mono={gamma_mono}  omega_power={omega_power})")
+          f"gnn_scale_slow={gnn_scale_slow}  gamma_mono={gamma_mono}  omega_power={omega_power}  "
+          f"omega_mode={omega_mode!r})")
 
     device = torch.device("cpu")
     torch.manual_seed(config.TRAIN_SEED)
@@ -81,7 +83,7 @@ def main():
                                        eta=eta, epochs=epochs, w_behind=w_behind, w_ahead=w_ahead,
                                        lr=config.TRAIN_LR, grad_clip=config.TRAIN_GRAD_CLIP,
                                        seed=config.TRAIN_SEED, loss_mode=loss_mode,
-                                       omega_power=omega_power)
+                                       omega_power=omega_power, omega_mode=omega_mode)
 
     print("=" * 70)
     print("dataset: ONE fixed market (graph + every parameter identical")

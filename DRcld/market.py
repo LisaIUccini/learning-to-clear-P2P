@@ -381,6 +381,76 @@ def sample_common_scale_topology_dataset(base_neighbors: Dict[int, List[int]],
     return specs
 
 
+def _perturb_topology_one_node(base_neighbors: Dict[int, List[int]], N0: int, delta: int,
+                                rng: np.random.Generator
+                                ) -> Tuple[int, Dict[int, List[int]], Dict[int, Optional[int]]]:
+    """Topology change of EXACTLY one node (delta=+1 or -1), isolating the
+    effect of a minimal node-count change from `_perturb_topology_shared_factor`'s
+    confound: for small N0 (e.g. 10), a +/-pct factor rounds to N_new==N0 across
+    much of its range anyway, while its E_target = round(E0*pct) still churns
+    several edges independent of whether N changed at all (e.g. N0=10, E0=38 at
+    density=0.8: up to ~4 edges added/removed even on a delta-N==0 draw) --
+    that edge churn, not the node-count change, was suspected to dominate the
+    weak topology zero-shot result. Growing: the new node attaches to ONE
+    uniformly random existing node (single new edge, nothing else touched).
+    Shrinking: removes ONE uniformly random node whose removal keeps the graph
+    connected (retries a different node if the first pick is a cut vertex);
+    every other node/edge is untouched.
+    """
+    if delta > 0:
+        nbrs = {i: list(base_neighbors[i]) for i in range(N0)}
+        new_id = N0
+        anchor = int(rng.integers(0, N0))
+        nbrs[new_id] = [anchor]
+        nbrs[anchor].append(new_id)
+        origin = {i: i for i in range(N0)}
+        origin[new_id] = None
+        N_new = N0 + 1
+    else:
+        candidates = list(range(N0))
+        rng.shuffle(candidates)
+        removed = None
+        nbrs, origin = None, None
+        for cand in candidates:
+            keep = [i for i in range(N0) if i != cand]
+            remap = {old: new for new, old in enumerate(keep)}
+            trial = {remap[i]: sorted(remap[v] for v in base_neighbors[i] if v != cand) for i in keep}
+            if _is_connected(trial, N0 - 1):
+                removed = cand
+                nbrs = trial
+                origin = {remap[i]: i for i in keep}
+                break
+        if removed is None:
+            raise RuntimeError("no single node can be removed without disconnecting the graph")
+        N_new = N0 - 1
+
+    neighbors_new = {i: sorted(set(nbrs[i])) for i in range(N_new)}
+    return N_new, neighbors_new, origin
+
+
+def sample_one_node_topology_dataset(base_neighbors: Dict[int, List[int]],
+                                      base_prim: MarketPrimitives, cfg: MarketConfig,
+                                      n_instances: int, seed: int) -> List[MarketSpec]:
+    """The +/-1-NODE counterpart of `sample_common_scale_topology_dataset`: each
+    instance's node count is EXACTLY N0+1 or N0-1 (coin flip per instance, via
+    `_perturb_topology_one_node`), never a percentage-rounded (and for small N0,
+    often UNCHANGED) node count, and with no independent edge-count percentage
+    scaling -- only the one new/removed node's own incident edge(s) differ from
+    the base graph. Isolates "does the model handle exactly one more/fewer
+    prosumer" from the edge-churn confound in the shared-factor version.
+    """
+    N0 = len(base_neighbors)
+    specs = []
+    for i in range(n_instances):
+        rng = np.random.default_rng(seed * 100_003 + i)
+        delta = 1 if rng.uniform() < 0.5 else -1
+        N_new, neighbors_new, origin = _perturb_topology_one_node(base_neighbors, N0, delta, rng)
+        prim_new = _perturb_primitives(base_neighbors, base_prim, N_new, neighbors_new,
+                                        origin, cfg, 0.0, rng)
+        specs.append(build_spec(N_new, neighbors_new, prim_new))
+    return specs
+
+
 def _perturb_primitives(base_neighbors: Dict[int, List[int]], prim0: MarketPrimitives,
                          N_new: int, neighbors_new: Dict[int, List[int]],
                          origin: Dict[int, Optional[int]], cfg: MarketConfig,

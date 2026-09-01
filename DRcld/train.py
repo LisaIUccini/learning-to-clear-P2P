@@ -111,11 +111,17 @@ class TrainConfig:
     w_behind: float = 2.0       # penalty weight for lagging plain DR ("asymmetric" mode)
     w_ahead: float = 1.0        # reward weight for beating plain DR ("asymmetric" mode)
     omega_power: float = 0.0    # iteration-weight exponent omega_k=(k/K)^omega_power, normalised
-                                # to mean 1 ("asymmetric" mode). 0 = uniform (paper Eq. 16 default).
-                                # >0 up-weights LATE iterations -- see module docstring's note on
-                                # a uniform average letting a cheap early lead pay for a costly
-                                # late plateau that a uniform mean doesn't penalise proportionally
-                                # to how much it actually costs in total iterations.
+                                # to mean 1 ("asymmetric" mode, omega_mode="fixed"). 0 = uniform
+                                # (paper Eq. 16 default). >0 up-weights LATE iterations -- see
+                                # module docstring's note on a uniform average letting a cheap
+                                # early lead pay for a costly late plateau that a uniform mean
+                                # doesn't penalise proportionally to how much it actually costs in
+                                # total iterations.
+    omega_mode: str = "fixed"  # "fixed" (omega_power's k/K schedule) | "dr_slope" (instance-
+                                # adaptive: weight by the reference plain-DR trajectory's own
+                                # local log-decay rate instead of raw iteration index -- see
+                                # asymmetric_loss's docstring; meant to transfer better to shifted
+                                # markets since it isn't tied to a fixed iteration index)
     epochs: int = 25
     lr: float = 3e-3
     grad_clip: float = 1.0
@@ -323,7 +329,7 @@ def log_ratio_loss(residuals: List[torch.Tensor], residuals_dr: List[torch.Tenso
 def asymmetric_loss(residuals: List[torch.Tensor], residuals_dr: List[torch.Tensor],
                      scale: torch.Tensor, gamma_mono: float, eps: float,
                      w_behind: float = 2.0, w_ahead: float = 1.0,
-                     omega_power: float = 0.0) -> torch.Tensor:
+                     omega_power: float = 0.0, omega_mode: str = "fixed") -> torch.Tensor:
     """Asymmetrically-weighted LINEAR difference against the plain-DR
     baseline -- continuous and uncapped like `log_ratio_loss` (no margin,
     no cutoff: still rewarded for beating DR by more, still penalised for
@@ -362,7 +368,43 @@ def asymmetric_loss(residuals: List[torch.Tensor], residuals_dr: List[torch.Tens
     rho_dr = (torch.stack(residuals_dr) / denom).detach()
     a = rho - rho_dr
     per_step = w_behind * torch.relu(a) - w_ahead * torch.relu(-a)
-    if omega_power != 0.0:
+    if omega_mode == "dr_slope":
+        # Instance-ADAPTIVE alternative to the fixed k-based schedule below:
+        # weight each step by how much SLOWER than typical the REFERENCE
+        # plain-DR trajectory is progressing there, in relative/geometric
+        # terms (log-space, so this is invariant to the absolute size of
+        # rho_dr -- a plateau near the end of a long trajectory and one near
+        # the start both get flagged the same way, unlike a fixed k-schedule
+        # which only knows ABSOLUTE position). A genuine plateau (rho_dr
+        # barely moving relative to itself) gets up-weighted; a steep,
+        # healthy decay region gets down-weighted. Because this reads the
+        # SAME instance's own rho_dr fresh every call, it follows wherever
+        # that instance's plateau actually is, instead of assuming it is
+        # always at the same iteration index -- meant to generalise better
+        # to shifted markets than `omega_power`'s fixed schedule (see
+        # runs/cross_density density=0.8 zero-shot D*/G_res result, which
+        # dropped to 67% win-rate under the fixed schedule).
+        log_rho_dr = torch.log(rho_dr + eps)
+        log_decrease = torch.clamp(log_rho_dr[:-1] - log_rho_dr[1:], min=0.0)
+        typical = log_decrease.mean().clamp(min=eps)
+        omega_local = typical / (log_decrease + 0.1 * typical)   # capped ~10x typical at a true plateau
+        # EXCLUDE the "already converged" tail from up-weighting: if this x0
+        # draw's plain-DR trajectory simply finishes before the unroll window
+        # ends (common on markets with wide x0-heterogeneity, e.g.
+        # density=0.5), rho_dr goes flat there because there is nothing left
+        # to do, not because of a genuine plateau -- without this guard that
+        # trivial flat tail gets the SAME up-weighting as a real plateau,
+        # which pulls training's attention away from the genuine difficulty
+        # (confirmed: broke density=0.5 outright, 1.81x/100% -> 0.82x/0%,
+        # while density=0.8's own unroll was short enough relative to its
+        # mean that few instances hit this case). "Already converged" =
+        # within 2x of this trajectory's own final value.
+        still_converging = rho_dr[:-1] > 2.0 * rho_dr[-1]
+        omega_local = torch.where(still_converging, omega_local, torch.ones_like(omega_local))
+        omega_local = torch.cat([omega_local, omega_local[-1:]])
+        omega = omega_local / omega_local.mean()
+        decay = (omega * per_step).mean()
+    elif omega_power != 0.0:
         K = rho.shape[0]
         k_frac = torch.arange(1, K + 1, dtype=rho.dtype, device=rho.device) / K
         omega = k_frac ** omega_power
@@ -401,7 +443,7 @@ class Trainer:
         elif cfg.loss_mode == "asymmetric":
             _, residuals_dr = rollout(net, None, cfg, x0=x0, differentiable=False)
             return asymmetric_loss(residuals, residuals_dr, scale, cfg.gamma_mono, cfg.eps,
-                                    cfg.w_behind, cfg.w_ahead, cfg.omega_power)
+                                    cfg.w_behind, cfg.w_ahead, cfg.omega_power, cfg.omega_mode)
         raise ValueError(f"unknown loss_mode {cfg.loss_mode!r}")
 
     def fit(self, train_specs, val_specs=None, device=None, verbose: bool = True):
