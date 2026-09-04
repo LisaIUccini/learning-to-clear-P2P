@@ -8,12 +8,13 @@ seaborn's "pastel" categorical palette, thin recessive gridlines, no
 top/right spines, and a fixed color identity used everywhere a series
 means the same thing --
 
-    C_DR       plain DR              (always this color, every plot)
-    C_LEARNED  DR + learned          (always this color, every plot)
-    C_WIN      per-instance win  (speed-up >= 1x)
-    C_LOSS     per-instance loss (speed-up <  1x)
-    C_TRAIN    training-loss curve
-    C_VAL      validation-loss curve
+    C_DR         plain DR                          (always this color, every plot)
+    C_LEARNED    DR + learned perturbation          (always this color, every plot)
+    C_WARMSTART  DR + learned warm start            (always this color, every plot)
+    C_WIN        per-instance win  (speed-up >= 1x)
+    C_LOSS       per-instance loss (speed-up <  1x)
+    C_TRAIN      training-loss curve
+    C_VAL        validation-loss curve
 
 Import this before creating any figure -- it configures rcParams as a
 side effect of import.
@@ -32,6 +33,7 @@ C_WIN = PASTEL[2]
 C_LOSS = PASTEL[3]
 C_TRAIN = PASTEL[4]
 C_VAL = PASTEL[5]
+C_WARMSTART = PASTEL[6]   # DR + learned warm start (experiments/compare_warmstart_baseline.py)
 
 INK = "#2b2b2b"
 INK_MUTED = "#6b6b6b"

@@ -1,0 +1,368 @@
+writing all artifacts to runs/cross_density/seed0_density1.0_seed0_generalization_sweep/  (weights=runs/cross_density/seed0_density1.0_seed0_drslope/phi_w.pt  base_seed=0  density=1.0  dr_gamma=4.0  gnn_rho=0.9667  gnn_scale=1.0  n_test=30  pct_levels=[0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5])
+  base market: N=10  edges=45
+
+--- level 1/11: pct=0.0% ---
+   1/30  DR   569 it  |  learned   288 it  |  reduction  49.4%
+   2/30  DR   647 it  |  learned   281 it  |  reduction  56.6%
+   3/30  DR   589 it  |  learned   282 it  |  reduction  52.1%
+   4/30  DR   632 it  |  learned   314 it  |  reduction  50.3%
+   5/30  DR   579 it  |  learned   281 it  |  reduction  51.5%
+   6/30  DR   578 it  |  learned   296 it  |  reduction  48.8%
+   7/30  DR   769 it  |  learned   296 it  |  reduction  61.5%
+   8/30  DR   646 it  |  learned   297 it  |  reduction  54.0%
+   9/30  DR   525 it  |  learned   293 it  |  reduction  44.2%
+  10/30  DR   633 it  |  learned   316 it  |  reduction  50.1%
+  11/30  DR   526 it  |  learned   317 it  |  reduction  39.7%
+  12/30  DR   579 it  |  learned   296 it  |  reduction  48.9%
+  13/30  DR   667 it  |  learned   285 it  |  reduction  57.3%
+  14/30  DR   464 it  |  learned   318 it  |  reduction  31.5%
+  15/30  DR   526 it  |  learned   305 it  |  reduction  42.0%
+  16/30  DR   743 it  |  learned   286 it  |  reduction  61.5%
+  17/30  DR   653 it  |  learned   299 it  |  reduction  54.2%
+  18/30  DR   712 it  |  learned   306 it  |  reduction  57.0%
+  19/30  DR   654 it  |  learned   307 it  |  reduction  53.1%
+  20/30  DR   634 it  |  learned   313 it  |  reduction  50.6%
+  21/30  DR   640 it  |  learned   284 it  |  reduction  55.6%
+  22/30  DR   686 it  |  learned   321 it  |  reduction  53.2%
+  23/30  DR   511 it  |  learned   319 it  |  reduction  37.6%
+  24/30  DR   725 it  |  learned   321 it  |  reduction  55.7%
+  25/30  DR   610 it  |  learned   304 it  |  reduction  50.2%
+  26/30  DR   719 it  |  learned   289 it  |  reduction  59.8%
+  27/30  DR   750 it  |  learned   304 it  |  reduction  59.5%
+  28/30  DR   484 it  |  learned   299 it  |  reduction  38.2%
+  29/30  DR   643 it  |  learned   287 it  |  reduction  55.4%
+  30/30  DR   591 it  |  learned   276 it  |  reduction  53.3%
+  [level 1/11] pct=  0.0%  n_infeasible= 0/30  mean_pct_reduction= 51.09%  median= 52.59%  mean_speedup= 2.09x  win-rate=100%
+
+--- level 2/11: pct=5.0% ---
+   1/30  DR   569 it  |  learned   312 it  |  reduction  45.2%
+   2/30  DR   647 it  |  learned   324 it  |  reduction  49.9%
+   3/30  DR   590 it  |  learned   287 it  |  reduction  51.4%
+   4/30  DR   636 it  |  learned   334 it  |  reduction  47.5%
+   5/30  DR   583 it  |  learned   315 it  |  reduction  46.0%
+   6/30  DR   577 it  |  learned   341 it  |  reduction  40.9%
+   7/30  DR   771 it  |  learned   319 it  |  reduction  58.6%
+   8/30  DR   645 it  |  learned   303 it  |  reduction  53.0%
+   9/30  DR   523 it  |  learned   281 it  |  reduction  46.3%
+  10/30  DR   634 it  |  learned   331 it  |  reduction  47.8%
+  11/30  DR   524 it  |  learned   304 it  |  reduction  42.0%
+  12/30  DR   576 it  |  learned   317 it  |  reduction  45.0%
+  13/30  DR   665 it  |  learned   303 it  |  reduction  54.4%
+  14/30  DR   498 it  |  learned   333 it  |  reduction  33.1%
+  15/30  DR   514 it  |  learned   326 it  |  reduction  36.6%
+  16/30  DR   743 it  |  learned   325 it  |  reduction  56.3%
+  17/30  DR   654 it  |  learned   300 it  |  reduction  54.1%
+  18/30  DR   713 it  |  learned   333 it  |  reduction  53.3%
+  19/30  DR   655 it  |  learned   309 it  |  reduction  52.8%
+  20/30  DR   636 it  |  learned   345 it  |  reduction  45.8%
+  21/30  DR   633 it  |  learned   341 it  |  reduction  46.1%
+  22/30  DR   686 it  |  learned   319 it  |  reduction  53.5%
+  23/30  DR   526 it  |  learned   319 it  |  reduction  39.4%
+  24/30  DR   721 it  |  learned   336 it  |  reduction  53.4%
+  25/30  DR   611 it  |  learned   310 it  |  reduction  49.3%
+  26/30  DR   720 it  |  learned   332 it  |  reduction  53.9%
+  27/30  DR   747 it  |  learned   343 it  |  reduction  54.1%
+  28/30  DR   499 it  |  learned   324 it  |  reduction  35.1%
+  29/30  DR   643 it  |  learned   306 it  |  reduction  52.4%
+  30/30  DR   592 it  |  learned   331 it  |  reduction  44.1%
+  [level 2/11] pct=  5.0%  n_infeasible= 0/30  mean_pct_reduction= 48.04%  median= 48.53%  mean_speedup= 1.95x  win-rate=100%
+
+--- level 3/11: pct=10.0% ---
+   1/30  DR   571 it  |  learned   331 it  |  reduction  42.0%
+   2/30  DR   646 it  |  learned   344 it  |  reduction  46.7%
+   3/30  DR   589 it  |  learned   283 it  |  reduction  52.0%
+   4/30  DR   637 it  |  learned   365 it  |  reduction  42.7%
+   5/30  DR   583 it  |  learned   328 it  |  reduction  43.7%
+   6/30  DR   575 it  |  learned   333 it  |  reduction  42.1%
+   7/30  DR   768 it  |  learned   335 it  |  reduction  56.4%
+   8/30  DR   647 it  |  learned   309 it  |  reduction  52.2%
+   9/30  DR   525 it  |  learned   280 it  |  reduction  46.7%
+  10/30  DR   638 it  |  learned   356 it  |  reduction  44.2%
+  11/30  DR   524 it  |  learned   306 it  |  reduction  41.6%
+  12/30  DR   575 it  |  learned   339 it  |  reduction  41.0%
+  13/30  DR   664 it  |  learned   334 it  |  reduction  49.7%
+  14/30  DR   523 it  |  learned   340 it  |  reduction  35.0%
+  15/30  DR   507 it  |  learned   351 it  |  reduction  30.8%
+  16/30  DR   743 it  |  learned   328 it  |  reduction  55.9%
+  17/30  DR   658 it  |  learned   299 it  |  reduction  54.6%
+  18/30  DR   716 it  |  learned   342 it  |  reduction  52.2%
+  19/30  DR   657 it  |  learned   334 it  |  reduction  49.2%
+  20/30  DR   639 it  |  learned   358 it  |  reduction  44.0%
+  21/30  DR   638 it  |  learned   375 it  |  reduction  41.2%
+  22/30  DR   686 it  |  learned   331 it  |  reduction  51.7%
+  23/30  DR   552 it  |  learned   346 it  |  reduction  37.3%
+  24/30  DR   721 it  |  learned   334 it  |  reduction  53.7%
+  25/30  DR   611 it  |  learned   303 it  |  reduction  50.4%
+  26/30  DR   722 it  |  learned   354 it  |  reduction  51.0%
+  27/30  DR   749 it  |  learned   332 it  |  reduction  55.7%
+  28/30  DR   519 it  |  learned   331 it  |  reduction  36.2%
+  29/30  DR   643 it  |  learned   320 it  |  reduction  50.2%
+  30/30  DR   589 it  |  learned   358 it  |  reduction  39.2%
+  [level 3/11] pct= 10.0%  n_infeasible= 0/30  mean_pct_reduction= 46.31%  median= 46.71%  mean_speedup= 1.89x  win-rate=100%
+
+--- level 4/11: pct=15.0% ---
+   1/30  DR   569 it  |  learned   344 it  |  reduction  39.5%
+   2/30  DR   644 it  |  learned   333 it  |  reduction  48.3%
+   3/30  DR   588 it  |  learned   287 it  |  reduction  51.2%
+   4/30  DR   639 it  |  learned   370 it  |  reduction  42.1%
+   5/30  DR   583 it  |  learned   355 it  |  reduction  39.1%
+   6/30  DR   571 it  |  learned   366 it  |  reduction  35.9%
+   7/30  DR   770 it  |  learned   326 it  |  reduction  57.7%
+   8/30  DR   647 it  |  learned   320 it  |  reduction  50.5%
+   9/30  DR   523 it  |  learned   278 it  |  reduction  46.8%
+  10/30  DR   636 it  |  learned   361 it  |  reduction  43.2%
+  11/30  DR   524 it  |  learned   313 it  |  reduction  40.3%
+  12/30  DR   575 it  |  learned   351 it  |  reduction  39.0%
+  13/30  DR   664 it  |  learned   341 it  |  reduction  48.6%
+  14/30  DR   541 it  |  learned   327 it  |  reduction  39.6%
+  15/30  DR   507 it  |  learned   362 it  |  reduction  28.6%
+  16/30  DR   738 it  |  learned   334 it  |  reduction  54.7%
+  17/30  DR   655 it  |  learned   301 it  |  reduction  54.0%
+  18/30  DR   714 it  |  learned   334 it  |  reduction  53.2%
+  19/30  DR   658 it  |  learned   347 it  |  reduction  47.3%
+  20/30  DR   639 it  |  learned   379 it  |  reduction  40.7%
+  21/30  DR   642 it  |  learned   381 it  |  reduction  40.7%
+  22/30  DR   686 it  |  learned   335 it  |  reduction  51.2%
+  23/30  DR   518 it  |  learned   357 it  |  reduction  31.1%
+  24/30  DR   719 it  |  learned   379 it  |  reduction  47.3%
+  25/30  DR   613 it  |  learned   313 it  |  reduction  48.9%
+  26/30  DR   725 it  |  learned   371 it  |  reduction  48.8%
+  27/30  DR   745 it  |  learned   368 it  |  reduction  50.6%
+  28/30  DR   541 it  |  learned   334 it  |  reduction  38.3%
+  29/30  DR   642 it  |  learned   329 it  |  reduction  48.8%
+  30/30  DR   597 it  |  learned   364 it  |  reduction  39.0%
+  [level 4/11] pct= 15.0%  n_infeasible= 0/30  mean_pct_reduction= 44.83%  median= 47.05%  mean_speedup= 1.84x  win-rate=100%
+
+--- level 5/11: pct=20.0% ---
+   1/30  DR   567 it  |  learned   354 it  |  reduction  37.6%
+   2/30  DR   645 it  |  learned   354 it  |  reduction  45.1%
+   3/30  DR   590 it  |  learned   292 it  |  reduction  50.5%
+   4/30  DR   661 it  |  learned   400 it  |  reduction  39.5%
+   5/30  DR   587 it  |  learned   362 it  |  reduction  38.3%
+   6/30  DR   569 it  |  learned   392 it  |  reduction  31.1%
+   7/30  DR   771 it  |  learned   328 it  |  reduction  57.5%
+   8/30  DR   647 it  |  learned   329 it  |  reduction  49.1%
+   9/30  DR   523 it  |  learned   286 it  |  reduction  45.3%
+  10/30  DR   633 it  |  learned   387 it  |  reduction  38.9%
+  11/30  DR   524 it  |  learned   318 it  |  reduction  39.3%
+  12/30  DR   579 it  |  learned   361 it  |  reduction  37.7%
+  13/30  DR   663 it  |  learned   340 it  |  reduction  48.7%
+  14/30  DR   557 it  |  learned   357 it  |  reduction  35.9%
+  15/30  DR   505 it  |  learned   371 it  |  reduction  26.5%
+  16/30  DR   739 it  |  learned   359 it  |  reduction  51.4%
+  17/30  DR   656 it  |  learned   301 it  |  reduction  54.1%
+  18/30  DR   712 it  |  learned   336 it  |  reduction  52.8%
+  19/30  DR   664 it  |  learned   360 it  |  reduction  45.8%
+  20/30  DR   672 it  |  learned   427 it  |  reduction  36.5%
+  21/30  DR   643 it  |  learned   389 it  |  reduction  39.5%
+  22/30  DR   690 it  |  learned   340 it  |  reduction  50.7%
+  23/30  DR   523 it  |  learned   378 it  |  reduction  27.7%
+  24/30  DR   717 it  |  learned   401 it  |  reduction  44.1%
+  25/30  DR   615 it  |  learned   311 it  |  reduction  49.4%
+  26/30  DR   757 it  |  learned   408 it  |  reduction  46.1%
+  27/30  DR   744 it  |  learned   393 it  |  reduction  47.2%
+  28/30  DR   539 it  |  learned   333 it  |  reduction  38.2%
+  29/30  DR   643 it  |  learned   340 it  |  reduction  47.1%
+  30/30  DR   629 it  |  learned   388 it  |  reduction  38.3%
+  [level 5/11] pct= 20.0%  n_infeasible= 0/30  mean_pct_reduction= 43.00%  median= 44.59%  mean_speedup= 1.79x  win-rate=100%
+
+--- level 6/11: pct=25.0% ---
+   1/30  DR   566 it  |  learned   360 it  |  reduction  36.4%
+   2/30  DR   642 it  |  learned   384 it  |  reduction  40.2%
+   3/30  DR   589 it  |  learned   294 it  |  reduction  50.1%
+   4/30  DR   645 it  |  learned   428 it  |  reduction  33.6%
+   5/30  DR   590 it  |  learned   361 it  |  reduction  38.8%
+   6/30  DR   567 it  |  learned   393 it  |  reduction  30.7%
+   7/30  DR   769 it  |  learned   349 it  |  reduction  54.6%
+   8/30  DR   648 it  |  learned   329 it  |  reduction  49.2%
+   9/30  DR   523 it  |  learned   293 it  |  reduction  44.0%
+  10/30  DR   661 it  |  learned   408 it  |  reduction  38.3%
+  11/30  DR   528 it  |  learned   332 it  |  reduction  37.1%
+  12/30  DR   578 it  |  learned   374 it  |  reduction  35.3%
+  13/30  DR   661 it  |  learned   342 it  |  reduction  48.3%
+  14/30  DR   556 it  |  learned   386 it  |  reduction  30.6%
+  15/30  DR   522 it  |  learned   418 it  |  reduction  19.9%
+  16/30  DR   739 it  |  learned   381 it  |  reduction  48.4%
+  17/30  DR   656 it  |  learned   304 it  |  reduction  53.7%
+  18/30  DR   711 it  |  learned   364 it  |  reduction  48.8%
+  19/30  DR   686 it  |  learned   397 it  |  reduction  42.1%
+  20/30  DR   670 it  |  learned   453 it  |  reduction  32.4%
+  21/30  DR   629 it  |  learned   434 it  |  reduction  31.0%
+  22/30  DR   691 it  |  learned   346 it  |  reduction  49.9%
+  23/30  DR   535 it  |  learned   464 it  |  reduction  13.3%
+  24/30  DR   715 it  |  learned   397 it  |  reduction  44.5%
+  25/30  DR   614 it  |  learned   313 it  |  reduction  49.0%
+  26/30  DR   752 it  |  learned   424 it  |  reduction  43.6%
+  27/30  DR   746 it  |  learned   391 it  |  reduction  47.6%
+  28/30  DR   515 it  |  learned   334 it  |  reduction  35.1%
+  29/30  DR   642 it  |  learned   347 it  |  reduction  46.0%
+  30/30  DR   623 it  |  learned   424 it  |  reduction  31.9%
+  [level 6/11] pct= 25.0%  n_infeasible= 0/30  mean_pct_reduction= 40.15%  median= 41.16%  mean_speedup= 1.71x  win-rate=100%
+
+--- level 7/11: pct=30.0% ---
+   1/30  DR   569 it  |  learned   369 it  |  reduction  35.1%
+   2/30  DR   643 it  |  learned   385 it  |  reduction  40.1%
+   3/30  DR   591 it  |  learned   298 it  |  reduction  49.6%
+   4/30  DR   605 it  |  learned   456 it  |  reduction  24.6%
+   5/30  DR   593 it  |  learned   377 it  |  reduction  36.4%
+   6/30  DR   565 it  |  learned   384 it  |  reduction  32.0%
+   7/30  DR   768 it  |  learned   364 it  |  reduction  52.6%
+   8/30  DR   648 it  |  learned   332 it  |  reduction  48.8%
+   9/30  DR   522 it  |  learned   295 it  |  reduction  43.5%
+  10/30  DR   646 it  |  learned   409 it  |  reduction  36.7%
+  11/30  DR   536 it  |  learned   338 it  |  reduction  36.9%
+  12/30  DR   610 it  |  learned   409 it  |  reduction  33.0%
+  13/30  DR   659 it  |  learned   345 it  |  reduction  47.6%
+  14/30  DR   535 it  |  learned   394 it  |  reduction  26.4%
+  15/30  DR   513 it  |  learned   409 it  |  reduction  20.3%
+  16/30  DR   736 it  |  learned   390 it  |  reduction  47.0%
+  17/30  DR   658 it  |  learned   304 it  |  reduction  53.8%
+  18/30  DR   710 it  |  learned   390 it  |  reduction  45.1%
+  19/30  DR   705 it  |  learned   440 it  |  reduction  37.6%
+  20/30  DR   696 it  |  learned   520 it  |  reduction  25.3%
+  21/30  DR   666 it  |  learned   454 it  |  reduction  31.8%
+  22/30  DR   693 it  |  learned   348 it  |  reduction  49.8%
+  23/30  DR   523 it  |  learned   532 it  |  reduction  -1.7%
+  24/30  DR   713 it  |  learned   406 it  |  reduction  43.1%
+  25/30  DR   615 it  |  learned   316 it  |  reduction  48.6%
+  26/30  DR   746 it  |  learned   455 it  |  reduction  39.0%
+  27/30  DR   722 it  |  learned   395 it  |  reduction  45.3%
+  28/30  DR   481 it  |  learned   309 it  |  reduction  35.8%
+  29/30  DR   642 it  |  learned   354 it  |  reduction  44.9%
+  30/30  DR   624 it  |  learned   455 it  |  reduction  27.1%
+  [level 7/11] pct= 30.0%  n_infeasible= 0/30  mean_pct_reduction= 37.87%  median= 38.30%  mean_speedup= 1.66x  win-rate=97%
+
+--- level 8/11: pct=35.0% ---
+   1/30  DR   565 it  |  learned   377 it  |  reduction  33.3%
+   2/30  DR   625 it  |  learned   376 it  |  reduction  39.8%
+   3/30  DR   588 it  |  learned   300 it  |  reduction  49.0%
+   4/30  DR   607 it  |  learned   477 it  |  reduction  21.4%
+   5/30  DR   608 it  |  learned   405 it  |  reduction  33.4%
+   6/30  DR   565 it  |  learned   395 it  |  reduction  30.1%
+   7/30  DR   769 it  |  learned   383 it  |  reduction  50.2%
+   8/30  DR   647 it  |  learned   331 it  |  reduction  48.8%
+   9/30  DR   522 it  |  learned   303 it  |  reduction  42.0%
+  10/30  DR   608 it  |  learned   455 it  |  reduction  25.2%
+  11/30  DR   544 it  |  learned   351 it  |  reduction  35.5%
+  12/30  DR   609 it  |  learned   397 it  |  reduction  34.8%
+  13/30  DR   660 it  |  learned   352 it  |  reduction  46.7%
+  14/30  DR   486 it  |  learned   381 it  |  reduction  21.6%
+  15/30  DR   495 it  |  learned   435 it  |  reduction  12.1%
+  16/30  DR   736 it  |  learned   387 it  |  reduction  47.4%
+  17/30  DR   656 it  |  learned   313 it  |  reduction  52.3%
+  18/30  DR   710 it  |  learned   396 it  |  reduction  44.2%
+  19/30  DR   724 it  |  learned   510 it  |  reduction  29.6%
+  20/30  DR   691 it  |  learned   570 it  |  reduction  17.5%
+  21/30  DR   668 it  |  learned   455 it  |  reduction  31.9%
+  22/30  DR   691 it  |  learned   356 it  |  reduction  48.5%
+  23/30  DR   530 it  |  learned   437 it  |  reduction  17.5%
+  24/30  DR   712 it  |  learned   415 it  |  reduction  41.7%
+  25/30  DR   616 it  |  learned   335 it  |  reduction  45.6%
+  26/30  DR   739 it  |  learned   480 it  |  reduction  35.0%
+  27/30  DR   723 it  |  learned   420 it  |  reduction  41.9%
+  28/30  DR   535 it  |  learned   301 it  |  reduction  43.7%
+  29/30  DR   644 it  |  learned   355 it  |  reduction  44.9%
+  30/30  DR   650 it  |  learned   506 it  |  reduction  22.2%
+  [level 8/11] pct= 35.0%  n_infeasible= 0/30  mean_pct_reduction= 36.26%  median= 37.66%  mean_speedup= 1.62x  win-rate=100%
+
+--- level 9/11: pct=40.0% ---
+   1/30  DR   593 it  |  learned   404 it  |  reduction  31.9%
+   2/30  DR   626 it  |  learned   380 it  |  reduction  39.3%
+   3/30  DR   588 it  |  learned   306 it  |  reduction  48.0%
+   4/30  DR   591 it  |  learned   492 it  |  reduction  16.8%
+   5/30  DR   643 it  |  learned   439 it  |  reduction  31.7%
+   6/30  DR   563 it  |  learned   423 it  |  reduction  24.9%
+   7/30  DR   765 it  |  learned   390 it  |  reduction  49.0%
+   8/30  DR   648 it  |  learned   332 it  |  reduction  48.8%
+   9/30  DR   525 it  |  learned   309 it  |  reduction  41.1%
+  10/30  DR   612 it  |  learned   497 it  |  reduction  18.8%
+  11/30  DR   551 it  |  learned   385 it  |  reduction  30.1%
+  12/30  DR   612 it  |  learned   410 it  |  reduction  33.0%
+  13/30  DR   657 it  |  learned   358 it  |  reduction  45.5%
+  14/30  DR   458 it  |  learned   391 it  |  reduction  14.6%
+  15/30  DR   501 it  |  learned   458 it  |  reduction   8.6%
+  16/30  DR   733 it  |  learned   382 it  |  reduction  47.9%
+  17/30  DR   655 it  |  learned   312 it  |  reduction  52.4%
+  18/30  DR   710 it  |  learned   398 it  |  reduction  43.9%
+  19/30  DR   770 it  |  learned   581 it  |  reduction  24.5%
+  20/30  DR   692 it  |  learned   606 it  |  reduction  12.4%
+  21/30  DR   683 it  |  learned   489 it  |  reduction  28.4%
+  22/30  DR   694 it  |  learned   363 it  |  reduction  47.7%
+  23/30  DR   581 it  |  learned   480 it  |  reduction  17.4%
+  24/30  DR   707 it  |  learned   447 it  |  reduction  36.8%
+  25/30  DR   624 it  |  learned   356 it  |  reduction  42.9%
+  26/30  DR   724 it  |  learned   509 it  |  reduction  29.7%
+  27/30  DR   711 it  |  learned   432 it  |  reduction  39.2%
+  28/30  DR   522 it  |  learned   322 it  |  reduction  38.3%
+  29/30  DR   645 it  |  learned   361 it  |  reduction  44.0%
+  30/30  DR   666 it  |  learned   549 it  |  reduction  17.6%
+  [level 9/11] pct= 40.0%  n_infeasible= 0/30  mean_pct_reduction= 33.51%  median= 34.89%  mean_speedup= 1.56x  win-rate=100%
+
+--- level 10/11: pct=45.0% ---
+   1/30  DR   582 it  |  learned   392 it  |  reduction  32.6%
+   2/30  DR   633 it  |  learned   411 it  |  reduction  35.1%
+   3/30  DR   591 it  |  learned   309 it  |  reduction  47.7%
+   4/30  DR   567 it  |  learned   568 it  |  reduction  -0.2%
+   5/30  DR   607 it  |  learned   481 it  |  reduction  20.8%
+   6/30  DR   559 it  |  learned   439 it  |  reduction  21.5%
+   7/30  DR   763 it  |  learned   393 it  |  reduction  48.5%
+   8/30  DR   647 it  |  learned   333 it  |  reduction  48.5%
+   9/30  DR   522 it  |  learned   319 it  |  reduction  38.9%
+  10/30  DR   612 it  |  learned   512 it  |  reduction  16.3%
+  11/30  DR   551 it  |  learned   399 it  |  reduction  27.6%
+  12/30  DR   604 it  |  learned   434 it  |  reduction  28.1%
+  13/30  DR   658 it  |  learned   368 it  |  reduction  44.1%
+  14/30  DR   471 it  |  learned   405 it  |  reduction  14.0%
+  15/30  DR   509 it  |  learned   478 it  |  reduction   6.1%
+  16/30  DR   732 it  |  learned   384 it  |  reduction  47.5%
+  17/30  DR   658 it  |  learned   312 it  |  reduction  52.6%
+  18/30  DR   710 it  |  learned   388 it  |  reduction  45.4%
+  19/30  DR   773 it  |  learned   593 it  |  reduction  23.3%
+  20/30  DR   672 it  |  learned   632 it  |  reduction   6.0%
+  21/30  DR   677 it  |  learned   484 it  |  reduction  28.5%
+  22/30  DR   696 it  |  learned   369 it  |  reduction  47.0%
+  23/30  DR   543 it  |  learned   549 it  |  reduction  -1.1%
+  24/30  DR   678 it  |  learned   437 it  |  reduction  35.5%
+  25/30  DR   625 it  |  learned   371 it  |  reduction  40.6%
+  26/30  DR   732 it  |  learned   539 it  |  reduction  26.4%
+  27/30  DR   685 it  |  learned   444 it  |  reduction  35.2%
+  28/30  DR   530 it  |  learned   347 it  |  reduction  34.5%
+  29/30  DR   646 it  |  learned   364 it  |  reduction  43.7%
+  30/30  DR   632 it  |  learned   625 it  |  reduction   1.1%
+  [level 10/11] pct= 45.0%  n_infeasible= 0/30  mean_pct_reduction= 29.86%  median= 33.59%  mean_speedup= 1.50x  win-rate=93%
+
+--- level 11/11: pct=50.0% ---
+   1/30  DR   583 it  |  learned   402 it  |  reduction  31.0%
+   2/30  DR   619 it  |  learned   422 it  |  reduction  31.8%
+   3/30  DR   591 it  |  learned   312 it  |  reduction  47.2%
+   4/30  DR   590 it  |  learned   633 it  |  reduction  -7.3%
+   5/30  DR   634 it  |  learned   460 it  |  reduction  27.4%
+   6/30  DR   557 it  |  learned   452 it  |  reduction  18.9%
+   7/30  DR   765 it  |  learned   397 it  |  reduction  48.1%
+   8/30  DR   650 it  |  learned   335 it  |  reduction  48.5%
+   9/30  DR   523 it  |  learned   324 it  |  reduction  38.0%
+  10/30  DR   618 it  |  learned   551 it  |  reduction  10.8%
+  11/30  DR   587 it  |  learned   437 it  |  reduction  25.6%
+  12/30  DR   595 it  |  learned   452 it  |  reduction  24.0%
+  13/30  DR   657 it  |  learned   378 it  |  reduction  42.5%
+  14/30  DR   489 it  |  learned   418 it  |  reduction  14.5%
+  15/30  DR   497 it  |  learned   488 it  |  reduction   1.8%
+  16/30  DR   732 it  |  learned   397 it  |  reduction  45.8%
+  17/30  DR   658 it  |  learned   313 it  |  reduction  52.4%
+  18/30  DR   690 it  |  learned   395 it  |  reduction  42.8%
+  19/30  DR   773 it  |  learned   605 it  |  reduction  21.7%
+  20/30  DR   670 it  |  learned   620 it  |  reduction   7.5%
+  21/30  DR   661 it  |  learned   477 it  |  reduction  27.8%
+  22/30  DR   700 it  |  learned   371 it  |  reduction  47.0%
+  23/30  DR   554 it  |  learned   564 it  |  reduction  -1.8%
+  24/30  DR   657 it  |  learned   450 it  |  reduction  31.5%
+  25/30  DR   658 it  |  learned   386 it  |  reduction  41.3%
+  26/30  DR   719 it  |  learned   614 it  |  reduction  14.6%
+  27/30  DR   683 it  |  learned   442 it  |  reduction  35.3%
+  28/30  DR   547 it  |  learned   371 it  |  reduction  32.2%
+  29/30  DR   646 it  |  learned   369 it  |  reduction  42.9%
+  30/30  DR   626 it  |  learned   616 it  |  reduction   1.6%
+  [level 11/11] pct= 50.0%  n_infeasible= 0/30  mean_pct_reduction= 28.18%  median= 31.28%  mean_speedup= 1.47x  win-rate=93%
+
+saved runs/cross_density/seed0_density1.0_seed0_generalization_sweep/generalization_sweep.png
+saved runs/cross_density/seed0_density1.0_seed0_generalization_sweep/sweep_results.json

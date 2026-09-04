@@ -435,3 +435,47 @@ def deploy(gnn: PerturbationGNN, net) -> None:
 def undeploy(net) -> None:
     for p in net.prosumers:
         p.gnn_agent = None
+
+
+class CalibratedLocalAgent(LocalAgent):
+    """PROTOTYPE (experiments/demo_calibrated_rho.py): like `LocalAgent`,
+    but the fast channel's amplitude schedule uses a rho/scale OVERRIDDEN
+    per-deployment instead of the checkpoint's own fixed `gnn.cfg.rho`, and
+    the decay exponent is measured from `k_offset` (the iteration this
+    agent was deployed at) rather than from k=0 -- lets one trained model
+    apply a DIFFERENT timescale on a per-INSTANCE basis (e.g. estimated
+    from that instance's own observed plain-DR convergence rate during a
+    short calibration window before deployment), without retraining any
+    weights. The slow channel is untouched (still the checkpoint's own
+    rho_slow/scale_slow, measured from the true k=0) -- this prototype
+    only targets the fast channel's mismatched-timescale hypothesis.
+    """
+    def __init__(self, gnn: PerturbationGNN, rho_override: float, scale_override: float,
+                 k_offset: int):
+        super().__init__(gnn)
+        self.rho_override = rho_override
+        self.scale_override = scale_override
+        self.k_offset = k_offset
+
+    @torch.no_grad()
+    def perturbation(self, state: LocalNodeState, k: int):
+        k_eff = max(k - self.k_offset, 0)
+        amp_fast = self.scale_override * (self.rho_override ** k_eff)
+        amp_slow = self.gnn.cfg.scale_slow * self.gnn.decay_slow(k)
+        (dD_f, dG_f, dq_f), (dD_s, dG_s, dq_s), mem_new = self.gnn.forward_local(state)
+        dD = amp_fast * dD_f + amp_slow * dD_s
+        dG = amp_fast * dG_f + amp_slow * dG_s
+        dq = {m: amp_fast * dq_f[m] + amp_slow * dq_s[m] for m in dq_f}
+        return dD, dG, dq, mem_new
+
+
+def deploy_calibrated(gnn: PerturbationGNN, net, rho_override: float,
+                       scale_override: Optional[float] = None, k_offset: int = 0) -> None:
+    """PROTOTYPE counterpart of `deploy`: installs `CalibratedLocalAgent`
+    instead of `LocalAgent`. `scale_override=None` keeps the checkpoint's
+    own trained `cfg.scale`."""
+    gnn.eval()
+    agent = CalibratedLocalAgent(
+        gnn, rho_override, scale_override if scale_override is not None else gnn.cfg.scale, k_offset)
+    for p in net.prosumers:
+        p.gnn_agent = agent

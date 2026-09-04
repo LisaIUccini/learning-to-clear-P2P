@@ -1,5 +1,62 @@
 # Experiment index
 
+**2026-09-04 update (v2 attempt: widen range + reduce loss asymmetry -- confirmed mechanism, no
+net improvement)**: widened the 6-quantity perturbation from split +/-15%(D*/G_res)/10%(bounds) to
+uniform +/-20% on all six (infeasible draws now discarded+resampled, ~7.5% of raw draws at this
+width) AND reduced the loss's w_behind:w_ahead asymmetry from 2.0:1.0 to 2.0:1.4, to test the
+cv-heterogeneity diagnosis from the previous entry. Result (`runs/cross_density/
+realistic_params_fixed_x0_v2/`, v1 kept untouched for comparison): mean 1.17x, win-rate 97%
+(29/30) -- vs v1's 1.19x/100%. DR's own iteration-count cv MORE THAN DOUBLED as hypothesized
+(0.040->0.102, now near the old x0-diverse design's 0.129) -- the heterogeneity mechanism is
+confirmed -- but the extra heterogeneity did NOT translate into a better result; two variables
+changed at once so the (small) regression can't yet be attributed to either one. See
+`project_l2p2p_paper.md` in the auto memory for the open question (isolate the two levers; or
+enlarge n_train=25 now that real heterogeneity is confirmed achievable).
+
+**2026-09-03 update (training on PARAMETER diversity, fixed x0/topology -- new training axis)**:
+following a discussion with the user's supervisor (Giuseppe Belgioioso, KTH, co-author of
+arXiv:2107.13444, the paper this project's market model is grounded in), trained with x0 held
+FIXED (a single draw, since x0 is a user-supplied input in the real use case, not something that
+varies at deployment) and diversity coming ONLY from perturbing D*/G_res (+/-15%) and
+D_min/D_max/G_min/G_max (+/-10%) of a new realistic (household-prosumer, kW-scale) base market --
+`experiments/build_realistic_training_dataset.py`. Also fixed a real deviation from the reference
+literature: G_min is now >=0 by construction (was negative by default), matching the paper's own
+`p_di >= 0` definition for dispatchable generation.
+
+Result (n_test=30, FIXED x0 throughout, `runs/cross_density/realistic_params_fixed_x0/`): mean
+**1.19x**, median 1.18x, min 1.07x, max 1.34x, win-rate **100% (30/30)** -- modest magnitude but
+zero losses. n_train=25 (fixed dataset, slot 0 = unperturbed original network always). Two design
+iterations were tried and explicitly rejected by the user first: a fresh-random-market base
+(should always be a perturbation of the base, never unrelated), and per-epoch spec resampling
+(rejected as conceptually wrong -- "epoch" means a pass over the SAME fixed dataset). See
+`project_l2p2p_paper.md` in the auto memory for the full methodology and literature grounding.
+Whether to enlarge n_train=25 is an open question, deferred by the user pending this result.
+
+**2026-09-02 update (calibrated-rho prototype, topology-generalization fix attempt)**: the fast
+channel's `rho` (e.g. 0.9667 for `seed0_density1.0_seed0_drslope`) is a fixed constant tuned once
+to the TRAINING topology's own convergence rate -- stale on a different topology. Prototype (no
+retraining): `gnn.CalibratedLocalAgent`/`deploy_calibrated` + `experiments/demo_calibrated_rho.py`
+runs 30 uncorrected DR iterations per instance, fits that instance's own decay rate, derives a
+fresh rho via the project's standing rule, deploys with it instead of the fixed value.
+
+Result, n=30, +/-10% topology test (density=1.0 seed=0): fixed rho = 12.49%/67% win-rate (matches
+known baseline); calibrated rho (~0.91-0.93 every time, much lower than 0.9667) = 5.27%/**77%**
+win-rate. Trade-off, NOT a clean win: higher win-rate and roughly halved worst-case loss
+(-43%->-20%), but also roughly halved MEAN (12.5%->5.3%) and capped-away best cases (58%->26%).
+Not yet solved -- see `project_l2p2p_paper.md` in the auto memory for the full mechanism and next
+ideas (different k_calib, re-estimating rho mid-trajectory, combining with an ahead-reward cap).
+
+**2026-09-02 update (fine-grained D*/G_res generalization sweep, checkpoint
+`seed0_density1.0_seed0_drslope`)**: 11 perturbation levels (0%-50%, step 5%), n=30 each, zero-shot
+(no retraining). Graceful, roughly linear degradation the whole way -- mean iteration-reduction
+51.09%->28.18%, win-rate 100%->93%, ZERO infeasible instances at any level up to 50%. No cliff, no
+breakdown point found. Much smoother/wider envelope than the topology axis (which was already weak
+by +/-10%). Bar chart with min-max whiskers (per user request):
+`runs/cross_density/seed0_density1.0_seed0_generalization_sweep/generalization_sweep_bars.png`;
+raw data in `sweep_results.json` in the same folder. Reusable script:
+`experiments/sweep_dstar_gres_generalization.py` (CLI: weights/base_seed/density/gamma/rho/scale/
+n_test/max_pct/step_pct). See `project_l2p2p_paper.md` in the auto memory for the full table.
+
 **2026-09-01 update (topology decomposition: node-only vs edge-only vs combined)**: the combined
 +/-10% topology test (below) confounds node-count and edge-count changes. Isolated them: node-only
 (`market.sample_one_node_topology_dataset`, exactly +/-1 node) and edge-only (reused

@@ -424,8 +424,11 @@ class Trainer:
         self.opt = torch.optim.Adam(gnn.parameters(), lr=self.cfg.lr)
         self.history = {"train": [], "val": []}
 
-    def _instance_loss(self, net, differentiable: bool) -> torch.Tensor:
+    def _instance_loss(self, net, differentiable: bool, fixed_x0: Optional[torch.Tensor] = None
+                        ) -> torch.Tensor:
         cfg = self.cfg
+        if fixed_x0 is not None:
+            net.unflatten(fixed_x0)
         x0 = net.flatten().detach()
         _, residuals = rollout(net, self.gnn, cfg, x0=x0, differentiable=differentiable)
         scale = self.gnn.physical_scale(net)
@@ -446,33 +449,61 @@ class Trainer:
                                     cfg.w_behind, cfg.w_ahead, cfg.omega_power, cfg.omega_mode)
         raise ValueError(f"unknown loss_mode {cfg.loss_mode!r}")
 
-    def fit(self, train_specs, val_specs=None, device=None, verbose: bool = True):
+    def fit(self, train_specs=None, val_specs=None, device=None, verbose: bool = True,
+            fixed_x0: Optional[torch.Tensor] = None, resample_specs_fn=None):
+        """`fixed_x0`, if given (a flattened [D,G,Q] tensor, `Network.flatten`
+        layout), OVERRIDES the usual per-(instance,epoch) random x0 draw with
+        this SAME tensor for every instance/epoch -- used when the diversity
+        axis under training is the market's own parameters (D*/G_res/box
+        bounds), not x0. `unflatten` sets state directly with no feasibility
+        check against that instance's own (possibly-shifted) box; DR handles
+        an out-of-box start fine (`local_prox` clamps back onto the box on
+        the very first step), so this is safe, just not a feasible x0 for
+        every perturbed instance -- by design here, not an oversight.
+
+        `resample_specs_fn`, if given (a zero-arg callable returning a list
+        of MarketSpecs, typically closing over its own per-call rng/seed),
+        is called ONCE PER EPOCH to get a FRESH `train_specs` list for that
+        epoch -- mirrors what the usual per-(instance,epoch) random x0 draw
+        already does implicitly for x0-diversity training (25 "slots" x 60
+        epochs = 1500 distinct draws, not 25): when `fixed_x0` removes that
+        free per-epoch diversity, resampling the SPEC list instead restores
+        the same order of magnitude of distinct training examples seen over
+        a full run, rather than looping the same fixed small list every
+        epoch. Mutually exclusive with a static `train_specs` list (pass
+        exactly one of the two)."""
         import market as market_mod
         cfg = self.cfg
         torch.manual_seed(cfg.seed)
         device = device or torch.device("cpu")
+        assert (train_specs is None) != (resample_specs_fn is None), \
+            "pass exactly one of train_specs (static list) or resample_specs_fn (resampled per epoch)"
 
         for epoch in range(cfg.epochs):
             self.gnn.train()
             total = 0.0
-            for i, spec in enumerate(train_specs):
-                gen = torch.Generator(device=device)
-                gen.manual_seed(cfg.seed * 1_000_003 + epoch * 7_919 + i)
-                net = market_mod.build_network(spec, device=device, rng=gen)
+            epoch_specs = resample_specs_fn() if resample_specs_fn is not None else train_specs
+            for i, spec in enumerate(epoch_specs):
+                if fixed_x0 is not None:
+                    net = market_mod.build_network(spec, device=device)
+                else:
+                    gen = torch.Generator(device=device)
+                    gen.manual_seed(cfg.seed * 1_000_003 + epoch * 7_919 + i)
+                    net = market_mod.build_network(spec, device=device, rng=gen)
 
                 self.opt.zero_grad()
-                loss = self._instance_loss(net, differentiable=True)
+                loss = self._instance_loss(net, differentiable=True, fixed_x0=fixed_x0)
                 loss.backward()
                 if cfg.grad_clip:
                     torch.nn.utils.clip_grad_norm_(self.gnn.parameters(), cfg.grad_clip)
                 self.opt.step()
                 total += loss.item()
-            train_loss = total / max(len(train_specs), 1)
+            train_loss = total / max(len(epoch_specs), 1)
             self.history["train"].append(train_loss)
 
             val_loss = None
             if val_specs:
-                val_loss = self.evaluate(val_specs, device=device)
+                val_loss = self.evaluate(val_specs, device=device, fixed_x0=fixed_x0)
                 self.history["val"].append(val_loss)
 
             if verbose:
@@ -483,14 +514,14 @@ class Trainer:
         return self.history
 
     @torch.no_grad()
-    def evaluate(self, specs, device=None) -> float:
+    def evaluate(self, specs, device=None, fixed_x0: Optional[torch.Tensor] = None) -> float:
         import market as market_mod
         self.gnn.eval()
         device = device or torch.device("cpu")
         total = 0.0
         for spec in specs:
             net = market_mod.build_network(spec, device=device)
-            total += float(self._instance_loss(net, differentiable=False))
+            total += float(self._instance_loss(net, differentiable=False, fixed_x0=fixed_x0))
         return total / max(len(specs), 1)
 
     def save(self, path: str) -> None:
