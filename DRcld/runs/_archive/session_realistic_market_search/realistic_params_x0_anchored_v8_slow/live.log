@@ -1,0 +1,100 @@
+writing all artifacts to runs/cross_density/realistic_params_x0_anchored_v8_slow/  (n_train=75  n_test=30  epochs=40  dr_gamma=4.0  unroll=360  gnn_rho=0.9722  gnn_scale=1.0  f_range=(0.5,2.0)  pct_level=0.2  w_ahead=1.0  w_behind=2.0  gnn_scale_slow=0.4  gnn_rho_slow=0.99)
+======================================================================
+dataset: fixed topology (density=1.0, same graph as every other
+experiment) + ONE shared x0 (drawn once) -- x0-ANCHORED perturbation:
+each node's box is rebuilt AROUND x0 by rescaling the base market's
+own distance from x0 to each edge (D_min/D_max, G_min/G_max) by two
+INDEPENDENT positive factors in [0.5,2.0] -- x0 is mathematically
+inside the box for every draw, by construction, no clip ever needed.
+D*/G_res keep their own independent 'level' factor +/-20%.
+Infeasible or negative draws discarded+resampled.
+FIXED train/test sets (slot 0 = original network, always)
+======================================================================
+  N=10  edges=45
+  shared x0 drawn once (seed=0), every box rebuilt around it
+  train: 75 FIXED instances (slot 0 = original network, 74 perturbed), 142 infeasible/negative draws discarded+resampled  |  test: 30 FIXED instances (slot 0 = original), 53 infeasible/negative draws discarded+resampled
+  x0 needed adjusting (sanity check -- should be ~0, x0 is inside by construction): 0/75 train, 0/30 test
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='dr_slope')
+  epoch   1/40 | train -0.0033 | val -0.0061
+  epoch   2/40 | train -0.0053 | val -0.0069
+  epoch   3/40 | train -0.0057 | val -0.0070
+  epoch   4/40 | train -0.0059 | val -0.0072
+  epoch   5/40 | train -0.0060 | val -0.0073
+  epoch   6/40 | train -0.0062 | val -0.0074
+  epoch   7/40 | train -0.0062 | val -0.0073
+  epoch   8/40 | train -0.0063 | val -0.0075
+  epoch   9/40 | train -0.0064 | val -0.0075
+  epoch  10/40 | train -0.0064 | val -0.0076
+  epoch  11/40 | train -0.0064 | val -0.0076
+  epoch  12/40 | train -0.0065 | val -0.0077
+  epoch  13/40 | train -0.0065 | val -0.0077
+  epoch  14/40 | train -0.0065 | val -0.0078
+  epoch  15/40 | train -0.0066 | val -0.0079
+  epoch  16/40 | train -0.0067 | val -0.0078
+  epoch  17/40 | train -0.0067 | val -0.0079
+  epoch  18/40 | train -0.0067 | val -0.0080
+  epoch  19/40 | train -0.0068 | val -0.0080
+  epoch  20/40 | train -0.0068 | val -0.0081
+  epoch  21/40 | train -0.0068 | val -0.0080
+  epoch  22/40 | train -0.0069 | val -0.0081
+  epoch  23/40 | train -0.0069 | val -0.0081
+  epoch  24/40 | train -0.0069 | val -0.0082
+  epoch  25/40 | train -0.0070 | val -0.0082
+  epoch  26/40 | train -0.0070 | val -0.0082
+  epoch  27/40 | train -0.0070 | val -0.0083
+  epoch  28/40 | train -0.0070 | val -0.0083
+  epoch  29/40 | train -0.0071 | val -0.0083
+  epoch  30/40 | train -0.0071 | val -0.0084
+  epoch  31/40 | train -0.0071 | val -0.0084
+  epoch  32/40 | train -0.0072 | val -0.0084
+  epoch  33/40 | train -0.0072 | val -0.0084
+  epoch  34/40 | train -0.0071 | val -0.0084
+  epoch  35/40 | train -0.0072 | val -0.0084
+  epoch  36/40 | train -0.0071 | val -0.0084
+  epoch  37/40 | train -0.0072 | val -0.0084
+  epoch  38/40 | train -0.0072 | val -0.0085
+  epoch  39/40 | train -0.0072 | val -0.0084
+  epoch  40/40 | train -0.0072 | val -0.0085
+saved runs/cross_density/realistic_params_x0_anchored_v8_slow/phi_w.pt
+saved runs/cross_density/realistic_params_x0_anchored_v8_slow/training_loss.png
+
+evaluating: plain DR vs DR + Phi_w, per-instance-projected fixed x0 --
+the only evaluation mode (x0 is an input the user supplies, not something that varies)
+----------------------------------------------------------------------
+  [fixed-x0]  1/30  DR   583 it  |  learned   642 it  |  x 0.91 (-10.1%)
+  [fixed-x0]  2/30  DR   596 it  |  learned   667 it  |  x 0.89 (-11.9%)
+  [fixed-x0]  3/30  DR   607 it  |  learned   627 it  |  x 0.97 (-3.3%)
+  [fixed-x0]  4/30  DR   691 it  |  learned   810 it  |  x 0.85 (-17.2%)
+  [fixed-x0]  5/30  DR   626 it  |  learned   720 it  |  x 0.87 (-15.0%)
+  [fixed-x0]  6/30  DR   558 it  |  learned   632 it  |  x 0.88 (-13.3%)
+  [fixed-x0]  7/30  DR   602 it  |  learned   689 it  |  x 0.87 (-14.5%)
+  [fixed-x0]  8/30  DR   582 it  |  learned   691 it  |  x 0.84 (-18.7%)
+  [fixed-x0]  9/30  DR   600 it  |  learned   707 it  |  x 0.85 (-17.8%)
+  [fixed-x0] 10/30  DR   636 it  |  learned   656 it  |  x 0.97 (-3.1%)
+  [fixed-x0] 11/30  DR   520 it  |  learned   619 it  |  x 0.84 (-19.0%)
+  [fixed-x0] 12/30  DR   618 it  |  learned   645 it  |  x 0.96 (-4.4%)
+  [fixed-x0] 13/30  DR   586 it  |  learned   682 it  |  x 0.86 (-16.4%)
+  [fixed-x0] 14/30  DR   633 it  |  learned   646 it  |  x 0.98 (-2.1%)
+  [fixed-x0] 15/30  DR   641 it  |  learned   638 it  |  x 1.00 (+0.5%)
+  [fixed-x0] 16/30  DR   583 it  |  learned   635 it  |  x 0.92 (-8.9%)
+  [fixed-x0] 17/30  DR   624 it  |  learned   652 it  |  x 0.96 (-4.5%)
+  [fixed-x0] 18/30  DR   617 it  |  learned   780 it  |  x 0.79 (-26.4%)
+  [fixed-x0] 19/30  DR   677 it  |  learned   805 it  |  x 0.84 (-18.9%)
+  [fixed-x0] 20/30  DR   571 it  |  learned   675 it  |  x 0.85 (-18.2%)
+  [fixed-x0] 21/30  DR   611 it  |  learned   713 it  |  x 0.86 (-16.7%)
+  [fixed-x0] 22/30  DR   599 it  |  learned   651 it  |  x 0.92 (-8.7%)
+  [fixed-x0] 23/30  DR   602 it  |  learned   722 it  |  x 0.83 (-19.9%)
+  [fixed-x0] 24/30  DR   585 it  |  learned   665 it  |  x 0.88 (-13.7%)
+  [fixed-x0] 25/30  DR   536 it  |  learned   645 it  |  x 0.83 (-20.3%)
+  [fixed-x0] 26/30  DR   595 it  |  learned   702 it  |  x 0.85 (-18.0%)
+  [fixed-x0] 27/30  DR   586 it  |  learned   644 it  |  x 0.91 (-9.9%)
+  [fixed-x0] 28/30  DR   527 it  |  learned   655 it  |  x 0.80 (-24.3%)
+  [fixed-x0] 29/30  DR   590 it  |  learned   655 it  |  x 0.90 (-11.0%)
+  [fixed-x0] 30/30  DR   626 it  |  learned   672 it  |  x 0.93 (-7.3%)
+  [fixed-x0] mean speed-up 0.89x   median 0.88x   min 0.79x   max 1.00x   win-rate 3% (1/30)
+saved runs/cross_density/realistic_params_x0_anchored_v8_slow/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/cross_density/realistic_params_x0_anchored_v8_slow/instance_plots/
+saved runs/cross_density/realistic_params_x0_anchored_v8_slow/NOTES.md

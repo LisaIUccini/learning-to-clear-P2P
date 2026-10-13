@@ -1,0 +1,79 @@
+writing all artifacts to runs/cross_density/combined_density05_v16_scale13/  (n_train=50  n_test=30  epochs=25  dr_gamma=6.0  unroll=313  gnn_rho=0.9681  gnn_scale=1.3  pct_level=0.1  pct_width=0.04  w_ahead=1.0  w_behind=2.0  gnn_rho_slow=0.99  gnn_scale_slow=0.0  gamma_mono=2.0  omega_mode=fixed  hidden_dim=32  lr_final_frac=0.01  density=0.5  omega_power=1.0)
+======================================================================
+dataset: COMBINED diversity -- market instances perturbed via level+width
+(+/-10% level, +/-4% width) AND x0 left FREE (fresh random
+draw per instance/epoch during training -- NOT fixed). Realistic market,
+density=0.5, base_seed=0.
+======================================================================
+  N=10  edges=27
+  train: 50 instances (slot 0 = original), 9 infeasible discarded  |  test: 30 instances (slot 0 = original), 4 infeasible discarded
+  x0: FRESH RANDOM per (instance, epoch) during training, fresh per test instance at eval
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='fixed')
+  epoch   1/25 | train -0.0026 | val -0.0036
+  epoch   2/25 | train -0.0037 | val -0.0038
+  epoch   3/25 | train -0.0038 | val -0.0037
+  epoch   4/25 | train -0.0039 | val -0.0039
+  epoch   5/25 | train -0.0039 | val -0.0039
+  epoch   6/25 | train -0.0039 | val -0.0039
+  epoch   7/25 | train -0.0040 | val -0.0040
+  epoch   8/25 | train -0.0039 | val -0.0038
+  epoch   9/25 | train -0.0040 | val -0.0040
+  epoch  10/25 | train -0.0040 | val -0.0039
+  epoch  11/25 | train -0.0040 | val -0.0039
+  epoch  12/25 | train -0.0040 | val -0.0040
+  epoch  13/25 | train -0.0041 | val -0.0041
+  epoch  14/25 | train -0.0041 | val -0.0040
+  epoch  15/25 | train -0.0041 | val -0.0041
+  epoch  16/25 | train -0.0042 | val -0.0041
+  epoch  17/25 | train -0.0042 | val -0.0041
+  epoch  18/25 | train -0.0042 | val -0.0041
+  epoch  19/25 | train -0.0043 | val -0.0042
+  epoch  20/25 | train -0.0043 | val -0.0041
+  epoch  21/25 | train -0.0043 | val -0.0041
+  epoch  22/25 | train -0.0044 | val -0.0041
+  epoch  23/25 | train -0.0043 | val -0.0042
+  epoch  24/25 | train -0.0044 | val -0.0042
+  epoch  25/25 | train -0.0044 | val -0.0042
+saved runs/cross_density/combined_density05_v16_scale13/phi_w.pt
+saved runs/cross_density/combined_density05_v16_scale13/training_loss.png
+
+evaluating: plain DR vs DR + Phi_w, FRESH RANDOM x0 per test instance
+----------------------------------------------------------------------
+  [combined]  1/30  DR   567 it  |  learned   559 it  |  x 1.01 (+1.4%)
+  [combined]  2/30  DR   598 it  |  learned   536 it  |  x 1.12 (+10.4%)
+  [combined]  3/30  DR   720 it  |  learned   605 it  |  x 1.19 (+16.0%)
+  [combined]  4/30  DR   581 it  |  learned   486 it  |  x 1.20 (+16.4%)
+  [combined]  5/30  DR   753 it  |  learned   695 it  |  x 1.08 (+7.7%)
+  [combined]  6/30  DR   795 it  |  learned   629 it  |  x 1.26 (+20.9%)
+  [combined]  7/30  DR   709 it  |  learned   619 it  |  x 1.15 (+12.7%)
+  [combined]  8/30  DR   694 it  |  learned   600 it  |  x 1.16 (+13.5%)
+  [combined]  9/30  DR   715 it  |  learned   690 it  |  x 1.04 (+3.5%)
+  [combined] 10/30  DR   631 it  |  learned   493 it  |  x 1.28 (+21.9%)
+  [combined] 11/30  DR   707 it  |  learned   607 it  |  x 1.16 (+14.1%)
+  [combined] 12/30  DR   572 it  |  learned   496 it  |  x 1.15 (+13.3%)
+  [combined] 13/30  DR   587 it  |  learned   502 it  |  x 1.17 (+14.5%)
+  [combined] 14/30  DR   758 it  |  learned   600 it  |  x 1.26 (+20.8%)
+  [combined] 15/30  DR   665 it  |  learned   615 it  |  x 1.08 (+7.5%)
+  [combined] 16/30  DR   718 it  |  learned   641 it  |  x 1.12 (+10.7%)
+  [combined] 17/30  DR   678 it  |  learned   636 it  |  x 1.07 (+6.2%)
+  [combined] 18/30  DR   600 it  |  learned   495 it  |  x 1.21 (+17.5%)
+  [combined] 19/30  DR   723 it  |  learned   660 it  |  x 1.10 (+8.7%)
+  [combined] 20/30  DR   578 it  |  learned   508 it  |  x 1.14 (+12.1%)
+  [combined] 21/30  DR   664 it  |  learned   596 it  |  x 1.11 (+10.2%)
+  [combined] 22/30  DR   587 it  |  learned   492 it  |  x 1.19 (+16.2%)
+  [combined] 23/30  DR   586 it  |  learned   499 it  |  x 1.17 (+14.8%)
+  [combined] 24/30  DR   684 it  |  learned   633 it  |  x 1.08 (+7.5%)
+  [combined] 25/30  DR   562 it  |  learned   513 it  |  x 1.10 (+8.7%)
+  [combined] 26/30  DR   668 it  |  learned   584 it  |  x 1.14 (+12.6%)
+  [combined] 27/30  DR   593 it  |  learned   508 it  |  x 1.17 (+14.3%)
+  [combined] 28/30  DR   594 it  |  learned   512 it  |  x 1.16 (+13.8%)
+  [combined] 29/30  DR   722 it  |  learned   620 it  |  x 1.16 (+14.1%)
+  [combined] 30/30  DR   683 it  |  learned   569 it  |  x 1.20 (+16.7%)
+  [combined] mean speed-up 1.15x   median 1.15x   min 1.01x   max 1.28x   win-rate 100% (30/30)
+  [combined] CORRECT mean % reduction (per-instance average, not 1-1/mean_speedup): mean=12.6%  median=13.4%
+saved runs/cross_density/combined_density05_v16_scale13/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/cross_density/combined_density05_v16_scale13/instance_plots/
+saved runs/cross_density/combined_density05_v16_scale13/NOTES.md

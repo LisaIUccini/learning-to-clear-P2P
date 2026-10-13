@@ -1,0 +1,95 @@
+writing all artifacts to runs/cross_density/realistic_market_x0_diversity_reference_fixed/  (n_train=25  n_test=30  epochs=60  dr_gamma=4.0  unroll=300  gnn_rho=0.9667  gnn_scale=1.0  w_ahead=1.0  w_behind=2.0  omega_mode=fixed)
+======================================================================
+dataset: ONE FIXED realistic market (density=1.0, N0=10, base_seed=0,
+G>=0 by construction) -- graph and every one of the 6 quantities
+IDENTICAL across all instances. The ONLY source of variation is x0,
+freshly randomized per (instance, epoch) during training and per
+test instance at evaluation -- reproduces seed0_density1.0_seed0_drslope's
+exact recipe, on the realistic market instead of the old abstract one.
+======================================================================
+  N=10  edges=45
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='fixed')
+  epoch   1/60 | train +0.0000 | val -0.0002
+  epoch   2/60 | train -0.0004 | val -0.0006
+  epoch   3/60 | train -0.0006 | val -0.0006
+  epoch   4/60 | train -0.0006 | val -0.0009
+  epoch   5/60 | train -0.0013 | val -0.0017
+  epoch   6/60 | train -0.0021 | val -0.0022
+  epoch   7/60 | train -0.0026 | val -0.0026
+  epoch   8/60 | train -0.0027 | val -0.0030
+  epoch   9/60 | train -0.0030 | val -0.0031
+  epoch  10/60 | train -0.0030 | val -0.0029
+  epoch  11/60 | train -0.0031 | val -0.0031
+  epoch  12/60 | train -0.0031 | val -0.0031
+  epoch  13/60 | train -0.0032 | val -0.0034
+  epoch  14/60 | train -0.0031 | val -0.0033
+  epoch  15/60 | train -0.0034 | val -0.0034
+  epoch  16/60 | train -0.0033 | val -0.0033
+  epoch  17/60 | train -0.0034 | val -0.0032
+  epoch  18/60 | train -0.0034 | val -0.0035
+  epoch  19/60 | train -0.0034 | val -0.0032
+  epoch  20/60 | train -0.0033 | val -0.0031
+  epoch  21/60 | train -0.0034 | val -0.0036
+  epoch  22/60 | train -0.0034 | val -0.0035
+  epoch  23/60 | train -0.0034 | val -0.0035
+  epoch  24/60 | train -0.0034 | val -0.0033
+  epoch  25/60 | train -0.0035 | val -0.0034
+  epoch  26/60 | train -0.0035 | val -0.0036
+  epoch  27/60 | train -0.0035 | val -0.0035
+  epoch  28/60 | train -0.0036 | val -0.0035
+  epoch  29/60 | train -0.0035 | val -0.0035
+  epoch  30/60 | train -0.0035 | val -0.0036
+  epoch  31/60 | train -0.0034 | val -0.0034
+  epoch  32/60 | train -0.0035 | val -0.0037
+  epoch  33/60 | train -0.0036 | val -0.0037
+  epoch  34/60 | train -0.0036 | val -0.0036
+  epoch  35/60 | train -0.0036 | val -0.0035
+  epoch  36/60 | train -0.0036 | val -0.0034
+  epoch  37/60 | train -0.0035 | val -0.0036
+  epoch  38/60 | train -0.0036 | val -0.0037
+  epoch  39/60 | train -0.0036 | val -0.0037
+  epoch  40/60 | train -0.0037 | val -0.0034
+  epoch  41/60 | train -0.0036 | val -0.0036
+  epoch  42/60 | train -0.0036 | val -0.0035
+  epoch  43/60 | train -0.0037 | val -0.0036
+  epoch  44/60 | train -0.0037 | val -0.0037
+  epoch  45/60 | train -0.0037 | val -0.0037
+  epoch  46/60 | train -0.0036 | val -0.0036
+  epoch  47/60 | train -0.0036 | val -0.0037
+  epoch  48/60 | train -0.0036 | val -0.0037
+  epoch  49/60 | train -0.0037 | val -0.0038
+  epoch  50/60 | train -0.0037 | val -0.0038
+  epoch  51/60 | train -0.0037 | val -0.0037
+  epoch  52/60 | train -0.0037 | val -0.0038
+  epoch  53/60 | train -0.0038 | val -0.0037
+  epoch  54/60 | train -0.0037 | val -0.0036
+  epoch  55/60 | train -0.0038 | val -0.0037
+  epoch  56/60 | train -0.0037 | val -0.0037
+  epoch  57/60 | train -0.0036 | val -0.0037
+  epoch  58/60 | train -0.0038 | val -0.0037
+  epoch  59/60 | train -0.0037 | val -0.0036
+  epoch  60/60 | train -0.0037 | val -0.0039
+saved runs/cross_density/realistic_market_x0_diversity_reference_fixed/phi_w.pt
+saved runs/cross_density/realistic_market_x0_diversity_reference_fixed/training_loss.png
+
+evaluating: plain DR vs DR + Phi_w, FRESH RANDOM x0 per test instance
+----------------------------------------------------------------------
+  [home-market]  1/30  DR   613 it  |  learned  1339 it  |  x 0.46 (-118.4%)
+  [home-market]  2/30  DR   919 it  |  learned  1337 it  |  x 0.69 (-45.5%)
+  [home-market]  3/30  DR   483 it  |  learned  1339 it  |  x 0.36 (-177.2%)
+  [home-market]  4/30  DR   673 it  |  learned  1336 it  |  x 0.50 (-98.5%)
+  [home-market]  5/30  DR   928 it  |  learned  1340 it  |  x 0.69 (-44.4%)
+  [home-market]  6/30  DR   620 it  |  learned  1343 it  |  x 0.46 (-116.6%)
+  [home-market]  7/30  DR   844 it  |  learned  1343 it  |  x 0.63 (-59.1%)
+  [home-market]  8/30  DR   674 it  |  learned  1345 it  |  x 0.50 (-99.6%)
+  [home-market]  9/30  DR   728 it  |  learned  1346 it  |  x 0.54 (-84.9%)
+  [home-market] 10/30  DR   611 it  |  learned  1335 it  |  x 0.46 (-118.5%)
+  [home-market] 11/30  DR   555 it  |  learned  1345 it  |  x 0.41 (-142.3%)
+  [home-market] 12/30  DR   791 it  |  learned  1346 it  |  x 0.59 (-70.2%)
+  [home-market] 13/30  DR   722 it  |  learned  1345 it  |  x 0.54 (-86.3%)
+  [home-market] 14/30  DR  1124 it  |  learned  1343 it  |  x 0.84 (-19.5%)
+  [home-market] 15/30  DR   749 it  |  learned  1345 it  |  x 0.56 (-79.6%)
+  [home-market] 16/30  DR   795 it  |  learned  1347 it  |  x 0.59 (-69.4%)
+  [home-market] 17/30  DR   799 it  |  learned  1347 it  |  x 0.59 (-68.6%)
+  [home-market] 18/30  DR   750 it  |  learned  1340 it  |  x 0.56 (-78.7%)

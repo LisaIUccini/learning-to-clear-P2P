@@ -1,0 +1,31 @@
+writing all artifacts to runs/cross_density/combined_density05_v6_combo/  (n_train=50  n_test=30  epochs=60  dr_gamma=4.0  unroll=262  gnn_rho=0.9618  gnn_scale=1.2  pct_level=0.1  pct_width=0.04  w_ahead=1.4  w_behind=10.0  gnn_rho_slow=0.99  gnn_scale_slow=0.4  gamma_mono=2.0  omega_mode=dr_slope  hidden_dim=32  lr_final_frac=0.01  density=0.5)
+======================================================================
+dataset: COMBINED diversity -- market instances perturbed via level+width
+(+/-10% level, +/-4% width) AND x0 left FREE (fresh random
+draw per instance/epoch during training -- NOT fixed). Realistic market,
+density=0.5, base_seed=0.
+======================================================================
+  N=10  edges=27
+  train: 50 instances (slot 0 = original), 9 infeasible discarded  |  test: 30 instances (slot 0 = original), 4 infeasible discarded
+  x0: FRESH RANDOM per (instance, epoch) during training, fresh per test instance at eval
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='dr_slope')
+  epoch   1/60 | train -0.0005 | val -0.0016
+  epoch   2/60 | train -0.0022 | val -0.0025
+  epoch   3/60 | train -0.0029 | val -0.0033
+  epoch   4/60 | train -0.0035 | val -0.0038
+  epoch   5/60 | train -0.0043 | val -0.0044
+  epoch   6/60 | train -0.0044 | val -0.0039
+  epoch   7/60 | train -0.0047 | val -0.0047
+  epoch   8/60 | train -0.0038 | val -0.0042
+  epoch   9/60 | train -0.0046 | val -0.0049
+  epoch  10/60 | train -0.0045 | val -0.0042
+  epoch  11/60 | train -0.0045 | val -0.0045
+  epoch  12/60 | train -0.0049 | val -0.0050
+  epoch  13/60 | train -0.0049 | val -0.0049
+  epoch  14/60 | train -0.0049 | val -0.0044
+  epoch  15/60 | train -0.0051 | val -0.0045
+  epoch  16/60 | train -0.0049 | val -0.0047
+  epoch  17/60 | train -0.0050 | val -0.0039
+  epoch  18/60 | train -0.0049 | val -0.0039
+  epoch  19/60 | train -0.0043 | val -0.0039

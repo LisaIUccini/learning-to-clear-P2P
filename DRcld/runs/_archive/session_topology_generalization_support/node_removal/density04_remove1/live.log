@@ -1,0 +1,18 @@
+node-removal zero-shot test  (weights=runs/cross_density/combined_density04_v2_omegapower15/phi_w.pt  density=0.4  remove_k=1  n_test=10  gnn_rho=0.9686  gnn_scale=1.8  base_seed=3)
+  loaded checkpoint
+  base market: N=10  edges=23
+  10/10 valid removals found (0 discarded: disconnected or infeasible after removal)
+----------------------------------------------------------------------
+  removed=[0]  N=9  DR   963 it  |  learned   426 it  |  x 2.26 (+55.8%)
+  removed=[1]  N=9  DR   370 it  |  learned   298 it  |  x 1.24 (+19.5%)
+  removed=[2]  N=9  DR   315 it  |  learned   301 it  |  x 1.05 (+4.4%)
+  removed=[3]  N=9  DR   418 it  |  learned   269 it  |  x 1.55 (+35.6%)
+  removed=[4]  N=9  DR   319 it  |  learned   260 it  |  x 1.23 (+18.5%)
+  removed=[5]  N=9  DR   468 it  |  learned   380 it  |  x 1.23 (+18.8%)
+  removed=[6]  N=9  DR   275 it  |  learned   276 it  |  x 1.00 (-0.4%)
+  removed=[7]  N=9  DR   400 it  |  learned   422 it  |  x 0.95 (-5.5%)
+  removed=[8]  N=9  DR   776 it  |  learned   316 it  |  x 2.46 (+59.3%)
+  removed=[9]  N=9  DR   517 it  |  learned   516 it  |  x 1.00 (+0.2%)
+
+[node-removal] mean speed-up 1.40x   median 1.23x   min 0.95x   max 2.46x   win-rate 80% (8/10)
+[node-removal] CORRECT mean % reduction (per-instance average): mean=20.6%  median=18.6%

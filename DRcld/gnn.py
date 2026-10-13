@@ -130,6 +130,20 @@ Range = Tuple[float, float]
 D_NODE = 9   # h_D, h_G, h_Dstar, h_bal, h_prev, h_stall, h_atilde, h_a, h_b
 D_EDGE = 3   # e_qown, e_qrecv, e_c
 
+# h_D/h_G are documented as always lying in [-1,1] (the state x is inside its
+# own box) -- true whenever x0 is freshly drawn inside whatever box is
+# active (every experiment in this project except the fixed-x0/parameter-
+# diversity axis with x0 left deliberately unclipped, 2026-09-10: x0's
+# feasibility relative to a given instance's box is not a requirement of
+# the algorithm, so it is not enforced, but that means h_D/h_G CAN exceed
+# [-1,1] there -- measured up to ~+/-2.4). Clamping here bounds what the
+# GRU ever actually sees to a range in the same ballpark as every other
+# experiment's training distribution, without moving x0 itself (a pure
+# perception-side fix, x0's physical value is completely unaffected) --
+# a no-op whenever x is already inside the box (h in [-1,1] costs nothing
+# extra here), so this cannot change any prior experiment's behaviour.
+H_POS_CLIP = 2.0
+
 
 @dataclass
 class GNNConfig:
@@ -244,8 +258,8 @@ class PerturbationGNN(nn.Module):
         dD = torch.clamp(net.D_max_vec - net.D_min_vec, min=1e-6)
         dG = torch.clamp(net.G_max_vec - net.G_min_vec, min=1e-6)
         h = torch.stack([
-            2.0 * (D - net.D_min_vec) / dD - 1.0,
-            2.0 * (G - net.G_min_vec) / dG - 1.0,
+            torch.clamp(2.0 * (D - net.D_min_vec) / dD - 1.0, -H_POS_CLIP, H_POS_CLIP),
+            torch.clamp(2.0 * (G - net.G_min_vec) / dG - 1.0, -H_POS_CLIP, H_POS_CLIP),
             2.0 * (net.D_star_vec - net.D_min_vec) / dD - 1.0,
             net.balance_at(x) / dD,
             prev_residual / dD,
@@ -336,8 +350,8 @@ class PerturbationGNN(nn.Module):
         dD = torch.clamp(s.D_max - s.D_min, min=1e-6)
         dG = torch.clamp(s.G_max - s.G_min, min=1e-6)
         h = torch.stack([
-            (2.0 * (s.D - s.D_min) / dD - 1.0).reshape(()),
-            (2.0 * (s.G - s.G_min) / dG - 1.0).reshape(()),
+            torch.clamp((2.0 * (s.D - s.D_min) / dD - 1.0).reshape(()), -H_POS_CLIP, H_POS_CLIP),
+            torch.clamp((2.0 * (s.G - s.G_min) / dG - 1.0).reshape(()), -H_POS_CLIP, H_POS_CLIP),
             (2.0 * (s.D_star - s.D_min) / dD - 1.0).reshape(()),
             ((s.D - s.G - s.G_res - self._q_sum(s)) / dD).reshape(()),
             (s.prev_residual / dD).reshape(()),

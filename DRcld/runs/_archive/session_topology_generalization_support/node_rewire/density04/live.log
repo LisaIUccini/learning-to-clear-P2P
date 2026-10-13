@@ -1,0 +1,23 @@
+degree-preserving rewire zero-shot test  (weights=runs/cross_density/combined_density04_v2_omegapower15/phi_w.pt  density=0.4  n_test=15  n_swaps=3  gnn_rho=0.9686  gnn_scale=1.8  base_seed=3)
+  loaded checkpoint
+  base market: N=10  edges=23
+  15/15 valid rewired instances found
+----------------------------------------------------------------------
+   1/15  DR   566 it  |  learned   400 it  |  x 1.42 (+29.3%)
+   2/15  DR   609 it  |  learned   542 it  |  x 1.12 (+11.0%)
+   3/15  DR   328 it  |  learned   375 it  |  x 0.87 (-14.3%)
+   4/15  DR  1884 it  |  learned  1894 it  |  x 0.99 (-0.5%)
+   5/15  DR   392 it  |  learned   279 it  |  x 1.41 (+28.8%)
+   6/15  DR   390 it  |  learned   432 it  |  x 0.90 (-10.8%)
+   7/15  DR   700 it  |  learned  1200 it  |  x 0.58 (-71.4%)
+   8/15  DR   334 it  |  learned   341 it  |  x 0.98 (-2.1%)
+   9/15  DR  1022 it  |  learned   687 it  |  x 1.49 (+32.8%)
+  10/15  DR   319 it  |  learned   382 it  |  x 0.84 (-19.7%)
+  11/15  DR  1085 it  |  learned  2605 it  |  x 0.42 (-140.1%)
+  12/15  DR   830 it  |  learned   562 it  |  x 1.48 (+32.3%)
+  13/15  DR   677 it  |  learned   579 it  |  x 1.17 (+14.5%)
+  14/15  DR   424 it  |  learned   327 it  |  x 1.30 (+22.9%)
+  15/15  DR  1044 it  |  learned   761 it  |  x 1.37 (+27.1%)
+
+[rewire] mean speed-up 1.09x   median 1.12x   min 0.42x   max 1.49x   win-rate 53% (8/15)
+[rewire] CORRECT mean % reduction (per-instance average): mean=-4.0%  median=11.0%

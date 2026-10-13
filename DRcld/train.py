@@ -124,6 +124,12 @@ class TrainConfig:
                                 # markets since it isn't tied to a fixed iteration index)
     epochs: int = 25
     lr: float = 3e-3
+    lr_final_frac: Optional[float] = None  # if set (e.g. 0.1), cosine-anneal lr from
+                                            # `lr` down to `lr * lr_final_frac` over
+                                            # `epochs` -- None (default) keeps lr constant,
+                                            # exactly today's behaviour for every existing
+                                            # experiment (opt-in only, never changes a run
+                                            # that doesn't pass this explicitly)
     grad_clip: float = 1.0
     seed: int = 0
     eps: float = 1e-9
@@ -422,6 +428,10 @@ class Trainer:
         self.gnn = gnn
         self.cfg = cfg or TrainConfig()
         self.opt = torch.optim.Adam(gnn.parameters(), lr=self.cfg.lr)
+        self.sched = None
+        if self.cfg.lr_final_frac is not None:
+            self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.opt, T_max=self.cfg.epochs, eta_min=self.cfg.lr * self.cfg.lr_final_frac)
         self.history = {"train": [], "val": []}
 
     def _instance_loss(self, net, differentiable: bool, fixed_x0: Optional[torch.Tensor] = None
@@ -450,16 +460,26 @@ class Trainer:
         raise ValueError(f"unknown loss_mode {cfg.loss_mode!r}")
 
     def fit(self, train_specs=None, val_specs=None, device=None, verbose: bool = True,
-            fixed_x0: Optional[torch.Tensor] = None, resample_specs_fn=None):
-        """`fixed_x0`, if given (a flattened [D,G,Q] tensor, `Network.flatten`
-        layout), OVERRIDES the usual per-(instance,epoch) random x0 draw with
-        this SAME tensor for every instance/epoch -- used when the diversity
-        axis under training is the market's own parameters (D*/G_res/box
-        bounds), not x0. `unflatten` sets state directly with no feasibility
-        check against that instance's own (possibly-shifted) box; DR handles
-        an out-of-box start fine (`local_prox` clamps back onto the box on
-        the very first step), so this is safe, just not a feasible x0 for
-        every perturbed instance -- by design here, not an oversight.
+            fixed_x0=None, resample_specs_fn=None, val_fixed_x0=None):
+        """`fixed_x0`, if given, OVERRIDES the usual per-(instance,epoch)
+        random x0 draw -- used when the diversity axis under training is the
+        market's own parameters (D*/G_res/box bounds), not x0. Either a
+        single flattened [D,G,Q] tensor (`Network.flatten` layout), reused
+        identically for every instance/epoch, OR a list of such tensors, one
+        per entry of `train_specs` (e.g. the SAME shared x0 individually
+        projected onto each instance's own box beforehand -- see
+        `experiments/build_realistic_training_dataset.adjust_x0_to_spec` --
+        since `unflatten` itself sets state directly with no feasibility
+        check against that instance's box: DR handles an out-of-box start
+        fine, `local_prox` clamps back onto the box on the very first step,
+        but a wildly out-of-box x0 also feeds the GNN's OWN features at k=0,
+        which are not clamped -- see gnn.py's `h_D`/`h_G` docstring).
+
+        `val_fixed_x0`: the `fixed_x0` counterpart for `val_specs` (a
+        SEPARATE list, so it needs its own x0/x0-list aligned to IT, not to
+        `train_specs`). Defaults to `fixed_x0` itself, which is only correct
+        when `fixed_x0` is a single tensor (reused everywhere) -- pass this
+        explicitly whenever `fixed_x0` is a per-`train_specs` list.
 
         `resample_specs_fn`, if given (a zero-arg callable returning a list
         of MarketSpecs, typically closing over its own per-call rng/seed),
@@ -478,13 +498,17 @@ class Trainer:
         device = device or torch.device("cpu")
         assert (train_specs is None) != (resample_specs_fn is None), \
             "pass exactly one of train_specs (static list) or resample_specs_fn (resampled per epoch)"
+        val_fixed_x0 = fixed_x0 if val_fixed_x0 is None else val_fixed_x0
+        assert not (isinstance(fixed_x0, list) and val_fixed_x0 is fixed_x0), \
+            "fixed_x0 is a per-train_specs list -- pass val_fixed_x0 explicitly, aligned to val_specs"
 
         for epoch in range(cfg.epochs):
             self.gnn.train()
             total = 0.0
             epoch_specs = resample_specs_fn() if resample_specs_fn is not None else train_specs
             for i, spec in enumerate(epoch_specs):
-                if fixed_x0 is not None:
+                x0_i = fixed_x0[i] if isinstance(fixed_x0, list) else fixed_x0
+                if x0_i is not None:
                     net = market_mod.build_network(spec, device=device)
                 else:
                     gen = torch.Generator(device=device)
@@ -492,18 +516,20 @@ class Trainer:
                     net = market_mod.build_network(spec, device=device, rng=gen)
 
                 self.opt.zero_grad()
-                loss = self._instance_loss(net, differentiable=True, fixed_x0=fixed_x0)
+                loss = self._instance_loss(net, differentiable=True, fixed_x0=x0_i)
                 loss.backward()
                 if cfg.grad_clip:
                     torch.nn.utils.clip_grad_norm_(self.gnn.parameters(), cfg.grad_clip)
                 self.opt.step()
                 total += loss.item()
+            if self.sched is not None:
+                self.sched.step()
             train_loss = total / max(len(epoch_specs), 1)
             self.history["train"].append(train_loss)
 
             val_loss = None
             if val_specs:
-                val_loss = self.evaluate(val_specs, device=device, fixed_x0=fixed_x0)
+                val_loss = self.evaluate(val_specs, device=device, fixed_x0=val_fixed_x0)
                 self.history["val"].append(val_loss)
 
             if verbose:
@@ -514,14 +540,17 @@ class Trainer:
         return self.history
 
     @torch.no_grad()
-    def evaluate(self, specs, device=None, fixed_x0: Optional[torch.Tensor] = None) -> float:
+    def evaluate(self, specs, device=None, fixed_x0=None) -> float:
+        """`fixed_x0`: single tensor (reused for every spec) or a list, one
+        per entry of `specs`, aligned by position -- see `fit`'s docstring."""
         import market as market_mod
         self.gnn.eval()
         device = device or torch.device("cpu")
         total = 0.0
-        for spec in specs:
+        for i, spec in enumerate(specs):
+            x0_i = fixed_x0[i] if isinstance(fixed_x0, list) else fixed_x0
             net = market_mod.build_network(spec, device=device)
-            total += float(self._instance_loss(net, differentiable=False, fixed_x0=fixed_x0))
+            total += float(self._instance_loss(net, differentiable=False, fixed_x0=x0_i))
         return total / max(len(specs), 1)
 
     def save(self, path: str) -> None:

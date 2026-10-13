@@ -1,5 +1,53 @@
 # Experiment index
 
+**2026-09-04 update (v4: more epochs too -- closes the v1/v2/v3/v4 arc, real ceiling confirmed)**:
+tested whether v3's still-oscillating loss curve at epoch 20 meant it was undertrained. v4:
+n_train=75 (as v3), epochs=40 (2x v3), same +/-20% range, w_ahead=1.0/w_behind=2.0 (as v3) --
+`runs/cross_density/realistic_params_fixed_x0_v4/`.
+
+Loss trajectory matched v3 exactly through epoch 20 (same seed/data), as expected. Past epoch 20,
+train/val loss went essentially FLAT (train -0.0039->-0.0040, val -0.0041->-0.0042 from epoch 20
+to 40) -- the earlier appearance of "still descending" was noise, not real undertraining.
+
+| | mean | median | win-rate | DR-iters cv |
+|---|---|---|---|---|
+| v1 (25x60, +/-15%/10%) | 1.19x | 1.18x | 100% | 0.040 |
+| v2 (25x60, +/-20%, w_ahead=1.4) | 1.17x | 1.16x | 97% | 0.102 |
+| v3 (75x20, +/-20%) | 1.21x | 1.20x | 100% | 0.1015 |
+| v4 (75x40, +/-20%) | 1.19x | **1.21x** | 100% | 0.1015 |
+
+Welch t-tests: v4 vs v1 p=0.869, v4 vs v2 p=0.441, v4 vs v3 p=0.450 -- **none significant**, same
+as every other pairwise comparison in this arc (all p>0.16). Neither 3x more training instances
+(v3) nor 2x more epochs (v4) moved the needle beyond noise.
+
+**Conclusion: this training axis (fixed x0 + fixed topology, diversity only from +/-20% perturbation
+of D*/G_res/D_min/D_max/G_min/G_max) has a real, budget-independent ceiling around ~1.2x mean
+speed-up** for this market. This is well short of the ~50% reduction (~2x) the old x0-diversity
+axis achieved. Root cause (confirmed across v1-v4): DR's own iteration-count coefficient of
+variation under this perturbation scheme tops out around cv~0.10, structurally below the cv=0.129
+seen under full x0 randomization -- the learned correction's ceiling is bounded by how much plain
+DR's own iteration count already varies across instances, and widening the parameter range further
+(v2) already showed this alone doesn't help either. See `project_l2p2p_paper.md` in the auto memory
+for the full arc and open options (combine x0 diversity back in / try a much wider range / accept
+and write up).
+
+**2026-09-04 update (v3: larger dataset, closes v1/v2/v3 arc)**: tested whether n_train=25 was
+the binding constraint behind v1/v2's modest results. v3: n_train=75, epochs=20 (SAME compute
+budget as v1/v2's 25x60=1500), range +/-20% (as v2), w_ahead reverted to 1.0. Same test set as v2
+(cv=0.1015 confirmed identical) for a clean comparison.
+
+| | mean | win-rate | DR-iters cv |
+|---|---|---|---|
+| v1 (25x60) | 1.19x | 100% | 0.040 |
+| v2 (25x60, wider range) | 1.17x | 97% | 0.102 |
+| v3 (75x20, wider range) | **1.21x** | **100%** | 0.102 |
+
+v3 is directionally best (highest mean, recovered 100% win-rate, and a striking per-instance win
+on the shared hardest test instance: 1.05x in v2 -> 1.33x in v3) but pairwise Welch t-tests show
+NONE of v1/v2/v3 are statistically distinguishable at n=30 (p=0.38-0.55). More training data is the
+most promising lever so far but not yet proven beyond noise. See `project_l2p2p_paper.md` in the
+auto memory for the full write-up and next steps (push n_train further, increase n_test for power).
+
 **2026-09-04 update (v2 attempt: widen range + reduce loss asymmetry -- confirmed mechanism, no
 net improvement)**: widened the 6-quantity perturbation from split +/-15%(D*/G_res)/10%(bounds) to
 uniform +/-20% on all six (infeasible draws now discarded+resampled, ~7.5% of raw draws at this

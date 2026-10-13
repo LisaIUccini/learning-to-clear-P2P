@@ -140,6 +140,39 @@ def sample_graph(N: int, density: float, rng: np.random.Generator) -> Dict[int, 
     return {i: sorted(adj[i]) for i in range(N)}
 
 
+def sample_regular_graph(N: int, degree: int, rng: np.random.Generator) -> Dict[int, List[int]]:
+    """k-REGULAR connected graph: every node has EXACTLY `degree` neighbors,
+    zero degree heterogeneity -- unlike `sample_graph` (density-driven),
+    whose random edge addition leaves meaningful degree variance across
+    nodes even at the same mean degree. Built for the degree-heterogeneity
+    isolation experiment (is a density's effect on the learned model driven
+    by average connectivity, or by how UNEVENLY that connectivity is spread
+    across nodes?): compare a model trained here against one trained via
+    `sample_graph` at a matching mean degree."""
+    import networkx as nx
+    base_seed = int(rng.integers(0, 2**31 - 1))
+    for attempt in range(200):
+        try:
+            g = nx.random_regular_graph(degree, N, seed=base_seed + attempt)
+        except nx.NetworkXError:
+            continue
+        adj = {i: sorted(g.neighbors(i)) for i in range(N)}
+        if _is_connected(adj, N):
+            return adj
+    raise RuntimeError(f"could not build a connected {degree}-regular graph on {N} nodes in 200 attempts")
+
+
+def sample_base_regular(N0: int, cfg: MarketConfig, degree: int, seed: int
+                        ) -> Tuple[Dict[int, List[int]], MarketPrimitives, MarketSpec]:
+    """Like `sample_base`, but the topology is k-REGULAR (see
+    `sample_regular_graph`) instead of density-driven -- cfg.density is
+    ignored, only used for the non-topology primitive ranges."""
+    rng = np.random.default_rng(seed)
+    neighbors = sample_regular_graph(N0, degree, rng)
+    prim = sample_primitives(N0, neighbors, cfg, rng)
+    return neighbors, prim, build_spec(N0, neighbors, prim)
+
+
 def _is_connected(adj: Dict[int, List[int]], N: int) -> bool:
     seen, dq = {0}, deque([0])
     while dq:

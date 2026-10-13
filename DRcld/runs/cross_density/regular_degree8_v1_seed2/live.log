@@ -1,0 +1,78 @@
+writing all artifacts to runs/cross_density/regular_degree8_v1_seed2/  (n_train=50  n_test=30  epochs=25  dr_gamma=4.0  unroll=400  gnn_rho=0.975  gnn_scale=1.8  pct_level=0.1  pct_width=0.04  w_ahead=1.6  w_behind=6.0  gnn_rho_slow=0.99  gnn_scale_slow=0.4  gamma_mono=2.0  omega_mode=dr_slope  hidden_dim=32  lr_final_frac=0.01  degree=8 (REGULAR GRAPH)  omega_power=0.0  base_seed=2)
+======================================================================
+dataset: COMBINED diversity (level+width market perturbation + free x0), SAME as the
+regular density-sweep recipe, EXCEPT the base topology is k-REGULAR: every node has
+EXACTLY degree=8 neighbors (zero degree heterogeneity), base_seed=2.
+======================================================================
+  N=10  edges=40  degree_min=8  degree_max=8
+  train: 50 instances (slot 0 = original), 17 infeasible discarded  |  test: 30 instances (slot 0 = original), 4 infeasible discarded
+  x0: FRESH RANDOM per (instance, epoch) during training, fresh per test instance at eval
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='dr_slope')
+  epoch   1/25 | train -0.0009 | val -0.0018
+  epoch   2/25 | train -0.0034 | val -0.0022
+  epoch   3/25 | train -0.0041 | val -0.0039
+  epoch   4/25 | train -0.0042 | val -0.0042
+  epoch   5/25 | train -0.0045 | val -0.0034
+  epoch   6/25 | train -0.0043 | val -0.0038
+  epoch   7/25 | train -0.0045 | val -0.0044
+  epoch   8/25 | train -0.0045 | val -0.0033
+  epoch   9/25 | train -0.0048 | val -0.0041
+  epoch  10/25 | train -0.0045 | val -0.0046
+  epoch  11/25 | train -0.0048 | val -0.0036
+  epoch  12/25 | train -0.0049 | val -0.0048
+  epoch  13/25 | train -0.0050 | val -0.0046
+  epoch  14/25 | train -0.0050 | val -0.0047
+  epoch  15/25 | train -0.0049 | val -0.0041
+  epoch  16/25 | train -0.0050 | val -0.0048
+  epoch  17/25 | train -0.0052 | val -0.0047
+  epoch  18/25 | train -0.0051 | val -0.0044
+  epoch  19/25 | train -0.0050 | val -0.0044
+  epoch  20/25 | train -0.0052 | val -0.0053
+  epoch  21/25 | train -0.0054 | val -0.0049
+  epoch  22/25 | train -0.0055 | val -0.0041
+  epoch  23/25 | train -0.0051 | val -0.0048
+  epoch  24/25 | train -0.0051 | val -0.0053
+  epoch  25/25 | train -0.0049 | val -0.0051
+saved runs/cross_density/regular_degree8_v1_seed2/phi_w.pt
+saved runs/cross_density/regular_degree8_v1_seed2/training_loss.png
+
+evaluating: plain DR vs DR + Phi_w, FRESH RANDOM x0 per test instance
+----------------------------------------------------------------------
+  [regular]  1/30  DR   834 it  |  learned   415 it  |  x 2.01 (+50.2%)
+  [regular]  2/30  DR  1015 it  |  learned   492 it  |  x 2.06 (+51.5%)
+  [regular]  3/30  DR   833 it  |  learned   564 it  |  x 1.48 (+32.3%)
+  [regular]  4/30  DR   660 it  |  learned   425 it  |  x 1.55 (+35.6%)
+  [regular]  5/30  DR   928 it  |  learned   622 it  |  x 1.49 (+33.0%)
+  [regular]  6/30  DR   763 it  |  learned   553 it  |  x 1.38 (+27.5%)
+  [regular]  7/30  DR   801 it  |  learned   591 it  |  x 1.36 (+26.2%)
+  [regular]  8/30  DR   764 it  |  learned   636 it  |  x 1.20 (+16.8%)
+  [regular]  9/30  DR   802 it  |  learned   509 it  |  x 1.58 (+36.5%)
+  [regular] 10/30  DR   831 it  |  learned   454 it  |  x 1.83 (+45.4%)
+  [regular] 11/30  DR   697 it  |  learned   607 it  |  x 1.15 (+12.9%)
+  [regular] 12/30  DR   749 it  |  learned   409 it  |  x 1.83 (+45.4%)
+  [regular] 13/30  DR   796 it  |  learned   387 it  |  x 2.06 (+51.4%)
+  [regular] 14/30  DR   693 it  |  learned   568 it  |  x 1.22 (+18.0%)
+  [regular] 15/30  DR  1011 it  |  learned  1002 it  |  x 1.01 (+0.9%)
+  [regular] 16/30  DR   699 it  |  learned   581 it  |  x 1.20 (+16.9%)
+  [regular] 17/30  DR   759 it  |  learned   596 it  |  x 1.27 (+21.5%)
+  [regular] 18/30  DR   970 it  |  learned   475 it  |  x 2.04 (+51.0%)
+  [regular] 19/30  DR  1018 it  |  learned   565 it  |  x 1.80 (+44.5%)
+  [regular] 20/30  DR   818 it  |  learned   468 it  |  x 1.75 (+42.8%)
+  [regular] 21/30  DR   976 it  |  learned   618 it  |  x 1.58 (+36.7%)
+  [regular] 22/30  DR   863 it  |  learned   461 it  |  x 1.87 (+46.6%)
+  [regular] 23/30  DR   759 it  |  learned   452 it  |  x 1.68 (+40.4%)
+  [regular] 24/30  DR   822 it  |  learned   640 it  |  x 1.28 (+22.1%)
+  [regular] 25/30  DR   718 it  |  learned   445 it  |  x 1.61 (+38.0%)
+  [regular] 26/30  DR  1126 it  |  learned   427 it  |  x 2.64 (+62.1%)
+  [regular] 27/30  DR   786 it  |  learned   483 it  |  x 1.63 (+38.5%)
+  [regular] 28/30  DR   719 it  |  learned   419 it  |  x 1.72 (+41.7%)
+  [regular] 29/30  DR   896 it  |  learned   546 it  |  x 1.64 (+39.1%)
+  [regular] 30/30  DR   852 it  |  learned   414 it  |  x 2.06 (+51.4%)
+  [regular] mean speed-up 1.63x   median 1.62x   min 1.01x   max 2.64x   win-rate 100% (30/30)
+  [regular] CORRECT mean % reduction (per-instance average, not 1-1/mean_speedup): mean=35.9%  median=38.3%
+saved runs/cross_density/regular_degree8_v1_seed2/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots to runs/cross_density/regular_degree8_v1_seed2/instance_plots/
+saved runs/cross_density/regular_degree8_v1_seed2/NOTES.md

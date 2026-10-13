@@ -1,0 +1,45 @@
+writing all artifacts to runs/cross_density/seed0_density1.0_seed0_a2dr_vs_drslope/  (n_test=30  eta=3e-05  mmax=5)
+  base market: N=10  edges=45  trading-graph diameter=1
+  -> A2DR communication cost model: 3 rounds/iteration (1 plain-DR round + gather + broadcast, each <= diameter hops) vs 1 for plain DR / DR+learned
+  loaded checkpoint runs/cross_density/seed0_density1.0_seed0_drslope/phi_w.pt
+   1/30  DR   569 it  |  centralized   568 it  |  A2DR   355 it (x 1.60 iters, x 0.53 comm rounds)  |  learned   288 it (x 1.98)
+   2/30  DR   647 it  |  centralized   647 it  |  A2DR   430 it (x 1.50 iters, x 0.50 comm rounds)  |  learned   281 it (x 2.30)
+   3/30  DR   589 it  |  centralized   588 it  |  A2DR   363 it (x 1.62 iters, x 0.54 comm rounds)  |  learned   282 it (x 2.09)
+   4/30  DR   632 it  |  centralized   632 it  |  A2DR   410 it (x 1.54 iters, x 0.51 comm rounds)  |  learned   314 it (x 2.01)
+   5/30  DR   579 it  |  centralized   581 it  |  A2DR   382 it (x 1.52 iters, x 0.51 comm rounds)  |  learned   281 it (x 2.06)
+   6/30  DR   578 it  |  centralized   578 it  |  A2DR   373 it (x 1.55 iters, x 0.52 comm rounds)  |  learned   296 it (x 1.95)
+   7/30  DR   769 it  |  centralized   769 it  |  A2DR   563 it (x 1.37 iters, x 0.46 comm rounds)  |  learned   296 it (x 2.60)
+   8/30  DR   646 it  |  centralized   646 it  |  A2DR   420 it (x 1.54 iters, x 0.51 comm rounds)  |  learned   297 it (x 2.18)
+   9/30  DR   525 it  |  centralized   524 it  |  A2DR   304 it (x 1.73 iters, x 0.58 comm rounds)  |  learned   293 it (x 1.79)
+  10/30  DR   633 it  |  centralized   630 it  |  A2DR   423 it (x 1.50 iters, x 0.50 comm rounds)  |  learned   316 it (x 2.00)
+  11/30  DR   526 it  |  centralized   524 it  |  A2DR   297 it (x 1.77 iters, x 0.59 comm rounds)  |  learned   317 it (x 1.66)
+  12/30  DR   579 it  |  centralized   578 it  |  A2DR   387 it (x 1.50 iters, x 0.50 comm rounds)  |  learned   296 it (x 1.96)
+  13/30  DR   667 it  |  centralized   666 it  |  A2DR   454 it (x 1.47 iters, x 0.49 comm rounds)  |  learned   285 it (x 2.34)
+  14/30  DR   464 it  |  centralized   463 it  |  A2DR   297 it (x 1.56 iters, x 0.52 comm rounds)  |  learned   318 it (x 1.46)
+  15/30  DR   526 it  |  centralized   528 it  |  A2DR   320 it (x 1.64 iters, x 0.55 comm rounds)  |  learned   305 it (x 1.72)
+  16/30  DR   743 it  |  centralized   744 it  |  A2DR   523 it (x 1.42 iters, x 0.47 comm rounds)  |  learned   286 it (x 2.60)
+  17/30  DR   653 it  |  centralized   656 it  |  A2DR   439 it (x 1.49 iters, x 0.50 comm rounds)  |  learned   299 it (x 2.18)
+  18/30  DR   712 it  |  centralized   714 it  |  A2DR   510 it (x 1.40 iters, x 0.47 comm rounds)  |  learned   306 it (x 2.33)
+  19/30  DR   654 it  |  centralized   655 it  |  A2DR   452 it (x 1.45 iters, x 0.48 comm rounds)  |  learned   307 it (x 2.13)
+  20/30  DR   634 it  |  centralized   636 it  |  A2DR   426 it (x 1.49 iters, x 0.50 comm rounds)  |  learned   313 it (x 2.03)
+  21/30  DR   640 it  |  centralized   641 it  |  A2DR   428 it (x 1.50 iters, x 0.50 comm rounds)  |  learned   284 it (x 2.25)
+  22/30  DR   686 it  |  centralized   687 it  |  A2DR   473 it (x 1.45 iters, x 0.48 comm rounds)  |  learned   321 it (x 2.14)
+  23/30  DR   511 it  |  centralized   512 it  |  A2DR   293 it (x 1.74 iters, x 0.58 comm rounds)  |  learned   319 it (x 1.60)
+  24/30  DR   725 it  |  centralized   725 it  |  A2DR   512 it (x 1.42 iters, x 0.47 comm rounds)  |  learned   321 it (x 2.26)
+  25/30  DR   610 it  |  centralized   609 it  |  A2DR   401 it (x 1.52 iters, x 0.51 comm rounds)  |  learned   304 it (x 2.01)
+  26/30  DR   719 it  |  centralized   717 it  |  A2DR   491 it (x 1.46 iters, x 0.49 comm rounds)  |  learned   289 it (x 2.49)
+  27/30  DR   750 it  |  centralized   750 it  |  A2DR   541 it (x 1.39 iters, x 0.46 comm rounds)  |  learned   304 it (x 2.47)
+  28/30  DR   484 it  |  centralized   485 it  |  A2DR   296 it (x 1.64 iters, x 0.55 comm rounds)  |  learned   299 it (x 1.62)
+  29/30  DR   643 it  |  centralized   643 it  |  A2DR   427 it (x 1.51 iters, x 0.50 comm rounds)  |  learned   287 it (x 2.24)
+  30/30  DR   591 it  |  centralized   592 it  |  A2DR   391 it (x 1.51 iters, x 0.50 comm rounds)  |  learned   276 it (x 2.14)
+
+  [A2DR (no training, iterations)] mean speed-up 1.53x   median 1.51x   min 1.37x   max 1.77x   win-rate 100% (30/30)
+  [A2DR (no training, communication rounds)] mean speed-up 0.51x   median 0.50x   min 0.46x   max 0.59x   win-rate 0% (0/30)
+  [DR + learned (dr_slope)] mean speed-up 2.09x   median 2.11x   min 1.46x   max 2.60x   win-rate 100% (30/30)
+  [Centralised DR (iterations, sanity check vs plain DR)] mean speed-up 1.00x   median 1.00x   min 1.00x   max 1.00x   win-rate 60% (18/30)
+  [Centralised DR] mean total communication rounds: 2 (fixed = 2*diameter, vs plain DR's mean 623)
+saved runs/cross_density/seed0_density1.0_seed0_a2dr_vs_drslope/results.json
+saved runs/cross_density/seed0_density1.0_seed0_a2dr_vs_drslope/comparison_bars.png
+saved runs/cross_density/seed0_density1.0_seed0_a2dr_vs_drslope/speedup_scatter.png
+saved runs/cross_density/seed0_density1.0_seed0_a2dr_vs_drslope/total_communication_rounds.png
+saved runs/cross_density/seed0_density1.0_seed0_a2dr_vs_drslope/NOTES.md

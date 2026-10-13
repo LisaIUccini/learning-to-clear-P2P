@@ -1,0 +1,71 @@
+zero-shot level+width test, DISCARD+RESAMPLE on DR non-convergence  (weights=../../../runs/cross_density/combined_density05_v25_seed1/phi_w.pt  n_test=30  pct_level=50%  pct_width=4%  dr_gamma=6.0  gnn_rho=0.9747  gnn_scale=1.0  gnn_rho_slow=0.99  gnn_scale_slow=0.0  DR_MAX_ITER=4000)
+  loaded checkpoint
+  base market: N=10  edges=27
+  [resample]  1/29 kept (attempt 1)  DR   862 it  |  learned   621 it
+  [resample]  2/29 kept (attempt 6)  DR   737 it  |  learned   610 it
+  ... instance 3: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  ... instance 3: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 2)
+  [resample]  3/29 kept (attempt 11)  DR   934 it  |  learned   859 it
+  [resample]  4/29 kept (attempt 5)  DR   731 it  |  learned   560 it
+  [resample]  5/29 kept (attempt 1)  DR   829 it  |  learned   697 it
+  [resample]  6/29 kept (attempt 1)  DR   862 it  |  learned   724 it
+  [resample]  7/29 kept (attempt 1)  DR   744 it  |  learned   817 it
+  [resample]  8/29 kept (attempt 1)  DR  1122 it  |  learned  1040 it
+  [resample]  9/29 kept (attempt 1)  DR   777 it  |  learned   700 it
+  ... instance 10: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 2)
+  [resample] 10/29 kept (attempt 5)  DR   737 it  |  learned   658 it
+  [resample] 11/29 kept (attempt 5)  DR   968 it  |  learned   609 it
+  [resample] 12/29 kept (attempt 3)  DR   864 it  |  learned   657 it
+  [resample] 13/29 kept (attempt 1)  DR   971 it  |  learned   655 it
+  [resample] 14/29 kept (attempt 2)  DR  1022 it  |  learned   972 it
+  [resample] 15/29 kept (attempt 1)  DR  1123 it  |  learned  1021 it
+  [resample] 16/29 kept (attempt 1)  DR   751 it  |  learned   679 it
+  [resample] 17/29 kept (attempt 3)  DR   759 it  |  learned   642 it
+  [resample] 18/29 kept (attempt 4)  DR   728 it  |  learned   502 it
+  [resample] 19/29 kept (attempt 1)  DR   726 it  |  learned   560 it
+  [resample] 20/29 kept (attempt 1)  DR   658 it  |  learned   564 it
+  [resample] 21/29 kept (attempt 6)  DR   784 it  |  learned   531 it
+  [resample] 22/29 kept (attempt 2)  DR   695 it  |  learned   554 it
+  [resample] 23/29 kept (attempt 2)  DR   848 it  |  learned   558 it
+  ... instance 24: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  [resample] 24/29 kept (attempt 2)  DR   791 it  |  learned   469 it
+  [resample] 25/29 kept (attempt 1)  DR   947 it  |  learned   652 it
+  [resample] 26/29 kept (attempt 5)  DR   759 it  |  learned   706 it
+  [resample] 27/29 kept (attempt 1)  DR   749 it  |  learned   630 it
+  [resample] 28/29 kept (attempt 1)  DR   635 it  |  learned   538 it
+  [resample] 29/29 kept (attempt 2)  DR   900 it  |  learned   524 it
+  test set: 30 instances (slot 0 = original), ALL SIX quantities perturbed via level+width (+/-50%/+/-4%), x0 FRESH RANDOM per instance (44 infeasible discarded, 4 DR-non-converged discarded+resampled)
+----------------------------------------------------------------------
+  [resample]  1/30  DR   728 it  |  learned   470 it  |  x 1.55 (+35.4%)
+  [resample]  2/30  DR   862 it  |  learned   621 it  |  x 1.39 (+28.0%)
+  [resample]  3/30  DR   737 it  |  learned   610 it  |  x 1.21 (+17.2%)
+  [resample]  4/30  DR   934 it  |  learned   859 it  |  x 1.09 (+8.0%)
+  [resample]  5/30  DR   731 it  |  learned   560 it  |  x 1.31 (+23.4%)
+  [resample]  6/30  DR   829 it  |  learned   697 it  |  x 1.19 (+15.9%)
+  [resample]  7/30  DR   862 it  |  learned   724 it  |  x 1.19 (+16.0%)
+  [resample]  8/30  DR   744 it  |  learned   817 it  |  x 0.91 (-9.8%)
+  [resample]  9/30  DR  1122 it  |  learned  1040 it  |  x 1.08 (+7.3%)
+  [resample] 10/30  DR   777 it  |  learned   700 it  |  x 1.11 (+9.9%)
+  [resample] 11/30  DR   737 it  |  learned   658 it  |  x 1.12 (+10.7%)
+  [resample] 12/30  DR   968 it  |  learned   609 it  |  x 1.59 (+37.1%)
+  [resample] 13/30  DR   864 it  |  learned   657 it  |  x 1.32 (+24.0%)
+  [resample] 14/30  DR   971 it  |  learned   655 it  |  x 1.48 (+32.5%)
+  [resample] 15/30  DR  1022 it  |  learned   972 it  |  x 1.05 (+4.9%)
+  [resample] 16/30  DR  1123 it  |  learned  1021 it  |  x 1.10 (+9.1%)
+  [resample] 17/30  DR   751 it  |  learned   679 it  |  x 1.11 (+9.6%)
+  [resample] 18/30  DR   759 it  |  learned   642 it  |  x 1.18 (+15.4%)
+  [resample] 19/30  DR   728 it  |  learned   502 it  |  x 1.45 (+31.0%)
+  [resample] 20/30  DR   726 it  |  learned   560 it  |  x 1.30 (+22.9%)
+  [resample] 21/30  DR   658 it  |  learned   564 it  |  x 1.17 (+14.3%)
+  [resample] 22/30  DR   784 it  |  learned   531 it  |  x 1.48 (+32.3%)
+  [resample] 23/30  DR   695 it  |  learned   554 it  |  x 1.25 (+20.3%)
+  [resample] 24/30  DR   848 it  |  learned   558 it  |  x 1.52 (+34.2%)
+  [resample] 25/30  DR   791 it  |  learned   469 it  |  x 1.69 (+40.7%)
+  [resample] 26/30  DR   947 it  |  learned   652 it  |  x 1.45 (+31.2%)
+  [resample] 27/30  DR   759 it  |  learned   706 it  |  x 1.08 (+7.0%)
+  [resample] 28/30  DR   749 it  |  learned   630 it  |  x 1.19 (+15.9%)
+  [resample] 29/30  DR   635 it  |  learned   538 it  |  x 1.18 (+15.3%)
+  [resample] 30/30  DR   900 it  |  learned   524 it  |  x 1.72 (+41.8%)
+  [resample] mean speed-up 1.28x   median 1.20x   min 0.91x   max 1.72x   win-rate 97% (29/30)
+  [resample] CORRECT mean % reduction (per-instance average, not 1-1/mean_speedup): mean=20.0%  median=16.6%
+saved results.png

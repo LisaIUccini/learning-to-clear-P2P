@@ -1,0 +1,15 @@
+cross-market zero-shot test  (weights=runs/cross_density/combined_density08_v1/phi_w.pt  density=0.8  gnn_rho=0.9854  gnn_scale=1.8  dr_gamma=4.0  n_markets=10  seed_start=100)
+  loaded checkpoint
+  market_seed=100  N=10  edges=38  DR   698 it  |  learned   937 it  |  x 0.74 (-34.2%)
+  market_seed=101  N=10  edges=38  DR   555 it  |  learned   682 it  |  x 0.81 (-22.9%)
+  market_seed=102  N=10  edges=38  DR   549 it  |  learned   773 it  |  x 0.71 (-40.8%)
+  market_seed=103  N=10  edges=38  DR   503 it  |  learned   464 it  |  x 1.08 (+7.8%)
+  market_seed=104  N=10  edges=38  DR   833 it  |  learned  1174 it  |  x 0.71 (-40.9%)
+  market_seed=105  N=10  edges=38  DR   883 it  |  learned  1068 it  |  x 0.83 (-21.0%)
+  market_seed=106  N=10  edges=38  DR   836 it  |  learned   926 it  |  x 0.90 (-10.8%)
+  market_seed=107  N=10  edges=38  DR  1334 it  |  learned  4000 it  |  x 0.33 (-199.9%)
+  market_seed=108  N=10  edges=38  DR   564 it  |  learned   680 it  |  x 0.83 (-20.6%)
+  market_seed=109  N=10  edges=38  DR   620 it  |  learned   701 it  |  x 0.88 (-13.1%)
+
+[cross-market] mean speed-up 0.78x   median 0.82x   min 0.33x   max 1.08x   win-rate 10% (1/10)
+[cross-market] CORRECT mean % reduction (per-instance average): mean=-39.6%  median=-21.9%

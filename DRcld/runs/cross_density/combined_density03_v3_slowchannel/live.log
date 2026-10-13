@@ -1,0 +1,20 @@
+writing all artifacts to runs/cross_density/combined_density03_v3_slowchannel/  (n_train=50  n_test=30  epochs=25  dr_gamma=4.0  unroll=450  gnn_rho=0.966  gnn_scale=1.0  pct_level=0.1  pct_width=0.04  w_ahead=1.0  w_behind=2.0  gnn_rho_slow=0.99  gnn_scale_slow=0.4  gamma_mono=2.0  omega_mode=dr_slope  hidden_dim=32  lr_final_frac=0.01  density=0.3  omega_power=0.0  base_seed=0)
+======================================================================
+dataset: COMBINED diversity -- market instances perturbed via level+width
+(+/-10% level, +/-4% width) AND x0 left FREE (fresh random
+draw per instance/epoch during training -- NOT fixed). Realistic market,
+density=0.3, base_seed=0.
+======================================================================
+  N=10  edges=20
+  train: 50 instances (slot 0 = original), 0 infeasible discarded  |  test: 30 instances (slot 0 = original), 0 infeasible discarded
+  x0: FRESH RANDOM per (instance, epoch) during training, fresh per test instance at eval
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='dr_slope')
+  epoch   1/25 | train -0.0003 | val -0.0006
+  epoch   2/25 | train -0.0009 | val -0.0013
+  epoch   3/25 | train -0.0010 | val -0.0008
+  epoch   4/25 | train -0.0011 | val -0.0009
+  epoch   5/25 | train -0.0011 | val -0.0013
+  epoch   6/25 | train -0.0012 | val -0.0010
+  epoch   7/25 | train -0.0011 | val -0.0010
+  epoch   8/25 | train -0.0011 | val -0.0013
