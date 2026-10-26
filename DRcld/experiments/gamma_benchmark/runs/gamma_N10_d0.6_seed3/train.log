@@ -1,0 +1,74 @@
+writing all artifacts to /home/lisa/energy_market_fixed_point/DRcld/experiments/gamma_benchmark/runs/gamma_N10_d0.6_seed3/  (density=0.6  N=10  gamma_base=4.0  unroll=321  hidden_dim=32  n_rounds=3  n_train=50  n_test=30  epochs=25  base_seed=3  lr=0.003)
+======================================================================
+GAMMA-GNN -- learned per-node DR step size (ADMM-paper-inspired prototype)
+density=0.6  base_seed=3  gamma_base=4.0  unroll(train k)=321
+======================================================================
+  N=10  edges=31
+  train: 50 (0 discarded)  |  test: 30 (0 discarded)  |  val: 10 (0 discarded)
+  model: 7777 parameters (independent of N)
+
+training gamma-GNN (k=321 unrolled steps)...
+  precomputing 50 train + 10 val fixed-point targets (plain DR to convergence, no grad)...
+  epoch   1/25 | train +0.0696 | val +0.0376
+  epoch   2/25 | train +0.0622 | val +0.0375
+  epoch   3/25 | train +0.0577 | val +0.0444
+  epoch   4/25 | train +0.0543 | val +0.0347
+  epoch   5/25 | train +0.0534 | val +0.0408
+  epoch   6/25 | train +0.0485 | val +0.0422
+  epoch   7/25 | train +0.0463 | val +0.0349
+  epoch   8/25 | train +0.0482 | val +0.0469
+  epoch   9/25 | train +0.0533 | val +0.0365
+  epoch  10/25 | train +0.0493 | val +0.0740
+  epoch  11/25 | train +0.0504 | val +0.0432
+  epoch  12/25 | train +0.0470 | val +0.0361
+  epoch  13/25 | train +0.0437 | val +0.0383
+  epoch  14/25 | train +0.0463 | val +0.0345
+  epoch  15/25 | train +0.0446 | val +0.0371
+  epoch  16/25 | train +0.0444 | val +0.0362
+  epoch  17/25 | train +0.0452 | val +0.0405
+  epoch  18/25 | train +0.0468 | val +0.0370
+  epoch  19/25 | train +0.0426 | val +0.0357
+  epoch  20/25 | train +0.0430 | val +0.0405
+  epoch  21/25 | train +0.0450 | val +0.0424
+  epoch  22/25 | train +0.0445 | val +0.0429
+  epoch  23/25 | train +0.0427 | val +0.0370
+  epoch  24/25 | train +0.0450 | val +0.0400
+  epoch  25/25 | train +0.0446 | val +0.0318
+
+evaluating: plain DR vs DR with learned per-node gamma, SAME shared x0, in-distribution test set
+----------------------------------------------------------------------
+  [gamma-gnn/d0.6]  1/30  DR   860 it  |  gamma-DR   669 it  |  x 1.29 (+22.2%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6]  2/30  DR   794 it  |  gamma-DR   651 it  |  x 1.22 (+18.0%)  gamma range=[3.62,4.19]
+  [gamma-gnn/d0.6]  3/30  DR  1064 it  |  gamma-DR   782 it  |  x 1.36 (+26.5%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6]  4/30  DR   878 it  |  gamma-DR   697 it  |  x 1.26 (+20.6%)  gamma range=[3.61,4.20]
+  [gamma-gnn/d0.6]  5/30  DR   906 it  |  gamma-DR   713 it  |  x 1.27 (+21.3%)  gamma range=[3.63,4.21]
+  [gamma-gnn/d0.6]  6/30  DR   975 it  |  gamma-DR   740 it  |  x 1.32 (+24.1%)  gamma range=[3.62,4.22]
+  [gamma-gnn/d0.6]  7/30  DR   859 it  |  gamma-DR   702 it  |  x 1.22 (+18.3%)  gamma range=[3.62,4.22]
+  [gamma-gnn/d0.6]  8/30  DR   698 it  |  gamma-DR   753 it  |  x 0.93 (-7.9%)  gamma range=[3.62,4.22]
+  [gamma-gnn/d0.6]  9/30  DR   663 it  |  gamma-DR   529 it  |  x 1.25 (+20.2%)  gamma range=[3.61,4.22]
+  [gamma-gnn/d0.6] 10/30  DR   676 it  |  gamma-DR   546 it  |  x 1.24 (+19.2%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 11/30  DR  1131 it  |  gamma-DR   787 it  |  x 1.44 (+30.4%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6] 12/30  DR   715 it  |  gamma-DR   579 it  |  x 1.23 (+19.0%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6] 13/30  DR   920 it  |  gamma-DR   719 it  |  x 1.28 (+21.8%)  gamma range=[3.62,4.19]
+  [gamma-gnn/d0.6] 14/30  DR  1020 it  |  gamma-DR   776 it  |  x 1.31 (+23.9%)  gamma range=[3.62,4.21]
+  [gamma-gnn/d0.6] 15/30  DR   885 it  |  gamma-DR   648 it  |  x 1.37 (+26.8%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6] 16/30  DR  1043 it  |  gamma-DR   767 it  |  x 1.36 (+26.5%)  gamma range=[3.62,4.22]
+  [gamma-gnn/d0.6] 17/30  DR   938 it  |  gamma-DR   766 it  |  x 1.22 (+18.3%)  gamma range=[3.63,4.22]
+  [gamma-gnn/d0.6] 18/30  DR   828 it  |  gamma-DR   661 it  |  x 1.25 (+20.2%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 19/30  DR   848 it  |  gamma-DR   681 it  |  x 1.25 (+19.7%)  gamma range=[3.61,4.20]
+  [gamma-gnn/d0.6] 20/30  DR   667 it  |  gamma-DR   549 it  |  x 1.21 (+17.7%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 21/30  DR   873 it  |  gamma-DR   706 it  |  x 1.24 (+19.1%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6] 22/30  DR   651 it  |  gamma-DR   575 it  |  x 1.13 (+11.7%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 23/30  DR   799 it  |  gamma-DR   643 it  |  x 1.24 (+19.5%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6] 24/30  DR   624 it  |  gamma-DR   631 it  |  x 0.99 (-1.1%)  gamma range=[3.62,4.21]
+  [gamma-gnn/d0.6] 25/30  DR   681 it  |  gamma-DR   623 it  |  x 1.09 (+8.5%)  gamma range=[3.61,4.21]
+  [gamma-gnn/d0.6] 26/30  DR   637 it  |  gamma-DR   578 it  |  x 1.10 (+9.3%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 27/30  DR   725 it  |  gamma-DR   609 it  |  x 1.19 (+16.0%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 28/30  DR   780 it  |  gamma-DR   619 it  |  x 1.26 (+20.6%)  gamma range=[3.61,4.19]
+  [gamma-gnn/d0.6] 29/30  DR   985 it  |  gamma-DR   741 it  |  x 1.33 (+24.8%)  gamma range=[3.62,4.21]
+  [gamma-gnn/d0.6] 30/30  DR   742 it  |  gamma-DR   628 it  |  x 1.18 (+15.4%)  gamma range=[3.62,4.21]
+
+  [gamma-gnn/d0.6] mean speed-up 1.23x   median 1.24x   min 0.93x   max 1.44x   win-rate 93% (28/30)
+  [gamma-gnn/d0.6] mean % reduction: 18.4%  median: 19.6%
+
+DONE -- /home/lisa/energy_market_fixed_point/DRcld/experiments/gamma_benchmark/runs/gamma_N10_d0.6_seed3/

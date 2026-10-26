@@ -34,6 +34,12 @@ class DRConfig:
     n_iter: int = 5000
     tol: float = 1e-5           # stop when ||x^{k+1}-x^k|| < tol
     bisect: int = 40
+    tau: float = 0.0            # volume-dependent trading-tariff weight (quadratic term
+                                 # (tau/2)*q_mn^2 added to every prosumer's trading cost --
+                                 # 0.0 = unchanged original model, every experiment before
+                                 # 2026-10-14 used tau=0.0 implicitly; see Le Cadre et al.
+                                 # 2020 Rem. 3.4 -- removes zero-cost circulating trades /
+                                 # non-unique q* by making the game strongly monotone)
 
     def __post_init__(self):
         if not (self.gamma > 0):
@@ -49,6 +55,7 @@ class DRResult:
     residual: List[float] = field(default_factory=list)          # ||x^{k+1}-x^k||, aux iterate
     shadow_residual: List[float] = field(default_factory=list)   # ||xbar^{k+1}-xbar^k||, FEASIBLE iterate
     cost: List[float] = field(default_factory=list)              # J(xbar^k), only if record=True
+    violation: List[float] = field(default_factory=list)         # dist(xbar^k, X_loc), only if record=True
 
 
 def run_dr(net, cfg: DRConfig, record: bool = True) -> DRResult:
@@ -68,12 +75,18 @@ def run_dr(net, cfg: DRConfig, record: bool = True) -> DRResult:
       - `cost`, J(xbar^k) (cheap: one elementwise pass over cached
         parameter tensors) -- the same quantity `equilibrium.
         solve_equilibrium_qp` gives the true optimum of.
-    Both are diagnostics only, no effect on the algorithm itself.
+      - `violation`, dist(xbar^k, X_loc) (`Network.dist_to_Xloc`) -- how
+        far the shadow iterate still sits from the LOCAL box constraints
+        at iteration k (X^rec-feasibility is automatic for xbar^k by
+        construction; X^loc-feasibility is the other half of a true
+        v-GNE, and is what this tracks).
+    All three are diagnostics only, no effect on the algorithm itself.
     """
     net.reset()
     residual: List[float] = []
     shadow_residual: List[float] = []
     cost: List[float] = []
+    violation: List[float] = []
     converged = False
     k_run = 0
     prev_shadow = net.project_reciprocity(net.flatten()) if record else None
@@ -83,17 +96,18 @@ def run_dr(net, cfg: DRConfig, record: bool = True) -> DRResult:
             k_run = k + 1
             net.communicate()
             for p in net.prosumers:
-                p.dr_step(cfg.gamma, cfg.lam, n_bisect=cfg.bisect)
+                p.dr_step(cfg.gamma, cfg.lam, n_bisect=cfg.bisect, tau=cfg.tau)
             r = net.aux_residual()
             if record:
                 residual.append(r)
                 shadow = net.project_reciprocity(net.flatten())
                 shadow_residual.append(float(torch.linalg.vector_norm(shadow - prev_shadow)))
                 cost.append(float(net.cost_at(shadow)))
+                violation.append(float(net.dist_to_Xloc(shadow)))
                 prev_shadow = shadow
             if r < cfg.tol:
                 converged = True
                 break
 
-    return DRResult(n_iter=k_run, converged=converged, residual=residual,
+    return DRResult(n_iter=k_run, converged=converged, residual=residual, violation=violation,
                      shadow_residual=shadow_residual, cost=cost)

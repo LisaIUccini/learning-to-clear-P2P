@@ -124,7 +124,7 @@ class Prosumer:
                 for m in self.neighbors}
 
     def local_prox(self, gamma: float, rD: torch.Tensor, rG: torch.Tensor,
-                    rq: Dict[int, torch.Tensor], n_bisect: int = 60
+                    rq: Dict[int, torch.Tensor], n_bisect: int = 60, tau: float = 0.0
                     ) -> Tuple[torch.Tensor, torch.Tensor, Dict[int, torch.Tensor]]:
         """Line 9: argmin_{xi in X^loc_n} gamma J_n(xi) + 1/2 ||xi-r||^2.
 
@@ -133,6 +133,19 @@ class Prosumer:
         multiplier nu gives closed-form primal updates and a balance
         residual that is monotone increasing in nu, so nu* is found by
         bisection -- purely local, no communication.
+
+        `tau` (2026-10-14): a volume-dependent network tariff added to the
+        trading cost, c_nm*q_mn -> c_nm*q_mn + (tau/2)*q_mn^2 (Le Cadre et
+        al. 2020, Remark 3.4 -- removes zero-cost circulating trades /
+        non-unique q* that a purely linear trading cost admits whenever
+        the graph has a cycle, by making the game strongly monotone in
+        every variable, q included). tau=0.0 (default) is EXACTLY the
+        original linear-cost model, every experiment before this date.
+        Mirrors D/G's own closed form exactly: q_m was the only one of
+        the three with NO denominator (linear cost -> 0 curvature from
+        J_n, only the prox term's curvature of 1) -- now it gets one too,
+        (1+gamma*tau), same structure as D's (2*gamma*a_tilde+1) and G's
+        (gamma*a+1).
         """
         g = float(gamma)
         denomD = 2.0 * g * self.a_tilde + 1.0
@@ -165,6 +178,7 @@ class Prosumer:
         # The bisection loop only needs the SUM of q_m(nu) at every step, so
         # the per-neighbour dict (needed only once, at the end) is kept out
         # of the hot loop -- same values, far fewer python-level tensor ops.
+        q_denom = 1.0 + g * tau   # = 1.0 when tau=0.0 (original model, unchanged)
         if self.neighbors:
             rq_vec = torch.stack([rq[m] for m in self.neighbors])
             c_vec = torch.stack([self.c[m] for m in self.neighbors])
@@ -172,13 +186,13 @@ class Prosumer:
             q_const_vec = rq_vec - g * c_vec
 
             def q_sum(nu):
-                return torch.minimum(q_const_vec - nu, k_vec).sum()
+                return torch.minimum((q_const_vec - nu) / q_denom, k_vec).sum()
         else:
             def q_sum(nu):
                 return torch.zeros((), device=self.device)
 
         def q_of(nu):
-            return {m: torch.minimum(rq[m] - g * self.c[m] - nu, self.k[m])
+            return {m: torch.minimum((rq[m] - g * self.c[m] - nu) / q_denom, self.k[m])
                     for m in self.neighbors}
 
         def balance(nu):
@@ -213,17 +227,19 @@ class Prosumer:
     # ------------------------------------------------------------------
     # Full local iteration (Algorithm 1, lines 4-12, this node alone)
     # ------------------------------------------------------------------
-    def dr_step(self, gamma: float, lam: float = 1.0, n_bisect: int = 60) -> None:
+    def dr_step(self, gamma: float, lam: float = 1.0, n_bisect: int = 60, tau: float = 0.0) -> None:
         """Requires `Network.communicate()` to have just been called, so
         `q_received` holds this round's q_nm. Runs plain DR (lines 4-10),
         then, if a trained model has been deployed (`gnn.deploy`), adds
         its local perturbation (lines 11-12) -- computed from THIS node's
         own state and the SAME `q_received` already on hand, no further
-        message exchange."""
+        message exchange.
+
+        `tau`: volume-dependent trading-tariff weight, see `local_prox`."""
         qbar = self.shadow_q()                                    # line 4
         rD, rG = self.D, self.G                                    # line 5 (D,G unchanged by proj X^rec)
         rq = {m: 2.0 * qbar[m] - self.q[m] for m in self.neighbors}  # line 7
-        zD, zG, zq = self.local_prox(gamma, rD, rG, rq, n_bisect)  # line 9
+        zD, zG, zq = self.local_prox(gamma, rD, rG, rq, n_bisect, tau=tau)  # line 9
 
         D_new = self.D + lam * (zD - self.D)                       # line 10
         G_new = self.G + lam * (zG - self.G)
@@ -368,13 +384,25 @@ class Network:
     # gradient dnu*/dr that the raw bisection result (a python float
     # comparison, no grad) would otherwise be blind to.
     # ------------------------------------------------------------------
-    def prox_local(self, gamma: float, r: torch.Tensor, n_bisect: int = 60) -> torch.Tensor:
+    def prox_local(self, gamma, r: torch.Tensor, n_bisect: int = 60) -> torch.Tensor:
+        """`gamma` is either the usual scalar (identical behaviour to
+        before this parameter) or a per-node tensor of shape (N,) -- e.g.
+        a GNN's own instance-adaptive gamma_i prediction (see
+        `gamma_gnn.py`). Every node-indexed use of gamma (denomD/denomG/
+        D_of/G_of, all already shaped (N,)) broadcasts a (N,) gamma
+        correctly with NO change needed; only `q_of`'s per-EDGE use needs
+        gamma indexed by each edge's OWNER node (`gamma[owner]`, the same
+        "edge i=(m,n), n is the owner, n's own decision" convention
+        `network.py`'s own module docstring already establishes elsewhere)
+        -- for a plain scalar this reduces to the original expression
+        exactly, so every existing call site (scalar gamma) is unaffected."""
         rD, rG, rQ = self.get_DGQ(r)
         at, a, b = self.a_tilde_vec, self.a_vec, self.b_vec
         Dstar, Gres = self.D_star_vec, self.G_res_vec
         Dmin, Dmax, Gmin, Gmax = self.D_min_vec, self.D_max_vec, self.G_min_vec, self.G_max_vec
         c_edge, k_edge = self.c_edge, self.k_edge
         owner = self.owner
+        gamma_e = gamma[owner] if (torch.is_tensor(gamma) and gamma.dim() > 0) else gamma
 
         denomD = 2.0 * gamma * at + 1.0
         denomG = gamma * a + 1.0
@@ -386,7 +414,7 @@ class Network:
             return torch.clamp((rG - gamma * b - nu) / denomG, Gmin, Gmax)
 
         def q_of(nu):
-            return rQ - gamma * c_edge - nu[owner] if self.E else rQ
+            return rQ - gamma_e * c_edge - nu[owner] if self.E else rQ
 
         def node_sum(v):
             out = torch.zeros(self.N, device=self.device, dtype=v.dtype)
@@ -441,6 +469,24 @@ class Network:
                 + 0.5 * self.a_vec * G ** 2 + self.b_vec * G).sum()
         trade = (self.c_edge * Q).sum() if self.E else torch.zeros((), device=self.device)
         return node + trade
+
+    def dist_to_Xloc(self, x: torch.Tensor) -> torch.Tensor:
+        """Euclidean distance from `x` ([D,G,Q]) to the LOCAL constraint
+        set X^loc = {D in [D_min,D_max], G in [G_min,G_max], Q <= k_edge}
+        -- the per-prosumer box `local_prox`/`prox_local` projects onto
+        exactly (the OTHER constraint set, X^rec = balance + reciprocity,
+        is what `project_reciprocity` handles). X^loc is separable per
+        coordinate, so its projection is closed-form clipping and the
+        distance is just the L2 norm of each coordinate's own clip
+        residual. Used to report dist(xbar^k, X_loc) -- how far the
+        SHADOW iterate (always X^rec-feasible by construction) still sits
+        from the box constraints at iteration k, a genuine convergence
+        diagnostic distinct from the residual."""
+        D, G, Q = self.get_DGQ(x)
+        dD = torch.clamp(self.D_min_vec - D, min=0.0) + torch.clamp(D - self.D_max_vec, min=0.0)
+        dG = torch.clamp(self.G_min_vec - G, min=0.0) + torch.clamp(G - self.G_max_vec, min=0.0)
+        dQ = torch.clamp(Q - self.k_edge, min=0.0) if self.E else torch.zeros(0, device=self.device)
+        return torch.sqrt((dD ** 2).sum() + (dG ** 2).sum() + (dQ ** 2).sum())
 
     def balance_at(self, x: torch.Tensor) -> torch.Tensor:
         D, G, Q = self.get_DGQ(x)

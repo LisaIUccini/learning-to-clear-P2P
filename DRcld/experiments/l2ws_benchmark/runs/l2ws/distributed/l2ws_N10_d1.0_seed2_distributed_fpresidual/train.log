@@ -1,0 +1,101 @@
+writing all artifacts to runs/l2ws/distributed/l2ws_N10_d1.0_seed2_distributed_fpresidual/  (density=1.0  N=10  gamma=6.0  unroll=1354  hidden_dim=32  n_rounds=3  shared_weights=True  update_type=residual  n_train=50  n_test=30  epochs=50  base_seed=2  lr=0.003  loss_mode=fp_residual)
+======================================================================
+DISTRIBUTED L2WS -- message-passing GNN warm-start (prototype)
+h_w = L=3-round message-passing GNN (shared weights, residual update), PLAIN DR thereafter
+density=1.0  base_seed=2  gamma=6.0  unroll(train k)=1354
+======================================================================
+  N=10  edges=45
+  train: 50 (35 discarded)  |  test: 30 (8 discarded)  |  val: 10 (1 discarded)
+  model: 10019 parameters (independent of N)
+
+training distributed h_w (loss_mode=fp_residual, k=1354 steps)...
+  epoch   1/50 | train +0.0000 | val +0.0000
+  epoch   2/50 | train +0.0000 | val +0.0000
+  epoch   3/50 | train +0.0000 | val +0.0000
+  epoch   4/50 | train +0.0000 | val +0.0000
+  epoch   5/50 | train +0.0000 | val +0.0000
+  epoch   6/50 | train +0.0000 | val +0.0000
+  epoch   7/50 | train +0.0000 | val +0.0000
+  epoch   8/50 | train +0.0000 | val +0.0000
+  epoch   9/50 | train +0.0000 | val +0.0000
+  epoch  10/50 | train +0.0000 | val +0.0000
+  epoch  11/50 | train +0.0000 | val +0.0000
+  epoch  12/50 | train +0.0000 | val +0.0000
+  epoch  13/50 | train +0.0000 | val +0.0000
+  epoch  14/50 | train +0.0000 | val +0.0000
+  epoch  15/50 | train +0.0000 | val +0.0000
+  epoch  16/50 | train +0.0000 | val +0.0000
+  epoch  17/50 | train +0.0000 | val +0.0000
+  epoch  18/50 | train +0.0000 | val +0.0000
+  epoch  19/50 | train +0.0000 | val +0.0000
+  epoch  20/50 | train +0.0000 | val +0.0000
+  epoch  21/50 | train +0.0000 | val +0.0000
+  epoch  22/50 | train +0.0000 | val +0.0000
+  epoch  23/50 | train +0.0000 | val +0.0000
+  epoch  24/50 | train +0.0000 | val +0.0000
+  epoch  25/50 | train +0.0000 | val +0.0000
+  epoch  26/50 | train +0.0000 | val +0.0000
+  epoch  27/50 | train +0.0000 | val +0.0000
+  epoch  28/50 | train +0.0000 | val +0.0000
+  epoch  29/50 | train +0.0000 | val +0.0000
+  epoch  30/50 | train +0.0000 | val +0.0000
+  epoch  31/50 | train +0.0000 | val +0.0000
+  epoch  32/50 | train +0.0000 | val +0.0000
+  epoch  33/50 | train +0.0000 | val +0.0000
+  epoch  34/50 | train +0.0000 | val +0.0000
+  epoch  35/50 | train +0.0000 | val +0.0000
+  epoch  36/50 | train +0.0000 | val +0.0000
+  epoch  37/50 | train +0.0000 | val +0.0000
+  epoch  38/50 | train +0.0000 | val +0.0000
+  epoch  39/50 | train +0.0000 | val +0.0000
+  epoch  40/50 | train +0.0000 | val +0.0000
+  epoch  41/50 | train +0.0000 | val +0.0000
+  epoch  42/50 | train +0.0000 | val +0.0000
+  epoch  43/50 | train +0.0000 | val +0.0000
+  epoch  44/50 | train +0.0000 | val +0.0000
+  epoch  45/50 | train +0.0000 | val +0.0000
+  epoch  46/50 | train +0.0000 | val +0.0000
+  epoch  47/50 | train +0.0000 | val +0.0000
+  epoch  48/50 | train +0.0000 | val +0.0000
+  epoch  49/50 | train +0.0000 | val +0.0000
+  epoch  50/50 | train +0.0000 | val +0.0000
+saved runs/l2ws/distributed/l2ws_N10_d1.0_seed2_distributed_fpresidual/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by distributed h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws-dist/d1.0]  1/30  DR  1909 it  |  L2WS  2821 it  |  x 0.68 (-47.8%)
+  [l2ws-dist/d1.0]  2/30  DR  2120 it  |  L2WS  2232 it  |  x 0.95 (-5.3%)
+  [l2ws-dist/d1.0]  3/30  DR  4000 it  |  L2WS  3773 it  |  x 1.06 (+5.7%)
+  [l2ws-dist/d1.0]  4/30  DR  1146 it  |  L2WS  2596 it  |  x 0.44 (-126.5%)
+  [l2ws-dist/d1.0]  5/30  DR  3806 it  |  L2WS  3696 it  |  x 1.03 (+2.9%)
+  [l2ws-dist/d1.0]  6/30  DR  4000 it  |  L2WS  4000 it  |  x 1.00 (+0.0%)
+  [l2ws-dist/d1.0]  7/30  DR  1233 it  |  L2WS  3766 it  |  x 0.33 (-205.4%)
+  [l2ws-dist/d1.0]  8/30  DR  4000 it  |  L2WS  4000 it  |  x 1.00 (+0.0%)
+  [l2ws-dist/d1.0]  9/30  DR  2376 it  |  L2WS  3326 it  |  x 0.71 (-40.0%)
+  [l2ws-dist/d1.0] 10/30  DR  2076 it  |  L2WS  1565 it  |  x 1.33 (+24.6%)
+  [l2ws-dist/d1.0] 11/30  DR  4000 it  |  L2WS  3660 it  |  x 1.09 (+8.5%)
+  [l2ws-dist/d1.0] 12/30  DR  1635 it  |  L2WS  1522 it  |  x 1.07 (+6.9%)
+  [l2ws-dist/d1.0] 13/30  DR   973 it  |  L2WS  1695 it  |  x 0.57 (-74.2%)
+  [l2ws-dist/d1.0] 14/30  DR  3798 it  |  L2WS  3451 it  |  x 1.10 (+9.1%)
+  [l2ws-dist/d1.0] 15/30  DR  3044 it  |  L2WS  3769 it  |  x 0.81 (-23.8%)
+  [l2ws-dist/d1.0] 16/30  DR  1002 it  |  L2WS  4000 it  |  x 0.25 (-299.2%)
+  [l2ws-dist/d1.0] 17/30  DR  3947 it  |  L2WS  4000 it  |  x 0.99 (-1.3%)
+  [l2ws-dist/d1.0] 18/30  DR  1013 it  |  L2WS  2081 it  |  x 0.49 (-105.4%)
+  [l2ws-dist/d1.0] 19/30  DR  4000 it  |  L2WS  3626 it  |  x 1.10 (+9.3%)
+  [l2ws-dist/d1.0] 20/30  DR  3926 it  |  L2WS  3603 it  |  x 1.09 (+8.2%)
+  [l2ws-dist/d1.0] 21/30  DR  2356 it  |  L2WS  4000 it  |  x 0.59 (-69.8%)
+  [l2ws-dist/d1.0] 22/30  DR  1000 it  |  L2WS  1625 it  |  x 0.62 (-62.5%)
+  [l2ws-dist/d1.0] 23/30  DR  2791 it  |  L2WS  2743 it  |  x 1.02 (+1.7%)
+  [l2ws-dist/d1.0] 24/30  DR  1109 it  |  L2WS  4000 it  |  x 0.28 (-260.7%)
+  [l2ws-dist/d1.0] 25/30  DR   974 it  |  L2WS  3401 it  |  x 0.29 (-249.2%)
+  [l2ws-dist/d1.0] 26/30  DR  1120 it  |  L2WS  2062 it  |  x 0.54 (-84.1%)
+  [l2ws-dist/d1.0] 27/30  DR  4000 it  |  L2WS  3617 it  |  x 1.11 (+9.6%)
+  [l2ws-dist/d1.0] 28/30  DR  1953 it  |  L2WS  1940 it  |  x 1.01 (+0.7%)
+  [l2ws-dist/d1.0] 29/30  DR  3224 it  |  L2WS  3354 it  |  x 0.96 (-4.0%)
+  [l2ws-dist/d1.0] 30/30  DR  2191 it  |  L2WS  1831 it  |  x 1.20 (+16.4%)
+  [l2ws-dist/d1.0] mean speed-up 0.82x   median 0.97x   min 0.25x   max 1.33x   win-rate 47% (14/30)
+  mean % reduction (per-instance average): mean=-51.9%  median=-2.7%
+saved runs/l2ws/distributed/l2ws_N10_d1.0_seed2_distributed_fpresidual/results.png
+saved runs/l2ws/distributed/l2ws_N10_d1.0_seed2_distributed_fpresidual/NOTES.md
+
+DONE -- runs/l2ws/distributed/l2ws_N10_d1.0_seed2_distributed_fpresidual/

@@ -1,0 +1,20 @@
+% DRAFT CAPTION: Iterations to convergence per method and density (median $\pm$ half-IQR
+% over 30 test instances); percentages and win-rate are in Figure 1. Bold = best (fewest
+% iterations) distributed method per column. (dagger) = centralized reference; '(global)'/
+% '(L=k)' = additional communication beyond the reported iteration count (see Sec. 5.2).
+
+\begin{tabular}{lcccccc}
+\toprule
+method & $\delta=0.2$ & $\delta=0.4$ & $\delta=0.5$ & $\delta=0.6$ & $\delta=0.8$ & $\delta=1.0$ \\
+\midrule
+DR & 1419 $\pm$ 229 & 900 $\pm$ 186 & 1146 $\pm$ 145 & 838 $\pm$ 107 & 2466 $\pm$ 434 & 2274 $\pm$ 1364 \\
+\midrule
+DR+GNN & \textbf{238 $\pm$ 23} & \textbf{350 $\pm$ 17} & \textbf{596 $\pm$ 69} & \textbf{428 $\pm$ 46} & \textbf{610 $\pm$ 6} & 1252 $\pm$ 59 \\
+L2WS-reg (dist.) (L=3) & 422 $\pm$ 28 & 434 $\pm$ 8 & 1052 $\pm$ 25 & 646 $\pm$ 85 & 1498 $\pm$ 46 & \textbf{1056 $\pm$ 106} \\
+L2WS-asym (dist.) (L=3) & 1634 $\pm$ 45 & 948 $\pm$ 52 & 1155 $\pm$ 27 & 808 $\pm$ 93 & 1550 $\pm$ 25 & 3526 $\pm$ 786 \\
+\midrule
+L2WS-reg (cent.)$^\dagger$ (global) & 164 $\pm$ 3 & 374 $\pm$ 21 & 703 $\pm$ 60 & 453 $\pm$ 49 & 994 $\pm$ 32 & 1016 $\pm$ 26 \\
+L2WS-asym (cent.)$^\dagger$ (global) & 1560 $\pm$ 54 & 308 $\pm$ 16 & 514 $\pm$ 26 & 387 $\pm$ 52 & 389 $\pm$ 19 & 906 $\pm$ 395 \\
+A2DR$^\dagger$ (global) & 1343 $\pm$ 327 & 673 $\pm$ 186 & 714 $\pm$ 107 & 512 $\pm$ 80 & 1997 $\pm$ 593 & 1091 $\pm$ 592 \\
+\bottomrule
+\end{tabular}

@@ -1,0 +1,102 @@
+writing all artifacts to runs/l2ws/distributed/l2ws_phase3_lr1e-2_ep50_d0.2/  (density=0.2  N=10  gamma=4.0  unroll=46  hidden_dim=32  n_rounds=3  shared_weights=True  update_type=residual  n_train=50  n_test=30  epochs=50  base_seed=3  lr=0.01  loss_mode=regression)
+======================================================================
+DISTRIBUTED L2WS -- message-passing GNN warm-start (prototype)
+h_w = L=3-round message-passing GNN (shared weights, residual update), PLAIN DR thereafter
+density=0.2  base_seed=3  gamma=4.0  unroll(train k)=46
+======================================================================
+  N=10  edges=16
+  train: 50 (20 discarded)  |  test: 30 (7 discarded)  |  val: 10 (1 discarded)
+  model: 10019 parameters (independent of N)
+
+training distributed h_w (loss_mode=regression, k=46 steps)...
+  precomputing 50 train + 10 val fixed-point targets (plain DR to convergence, no grad)...
+  epoch   1/50 | train +0.3480 | val +0.3379
+  epoch   2/50 | train +0.3390 | val +0.3379
+  epoch   3/50 | train +0.3394 | val +0.3394
+  epoch   4/50 | train +0.3410 | val +0.3579
+  epoch   5/50 | train +0.3916 | val +0.3387
+  epoch   6/50 | train +0.3472 | val +0.3586
+  epoch   7/50 | train +0.3709 | val +0.3546
+  epoch   8/50 | train +0.3543 | val +0.3546
+  epoch   9/50 | train +0.3542 | val +0.3535
+  epoch  10/50 | train +0.3527 | val +0.3528
+  epoch  11/50 | train +0.3525 | val +0.3527
+  epoch  12/50 | train +0.3524 | val +0.3527
+  epoch  13/50 | train +0.3524 | val +0.3527
+  epoch  14/50 | train +0.3524 | val +0.3527
+  epoch  15/50 | train +0.3524 | val +0.3527
+  epoch  16/50 | train +0.3524 | val +0.3527
+  epoch  17/50 | train +0.3594 | val +0.3949
+  epoch  18/50 | train +0.3948 | val +0.3940
+  epoch  19/50 | train +0.3936 | val +0.3932
+  epoch  20/50 | train +0.3933 | val +0.3932
+  epoch  21/50 | train +0.3933 | val +0.3932
+  epoch  22/50 | train +0.3933 | val +0.3932
+  epoch  23/50 | train +0.3933 | val +0.3932
+  epoch  24/50 | train +0.3933 | val +0.3932
+  epoch  25/50 | train +0.3933 | val +0.3932
+  epoch  26/50 | train +0.3933 | val +0.3932
+  epoch  27/50 | train +0.3933 | val +0.3932
+  epoch  28/50 | train +0.3933 | val +0.3932
+  epoch  29/50 | train +0.3933 | val +0.3932
+  epoch  30/50 | train +0.3933 | val +0.3932
+  epoch  31/50 | train +0.3933 | val +0.3932
+  epoch  32/50 | train +0.3933 | val +0.3932
+  epoch  33/50 | train +0.3933 | val +0.3932
+  epoch  34/50 | train +0.3933 | val +0.3932
+  epoch  35/50 | train +0.3933 | val +0.3932
+  epoch  36/50 | train +0.3933 | val +0.3932
+  epoch  37/50 | train +0.3933 | val +0.3932
+  epoch  38/50 | train +0.3933 | val +0.3932
+  epoch  39/50 | train +0.3933 | val +0.3932
+  epoch  40/50 | train +0.3933 | val +0.3932
+  epoch  41/50 | train +0.3933 | val +0.3932
+  epoch  42/50 | train +0.3933 | val +0.3932
+  epoch  43/50 | train +0.3933 | val +0.3932
+  epoch  44/50 | train +0.3933 | val +0.3932
+  epoch  45/50 | train +0.3933 | val +0.3932
+  epoch  46/50 | train +0.3933 | val +0.3932
+  epoch  47/50 | train +0.3933 | val +0.3932
+  epoch  48/50 | train +0.3933 | val +0.3932
+  epoch  49/50 | train +0.3933 | val +0.3932
+  epoch  50/50 | train +0.3933 | val +0.3932
+saved runs/l2ws/distributed/l2ws_phase3_lr1e-2_ep50_d0.2/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by distributed h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws-dist/d0.2]  1/30  DR  1674 it  |  L2WS  1654 it  |  x 1.01 (+1.2%)
+  [l2ws-dist/d0.2]  2/30  DR  1675 it  |  L2WS  1747 it  |  x 0.96 (-4.3%)
+  [l2ws-dist/d0.2]  3/30  DR  1614 it  |  L2WS  1605 it  |  x 1.01 (+0.6%)
+  [l2ws-dist/d0.2]  4/30  DR  1347 it  |  L2WS  1659 it  |  x 0.81 (-23.2%)
+  [l2ws-dist/d0.2]  5/30  DR  2084 it  |  L2WS  1619 it  |  x 1.29 (+22.3%)
+  [l2ws-dist/d0.2]  6/30  DR  1113 it  |  L2WS  1617 it  |  x 0.69 (-45.3%)
+  [l2ws-dist/d0.2]  7/30  DR  1285 it  |  L2WS  1600 it  |  x 0.80 (-24.5%)
+  [l2ws-dist/d0.2]  8/30  DR   899 it  |  L2WS  1622 it  |  x 0.55 (-80.4%)
+  [l2ws-dist/d0.2]  9/30  DR  1297 it  |  L2WS  1615 it  |  x 0.80 (-24.5%)
+  [l2ws-dist/d0.2] 10/30  DR  1447 it  |  L2WS  1696 it  |  x 0.85 (-17.2%)
+  [l2ws-dist/d0.2] 11/30  DR  2612 it  |  L2WS  1609 it  |  x 1.62 (+38.4%)
+  [l2ws-dist/d0.2] 12/30  DR  2187 it  |  L2WS  1712 it  |  x 1.28 (+21.7%)
+  [l2ws-dist/d0.2] 13/30  DR  2053 it  |  L2WS  1731 it  |  x 1.19 (+15.7%)
+  [l2ws-dist/d0.2] 14/30  DR  1357 it  |  L2WS  1656 it  |  x 0.82 (-22.0%)
+  [l2ws-dist/d0.2] 15/30  DR   675 it  |  L2WS  1598 it  |  x 0.42 (-136.7%)
+  [l2ws-dist/d0.2] 16/30  DR  1894 it  |  L2WS  1625 it  |  x 1.17 (+14.2%)
+  [l2ws-dist/d0.2] 17/30  DR  1690 it  |  L2WS  1629 it  |  x 1.04 (+3.6%)
+  [l2ws-dist/d0.2] 18/30  DR   793 it  |  L2WS  1709 it  |  x 0.46 (-115.5%)
+  [l2ws-dist/d0.2] 19/30  DR  1391 it  |  L2WS  1598 it  |  x 0.87 (-14.9%)
+  [l2ws-dist/d0.2] 20/30  DR  1730 it  |  L2WS  1622 it  |  x 1.07 (+6.2%)
+  [l2ws-dist/d0.2] 21/30  DR  1822 it  |  L2WS  1607 it  |  x 1.13 (+11.8%)
+  [l2ws-dist/d0.2] 22/30  DR  1080 it  |  L2WS  1697 it  |  x 0.64 (-57.1%)
+  [l2ws-dist/d0.2] 23/30  DR  1808 it  |  L2WS  1632 it  |  x 1.11 (+9.7%)
+  [l2ws-dist/d0.2] 24/30  DR  1284 it  |  L2WS  1624 it  |  x 0.79 (-26.5%)
+  [l2ws-dist/d0.2] 25/30  DR  1128 it  |  L2WS  1654 it  |  x 0.68 (-46.6%)
+  [l2ws-dist/d0.2] 26/30  DR  1255 it  |  L2WS  1730 it  |  x 0.73 (-37.8%)
+  [l2ws-dist/d0.2] 27/30  DR  1363 it  |  L2WS  1726 it  |  x 0.79 (-26.6%)
+  [l2ws-dist/d0.2] 28/30  DR  1554 it  |  L2WS  1721 it  |  x 0.90 (-10.7%)
+  [l2ws-dist/d0.2] 29/30  DR  1186 it  |  L2WS  1633 it  |  x 0.73 (-37.7%)
+  [l2ws-dist/d0.2] 30/30  DR  1554 it  |  L2WS  1724 it  |  x 0.90 (-10.9%)
+  [l2ws-dist/d0.2] mean speed-up 0.90x   median 0.86x   min 0.42x   max 1.62x   win-rate 37% (11/30)
+  mean % reduction (per-instance average): mean=-20.6%  median=-16.0%
+saved runs/l2ws/distributed/l2ws_phase3_lr1e-2_ep50_d0.2/results.png
+saved runs/l2ws/distributed/l2ws_phase3_lr1e-2_ep50_d0.2/NOTES.md
+
+DONE -- runs/l2ws/distributed/l2ws_phase3_lr1e-2_ep50_d0.2/

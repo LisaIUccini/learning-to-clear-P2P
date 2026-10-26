@@ -126,8 +126,19 @@ def main():
     test_specs, test_log, n_discarded_test = sample_level_width_perturbed_dataset(
         base_spec, n_instances=n_test - 1, seed=config.TRAIN_SEED + 1, pct_level=pct_level, pct_width=pct_width)
     test_specs = [base_spec] + test_specs
+    # SEPARATE validation set (own seed, no overlap with train or test) --
+    # used only for the per-epoch "val" loss printed during training/for
+    # hyperparameter choices; final reported numbers always come from
+    # test_specs. n_val=10, seed=TRAIN_SEED+2 (distinct from train's
+    # TRAIN_SEED and test's TRAIN_SEED+1). Previously this reused
+    # test_specs[:5] (a genuine train/val/test leak, fixed 2026-10-14).
+    n_val = 10
+    val_specs, val_log, n_discarded_val = sample_level_width_perturbed_dataset(
+        base_spec, n_instances=n_val - 1, seed=config.TRAIN_SEED + 2, pct_level=pct_level, pct_width=pct_width)
+    val_specs = [base_spec] + val_specs
     print(f"  train: {n_train} instances (slot 0 = original), {n_discarded_train} infeasible discarded  |  "
-          f"test: {n_test} instances (slot 0 = original), {n_discarded_test} infeasible discarded", flush=True)
+          f"test: {n_test} instances (slot 0 = original), {n_discarded_test} infeasible discarded  |  "
+          f"val: {n_val} instances (slot 0 = original), {n_discarded_val} infeasible discarded", flush=True)
     print("  x0: FRESH RANDOM per (instance, epoch) during training, fresh per test instance at eval", flush=True)
 
     print(f"\ntraining Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='{omega_mode}')", flush=True)
@@ -135,7 +146,7 @@ def main():
         mc, rho=gnn_rho, scale=gnn_scale, rho_slow=gnn_rho_slow, scale_slow=gnn_scale_slow,
         hidden_dim=hidden_dim))
     trainer = train_mod.Trainer(model, train_cfg)
-    history = trainer.fit(train_specs, val_specs=test_specs[:5], device=device)
+    history = trainer.fit(train_specs, val_specs=val_specs, device=device)
 
     trainer.save(os.path.join(out_dir, "phi_w.pt"))
     print(f"saved {os.path.join(out_dir, 'phi_w.pt')}", flush=True)

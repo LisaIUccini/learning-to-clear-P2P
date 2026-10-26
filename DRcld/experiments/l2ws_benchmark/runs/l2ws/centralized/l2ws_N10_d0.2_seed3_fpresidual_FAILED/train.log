@@ -1,0 +1,104 @@
+writing all artifacts to runs/l2ws/l2ws_N10_d0.2_seed3/  (density=0.2  N=10  gamma=4.0  unroll=46  hidden_dim=64  n_hidden_layers=1  n_train=50  n_test=30  epochs=50  base_seed=3  lr=0.003)
+======================================================================
+L2WS BENCHMARK -- Sambharya, Hall, Amos & Stellato (JMLR 2024)
+warm-start MLP h_w(theta) only, PLAIN DR thereafter (no per-step correction)
+density=0.2  base_seed=3  gamma=4.0  unroll(train k)=46
+======================================================================
+  [generator=old, c_old_range=(0.05, 0.18), c<b guaranteed: max(c)=0.18 < min(b)=0.2]
+  N=10  edges=16 (directed=32)  theta_dim=154  out_dim(=2N+E_directed)=52
+  train: 50 (20 discarded)  |  test: 30 (7 discarded)  |  val: 10 (1 discarded)
+
+training h_w (feedforward MLP, fixed-point residual loss, k=46 steps)...
+  epoch   1/50 | train +0.0113 | val +0.0076
+  epoch   2/50 | train +0.0042 | val +0.0031
+  epoch   3/50 | train +0.0021 | val +0.0018
+  epoch   4/50 | train +0.0017 | val +0.0015
+  epoch   5/50 | train +0.0016 | val +0.0015
+  epoch   6/50 | train +0.0015 | val +0.0015
+  epoch   7/50 | train +0.0015 | val +0.0015
+  epoch   8/50 | train +0.0015 | val +0.0014
+  epoch   9/50 | train +0.0014 | val +0.0014
+  epoch  10/50 | train +0.0014 | val +0.0014
+  epoch  11/50 | train +0.0014 | val +0.0015
+  epoch  12/50 | train +0.0015 | val +0.0015
+  epoch  13/50 | train +0.0015 | val +0.0015
+  epoch  14/50 | train +0.0015 | val +0.0014
+  epoch  15/50 | train +0.0015 | val +0.0015
+  epoch  16/50 | train +0.0016 | val +0.0015
+  epoch  17/50 | train +0.0015 | val +0.0015
+  epoch  18/50 | train +0.0015 | val +0.0015
+  epoch  19/50 | train +0.0015 | val +0.0015
+  epoch  20/50 | train +0.0016 | val +0.0015
+  epoch  21/50 | train +0.0015 | val +0.0015
+  epoch  22/50 | train +0.0016 | val +0.0016
+  epoch  23/50 | train +0.0015 | val +0.0016
+  epoch  24/50 | train +0.0015 | val +0.0015
+  epoch  25/50 | train +0.0015 | val +0.0015
+  epoch  26/50 | train +0.0015 | val +0.0015
+  epoch  27/50 | train +0.0015 | val +0.0015
+  epoch  28/50 | train +0.0015 | val +0.0015
+  epoch  29/50 | train +0.0016 | val +0.0015
+  epoch  30/50 | train +0.0015 | val +0.0015
+  epoch  31/50 | train +0.0015 | val +0.0015
+  epoch  32/50 | train +0.0015 | val +0.0015
+  epoch  33/50 | train +0.0016 | val +0.0015
+  epoch  34/50 | train +0.0015 | val +0.0015
+  epoch  35/50 | train +0.0015 | val +0.0015
+  epoch  36/50 | train +0.0015 | val +0.0015
+  epoch  37/50 | train +0.0015 | val +0.0015
+  epoch  38/50 | train +0.0015 | val +0.0015
+  epoch  39/50 | train +0.0015 | val +0.0015
+  epoch  40/50 | train +0.0016 | val +0.0015
+  epoch  41/50 | train +0.0015 | val +0.0015
+  epoch  42/50 | train +0.0015 | val +0.0015
+  epoch  43/50 | train +0.0015 | val +0.0015
+  epoch  44/50 | train +0.0015 | val +0.0015
+  epoch  45/50 | train +0.0015 | val +0.0015
+  epoch  46/50 | train +0.0015 | val +0.0015
+  epoch  47/50 | train +0.0015 | val +0.0015
+  epoch  48/50 | train +0.0015 | val +0.0015
+  epoch  49/50 | train +0.0015 | val +0.0015
+  epoch  50/50 | train +0.0015 | val +0.0015
+saved runs/l2ws/l2ws_N10_d0.2_seed3/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws/d0.2]  1/30  DR  1674 it  |  L2WS  2193 it  |  x 0.76 (-31.0%)
+  [l2ws/d0.2]  2/30  DR  1675 it  |  L2WS  2292 it  |  x 0.73 (-36.8%)
+  [l2ws/d0.2]  3/30  DR  1614 it  |  L2WS  2028 it  |  x 0.80 (-25.7%)
+  [l2ws/d0.2]  4/30  DR  1347 it  |  L2WS  2193 it  |  x 0.61 (-62.8%)
+  [l2ws/d0.2]  5/30  DR  2084 it  |  L2WS  2142 it  |  x 0.97 (-2.8%)
+  [l2ws/d0.2]  6/30  DR  1113 it  |  L2WS  2080 it  |  x 0.54 (-86.9%)
+  [l2ws/d0.2]  7/30  DR  1285 it  |  L2WS  2110 it  |  x 0.61 (-64.2%)
+  [l2ws/d0.2]  8/30  DR   899 it  |  L2WS  2108 it  |  x 0.43 (-134.5%)
+  [l2ws/d0.2]  9/30  DR  1297 it  |  L2WS  2100 it  |  x 0.62 (-61.9%)
+  [l2ws/d0.2] 10/30  DR  1447 it  |  L2WS  2257 it  |  x 0.64 (-56.0%)
+  [l2ws/d0.2] 11/30  DR  2612 it  |  L2WS  2039 it  |  x 1.28 (+21.9%)
+  [l2ws/d0.2] 12/30  DR  2187 it  |  L2WS  2284 it  |  x 0.96 (-4.4%)
+  [l2ws/d0.2] 13/30  DR  2053 it  |  L2WS  2280 it  |  x 0.90 (-11.1%)
+  [l2ws/d0.2] 14/30  DR  1357 it  |  L2WS  2183 it  |  x 0.62 (-60.9%)
+  [l2ws/d0.2] 15/30  DR   675 it  |  L2WS  1985 it  |  x 0.34 (-194.1%)
+  [l2ws/d0.2] 16/30  DR  1894 it  |  L2WS  1987 it  |  x 0.95 (-4.9%)
+  [l2ws/d0.2] 17/30  DR  1690 it  |  L2WS  2127 it  |  x 0.79 (-25.9%)
+  [l2ws/d0.2] 18/30  DR   793 it  |  L2WS  2233 it  |  x 0.36 (-181.6%)
+  [l2ws/d0.2] 19/30  DR  1391 it  |  L2WS  2053 it  |  x 0.68 (-47.6%)
+  [l2ws/d0.2] 20/30  DR  1730 it  |  L2WS  2155 it  |  x 0.80 (-24.6%)
+  [l2ws/d0.2] 21/30  DR  1822 it  |  L2WS  2049 it  |  x 0.89 (-12.5%)
+  [l2ws/d0.2] 22/30  DR  1080 it  |  L2WS  2256 it  |  x 0.48 (-108.9%)
+  [l2ws/d0.2] 23/30  DR  1808 it  |  L2WS  2150 it  |  x 0.84 (-18.9%)
+  [l2ws/d0.2] 24/30  DR  1284 it  |  L2WS  2135 it  |  x 0.60 (-66.3%)
+  [l2ws/d0.2] 25/30  DR  1128 it  |  L2WS  2180 it  |  x 0.52 (-93.3%)
+  [l2ws/d0.2] 26/30  DR  1255 it  |  L2WS  2285 it  |  x 0.55 (-82.1%)
+  [l2ws/d0.2] 27/30  DR  1363 it  |  L2WS  2278 it  |  x 0.60 (-67.1%)
+  [l2ws/d0.2] 28/30  DR  1554 it  |  L2WS  2284 it  |  x 0.68 (-47.0%)
+  [l2ws/d0.2] 29/30  DR  1186 it  |  L2WS  2141 it  |  x 0.55 (-80.5%)
+  [l2ws/d0.2] 30/30  DR  1554 it  |  L2WS  2251 it  |  x 0.69 (-44.9%)
+  [l2ws/d0.2] mean speed-up 0.69x   median 0.66x   min 0.34x   max 1.28x   win-rate 3% (1/30)
+  mean % reduction (per-instance average): mean=-57.2%  median=-51.8%
+saved runs/l2ws/l2ws_N10_d0.2_seed3/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots + raw-trajectory JSON files to runs/l2ws/l2ws_N10_d0.2_seed3/instance_plots/
+saved runs/l2ws/l2ws_N10_d0.2_seed3/NOTES.md
+
+DONE -- runs/l2ws/l2ws_N10_d0.2_seed3/

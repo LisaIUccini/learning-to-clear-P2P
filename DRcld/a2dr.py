@@ -107,6 +107,7 @@ class A2DRResult:
     residual: List[float] = field(default_factory=list)           # ||v^{k+1}-v^k||, the step ACTUALLY taken
     shadow_residual: List[float] = field(default_factory=list)    # ||xbar^{k+1}-xbar^k||, same convention as DRResult
     cost: List[float] = field(default_factory=list)               # J(xbar^k)
+    violation: List[float] = field(default_factory=list)          # dist(xbar^k, X_loc), same convention as DRResult
     aa_accepted: List[bool] = field(default_factory=list)         # was the AA candidate used at this iteration?
 
 
@@ -156,6 +157,7 @@ def run_a2dr(net, cfg: A2DRConfig, record: bool = True) -> A2DRResult:
     residual: List[float] = []
     shadow_residual: List[float] = []
     cost: List[float] = []
+    violation: List[float] = []
     aa_accepted: List[bool] = []
     converged = False
     k_run = 0
@@ -232,6 +234,7 @@ def run_a2dr(net, cfg: A2DRConfig, record: bool = True) -> A2DRResult:
                 shadow = net.project_reciprocity(v)
                 shadow_residual.append(float(torch.linalg.vector_norm(shadow - prev_shadow)))
                 cost.append(float(net.cost_at(shadow)))
+                violation.append(float(net.dist_to_Xloc(shadow)))
                 prev_shadow = shadow
                 aa_accepted.append(take_aa)
 
@@ -241,4 +244,5 @@ def run_a2dr(net, cfg: A2DRConfig, record: bool = True) -> A2DRResult:
 
     net.unflatten(v)  # leave net's state consistent with the returned iterate
     return A2DRResult(n_iter=k_run, converged=converged, residual=residual,
-                       shadow_residual=shadow_residual, cost=cost, aa_accepted=aa_accepted)
+                       shadow_residual=shadow_residual, cost=cost, violation=violation,
+                       aa_accepted=aa_accepted)

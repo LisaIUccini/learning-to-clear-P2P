@@ -1,0 +1,772 @@
+% \documentclass{l4dc2026}
+% If your paper is accepted, please use the "final" option
+% for the camera-ready version
+\documentclass[final]{l4dc2026}
+
+
+% The following packages will be automatically loaded:
+% amsmath, amssymb, natbib, graphicx, url, algorithm2e
+
+\title[Learning to Clear Peer-to-peer Electricity Markets]{Learning to Clear Peer-to-peer Electricity Markets}
+\usepackage{times}
+\usepackage{appendix}
+% \newtheorem{definition}{Definition}
+% \newtheorem{proposition}{Proposition}
+\newtheorem{assumption}{Assumption}
+% \newtheorem{theorem}{Theorem}
+% \newtheorem{lemma}{Lemma}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{algorithm, algorithmic}
+\usepackage{balance}
+% Use \Name{Author Name} to specify the name.
+% If the surname contains spaces, enclose the surname
+% in braces, e.g. \Name{John {Smith Jones}} similarly
+% if the name has a "von" part, e.g \Name{Jane {de Winter}}.
+% If the first letter in the forenames is a diacritic
+% enclose the diacritic in braces, e.g. \Name{{\'E}louise Smith}
+
+% Two authors with the same address
+% \coltauthor{\Name{Author Name1} \Email{abc@sample.com}\and
+%  \Name{Author Name2} \Email{xyz@sample.com}\\
+%  \addr Address}
+
+% Three or more authors with the same address:
+\coltauthor{\Name{Lisa {Innocenti Uccini}} \Email{lisaiu@kth.se}\\
+ \Name{Andrea Martin} \Email{andrmar@kth.se}\\
+ \Name{Giuseppe Belgioioso} \Email{giubel@kth.se}\\
+ \addr Department of Decision and Control Systems, KTH Royal Institute of Technology, Stockholm, Sweden
+ }
+
+% Authors with different addresses:
+% \author{%
+%  \Name{} \Email{}\\
+%  \addr Address 1
+%  \AND
+%  \Name{} \Email{}\\
+%  \addr Address 2%
+%  \AND
+%  \Name{} \Email{}\\
+%  \addr Address 2%
+% }
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}%
+Peer-to-peer (P2P) electricity markets are naturally modeled as generalized games, whose equilibria are computed through distributed algorithms. These algorithms typically require many iterations, each involving a round of communication among trading prosumers, making market clearing a computational bottleneck.
+Since P2P markets are cleared repeatedly over the same community of prosumers, we propose to use historical market data to speed up the clearing of future instances. Specifically, we augment a distributed Douglas--Rachford (DR) scheme with a learned correction, parametrized by a graph neural network and trained offline on past market instances. The resulting algorithm is fully distributed, introduces no additional communication, and is guaranteed by design to converge to a variational equilibrium for any trained parameters. Numerical results show that it reduces the number of iterations, and hence of communication rounds.
+\end{abstract}
+
+\begin{keywords}%
+  \textcolor{red}{List of keywords}%
+\end{keywords}
+
+
+
+\section{Introduction}
+The ongoing transition of power systems, driven by the large-scale deployment of distributed energy resources at the grid edge, is reshaping the role of end users. Consumers are increasingly becoming prosumers: agents that not only consume and produce energy, but also participate actively in system operation~\citep{parag2016electricity, tushar2020peer}. As a result, conventional top-down electricity markets are becoming less suited to these new forms of participation, motivating more decentralized paradigms~\citep{pinson2023may}. Peer-to-peer (P2P) energy markets have emerged as a promising framework for this transition, enabling prosumers to exchange energy directly with one another over the distribution network~\citep{liu2019peer}, as reflected in a growing number of pilot projects and demonstrations~\citep{zhang2017review, ableitner2019quartierstrom, mengelkamp2018designing}.\looseness-1
+
+Two main approaches have been used to model how energy exchanges are determined in P2P markets~\citep{sousa2019peer,tushar2018transforming,islam2024review}. Optimization-based formulations cast market clearing as a single welfare-maximization problem, solved either by a central operator~\citep{cadre_peer-peer_2020} or by decomposing the welfare objective across prosumers via consensus schemes~\citep{sorin2018consensus, baroche2019prosumer, moret2020loss}. Game-theoretic formulations instead model strategic interactions, defining market outcomes through individually optimal decisions: each prosumer minimizes its own local cost while trading with its neighbors. Because these decisions are coupled through shared trading and network constraints, each agent's feasible set depends on the decisions of others, leading to a generalized Nash equilibrium problem (GNEP). Its equilibria represent stable market outcomes in which no prosumer can unilaterally improve its objective~\citep{belgioioso2022operationally,behrunani2023designing,tushar2018transforming}. Importantly, this perspective need not sacrifice social efficiency: under suitable assumptions on trading prices, the set of variational equilibria (v-GNE) of the P2P game coincides with the set of social-welfare optima~\citep{cadre_peer-peer_2020}, while retaining the economic properties associated with marginal pricing~\citep{conejo2023marginal}.
+
+Clearing the market thus amounts to computing a v-GNE. Since no prosumer has access to the global state, the equilibrium must be computed through distributed algorithms, in which each agent iteratively updates its decisions using only local information and messages exchanged with its trading partners~\citep{tushar2018transforming}. Consensus-based schemes, such as consensus-ADMM, are the workhorse of distributed market clearing~\citep{sorin2018consensus, baroche2019prosumer, moret2020loss}, while primal-dual and forward-backward methods have been developed specifically for distributed GNE seeking~\citep{belgioioso2022distributed}, possibly with a coordinating entity handling network constraints or price fairness~\citep{liu2017energy, belgioioso2022operationally, behrunani2023designing}. Under standard monotonicity assumptions, these methods converge to a v-GNE~\citep{belgioioso2022distributed, briceno2013monotone}. Such guarantees, however, are asymptotic, and say little about the transient that determines whether a market can be cleared within its trading interval. This gap is particularly critical in P2P markets, where each iteration is not merely a computational step but a round of communication over the trading network. The iteration count therefore determines the coordination cost of clearing~\citep{baroche2019prosumer},  and even for a community of ten prosumers it can exceed a thousand of rounds per instance (Section~\ref{sec:numerical}).
+Crucially, P2P markets are not cleared once, but repeatedly, e.g., at every trading interval, over the same community of prosumers. Market instances are therefore not arbitrary, but follow an underlying distribution, of which historical market data provide samples.
+Classical acceleration schemes for fixed-point iterations, such as Anderson-accelerated DR~\citep{fu2020anderson} and the quasi-Newton SuperMann framework~\citep{themelis2019supermann}, cannot exploit this structure: they are data-agnostic and worst-case oriented, solving each instance from scratch.
+%P2P markets, however, are cleared repeatedly over the same community of prosumers, so that instances are not arbitrary, but follow an underlying distribution, of which historical market data provide samples. Exploiting this distribution is precisely what these generic acceleration schemes cannot do.
+Moreover, their convergence safeguards and line searches evaluate global residuals at every iteration, which in a P2P market requires system-wide coordination, thus consuming the very communication they aim to save. Accelerating P2P market clearing therefore calls for a method that (i) exploits historical data to improve performance on the instances encountered in practice, (ii) retains convergence to a v-GNE on every instance, since its limit defines a binding market allocation, and (iii) relies only on local information and on the messages already exchanged by the baseline algorithm.
+
+%Learning to optimize (L2O) exploits precisely this distribution, using data to improve the average-case performance of iterative solvers on recurring problem instances~\citep{chen2022learning}. Existing approaches, however, involve different trade-offs.
+Learning to optimize (L2O) addresses (i), using data to improve the average-case performance of iterative solvers on recurring problem instances~\citep{chen2022learning}. Existing approaches, however, trade it off against (ii) or (iii).
+Learning the update rule through unrolled training~\citep{andrychowicz2016learning}
+%\textcolor{red}{\citep{mazumdar2020gradient}}
+is effective in practice, but sacrifices convergence guarantees, a critical drawback when the iterates are market allocations. Guarantees can be recovered by restricting what is learned, for instance warm starts~\citep{sambharya2024learning} or hyperparameters within admissible ranges~\citep{ichnowski2021accelerating, doerks2025learning}, which leave the form of the update unchanged, and thus offer limited control over the transient.
+ Alternatively, a freely learned update can be safeguarded by a fallback to the nominal iteration~\citep{heaton2023safeguarded}, which in turn requires a global acceptance test at every iteration, violating (iii). In game-theoretic settings, learning has primarily been used to fit surrogate models or implicit networks that approximate or predict equilibria directly
+ ~\citep{bichler2021learning, wang2020multi, jungel2025wardropnet, bemporad2026learning, mckenzie2024three}, rather than to accelerate an equilibrium-seeking algorithm.
+
+\emph{Contributions:} In this work, we use historical market data to accelerate distributed market clearing, actively shaping the transient to reduce the number of iterations, and hence of communication rounds, while satisfying (i)-(iii).
+%while preserving convergence by design and relying only on local information.
+
+%- the main idea of the paper: using historical market data to speed up clearing of decentralized energy markets should be spelled out explicitly throughout the paper.
+
+%-Consider to include in the first page an illustration to explain your approach.
+
+\medskip
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \subsection{Notation}
+%A short section on basic notation, and VI definitions, e.g. SOL operator, may be helpful.
+\emph{Notation:} Throughout the paper, $n$ indexes prosumers, while $k$ indexs algorithmic iterations. When a finite dataset is considered, $i$ indexes samples, e.g., $x_n^{k,i}$ denotes the local variable of agent $n$ at iteration $k$ for sample $i$, sample indices are omitted when referring to a generic instance. When relevant, the dependence of a quantity on trainable parameters is made explicit through functional notation, e.g., $x^{k,i}(w)$, and is otherwise omitted for simplicity. A superscript $^*$ denotes an equilibrium or an optimizer, according to context. The operator $\operatorname{col}((x_n)_{n\in\mathcal N})$ denotes the column-wise stacking of the vectors $x_n$. For a set $\mathcal S$, $\operatorname{dist}(x,\mathcal S)$ denotes the Euclidean distance of $x$ from $\mathcal S$.
+
+Given a nonempty closed convex set $\mathcal X\subseteq\mathbb R^d$ and a mapping $F:\mathbb R^d\to\mathbb R^d$, the solution set of the variational inequality $\operatorname{VI}(\mathcal X,F)$ is
+$\operatorname{SOL}(\mathcal X,F):=\{x^\star\in\mathcal X\mid\langle F(x^\star),x-x^\star\rangle\geq 0,\ \forall x\in\mathcal X\}$.
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Problem Formulation}
+\label{sec:probformulation}
+In this section, we formalize the problem of designing an efficient market-clearing algorithm for P2P energy markets. Following~\citep{cadre_peer-peer_2020}, we first model prosumer interactions as generalized noncooperative games with reciprocity constraints. Then, we state key convergence and distributed-implementability requirements that underpin the design of market-clearing algorithms.
+
+%____________________________________________________%
+\subsection{Game-theoretic model of P2P energy market}
+We consider a P2P energy market whose trading network is modeled as a connected undirected graph $\mathcal{G} = (\mathcal{N}, \mathcal{E})$, where
+$\mathcal{N} = \{0, \ldots, N{-}1\}$ is a set of $N \in \mathbb{N}$~nodes
+and $\mathcal{E} \subseteq \mathcal{N} \times \mathcal{N}$
+encodes peer-to-peer trading links.
+Let $\Omega_n \subseteq \mathcal{N}$ denote the set of neighbors of $n\in\mathcal{N}$, namely, the prosumers that $n$ can directly
+trade with, defining its local energy community.
+
+Each prosumer~$n$ controls three types of decision variables: flexible demand $D_n > 0$, which represents the energy consumed to achieve a maximum comfort level by meeting a  pre-specified target demand $D_n^{\text{ref}}$; controllable local generation $G_n > 0$ (also termed flexibility activation), consisting of dispatchable resources such as micro combined-heat-and-power (CHP) units or storage facilities that the agent can actively modulate; and bilateral trades $q_{mn} \in \mathbb{R}$ for each $m \in \Omega_n$, where
+$q_{mn} > 0$ means $n$ buys from~$m$ and $q_{mn} < 0$ means $n$
+sells to~$m$. Each node~$n$ is also equipped with a stochastic renewable energy source (RES) generation
+$\Delta G_n \geq 0$ (e.g., photovoltaic output), treated as a
+fixed parameter not subject to optimization.
+Overall, the local decision vector of prosumer $n \in \mathcal{N}$ is
+$x_n = (D_n,\, G_n,\, q_n^\top)^\top \in \mathbb{R}^{2+|\Omega_n|}$,
+where $q_n = (q_{mn})_{m \in \Omega_n}$, whereas the vector $x=(x_n)_{n\in\mathcal{N}} \in \mathbb{R}^{n_x}$ collects all prosumers' decisions, with $n_x:=\sum_{n\in\mathcal{N}}{(2+|\Omega_n|)}$.
+
+We collect the data of prosumer $n$ (bounds on its variables and the target demand appearing in \ref{eq:local_set}, RES output, and the cost
+coefficients introduced in \ref{eq:cost}) into a parameter vector $\theta_n\in\Theta_n\subseteq\mathbb{R}^{p_n}$, where $p_n$ is the number of components and its dimension depends on $|\Omega_n|$. So that the market is parametric in $\theta = (\theta_n)_{n\in\mathcal{N}} \in \Theta := \prod_{n\in\mathcal{N}} \Theta_n \subseteq \mathbb{R}^{p}$, where $p := \sum_{n\in\mathcal{N}} p_n$. A P2P market-clearing instance is a pair $\eta = (\mathcal{G}, \theta)$ with $\mathcal{G}$ a trading graph and $\theta$ compatible with $\mathcal{G}$.
+
+The local feasibility set of prosumer~$n \in \mathcal{N}$ collects all operational and energy balance constraints that involve only its own decision
+variables, namely,
+%
+\begin{equation}\label{eq:local_set}
+  \mathcal{X}_n^{\mathrm{\text{loc}}}(\theta_n) \!=\!
+  \left\{\! x_n :
+  \begin{array}{l}
+    D_n\in[\underline{D}_n, \overline{D}_n],\;
+    G_n\in[\underline{G}_n, \overline{G}_n],\;
+    D_n = G_n + \Delta G_n + Q_n,\\[2pt]
+    |q_{mn}| \leq \kappa_{mn},\;\forall m \in \Omega_n,
+  \end{array}
+  \!\right\}\!,
+\end{equation}
+%
+where $Q_n = \sum_{m \in \Omega_n} q_{mn}$ is the net import at
+node~$n$, and $\kappa_{mn} = \kappa_{nm} > 0$ is the maximum
+interconnection capacity. Since $\mathcal{X}_n^{\mathrm{\text{loc}}}(\theta_n)$ is
+described by finitely many affine constraints, it is a compact polyhedron. Let $\mathcal{X}^{\text{loc}}(\theta)=\prod_{n\in\mathcal{N}} \mathcal{X}^{\text{loc}}_n(\theta_n)$ be the local feasibility set of the market.
+
+Trading prosumers are coupled through a trade reciprocity condition:
+\begin{equation}\label{eq:reciprocity}
+  q_{mn} + q_{nm} \leq 0,
+  \qquad \forall\, \{n,m\} \in \mathcal{E}.
+  \vspace{-0.2cm}
+\end{equation}
+Modeling reciprocity as an inequality rather than an equality allows the energy offered to be only partially absorbed. We collect the coupling constraints in the reciprocity set $\mathcal{X}^{\mathrm{rec}} =
+ \{x \in\mathbb{R}^{n_x}: \eqref{eq:reciprocity} \text{ holds}\}$, a polyhedral cone obtained as the
+intersection of $|\mathcal{E}|$ half-spaces, each involving a distinct pair of
+trade variables.
+Each prosumer~$n$ aims to minimize a local cost function
+\begin{equation}\label{eq:cost}
+J_n(x_n; \theta_n) = \underbrace{\tfrac{1}{2} a_n G_n^2 + b_n G_n + d_n}_{C_n(G_n, \theta_n)} + \underbrace{{\textstyle\sum_{m \in \Omega_n}} c_{nm}\, q_{mn}}_{\tilde{C}_n(q_n; \theta_n)} - \underbrace{(\tilde{b}_n-\tilde{a}_n (D_n - D_n^{\text{ref}})^2)}_{U_n(D_n; \theta_n)},
+\end{equation}
+whose three components are the convex quadratic generation cost $C_n$, the trading cost $\tilde C_n$, whose coefficients $c_{nm}>0$ encode per-unit trading preferences, e.g., reflecting proximity or policy-induced charges, and the usage comfort $U_n$, strictly concave and maximized at $D_n^{\text{ref}}$, capturing a preference for a target consumption level. All parameters $a_n, b_n, d_n, \tilde{a}_n, \tilde{b}_n$ are positive.
+
+Given a specific P2P market-clearing instance $\eta = (\mathcal{G}, \theta)$, where $\theta\in\Theta$ is the parameter vector, each prosumer~$n$ faces the following parametric optimization problem:
+%
+%\begin{equation}\label{eq:game}
+%   \min_{x_n}\, J_n(x_n; \theta_n) \quad
+%  \text{s.t.}\;\; x_n \in \mathcal{X}_n^{\mathrm{\text{loc}}}(\theta_n),\;\;
+% (x_n,x_{-n}) \in  \mathcal{X}^{\mathrm{rec}}.
+%\end{equation}
+\begin{equation}\label{eq:game}
+\begin{aligned}
+   \min_{x_n}\quad  J_n(x_n; \theta_n) \quad
+   \text{s.t.}\quad
+    x_n \in \mathcal{X}_n^{\mathrm{\text{loc}}}(\theta_n), \quad (x_n,x_{-n}) \in \mathcal{X}^{\mathrm{rec}}.
+\end{aligned}
+\end{equation}
+
+Note that prosumers' decisions on local operational and trading profiles are coupled through the reciprocity constraints in $\mathcal{X}^{\mathrm{rec}}$, making the collection of problems \eqref{eq:game}, one for each prosumer $n\in \mathcal{N}$, a generalized noncooperative game \citep{facchinei2010generalized}. Solutions to such game are known as generalized Nash equilibria (GNEs), as defined next.
+\begin{definition}[GNE]\label{def:gne}
+A feasible tuple of strategies $x^\star = (x^\star_0, \ldots,x^\star_{N-1}) \in \mathcal{X}(\theta)$, with $\mathcal{X}(\theta):= \mathcal{X}^{\mathrm{\text{loc}}}(\theta) \cap \mathcal{X}^{\mathrm{rec}}$, is a GNE of the game~\eqref{eq:game} if, for all $n \in \mathcal{N}$, $x^\star_n$ solves \eqref{eq:game}.
+{\hfill $\square$}
+\end{definition}
+
+Such $x^*$ represents a strategically-stable market outcome at which no prosumer can unilaterally reduce their cost by deviating to a feasible strategy.
+Among the possibly many GNEs, we focus on the variational GNE, a refinement with uniform marginal price across each trade.
+%In particular, in this work we focus on a refinement of Definition~\ref{def:gne}, the
+%variational GNE, obtained by restricting to the solutions of a variational
+%inequality.
+\begin{definition}[v-GNE]\label{def:vgne}
+A v-GNE of~\eqref{eq:game} is a
+tuple of strategies $x^\star \in \mathcal{X}(\theta)$ solving the
+$\mathrm{VI}(\mathcal{X}(\theta), F(x;\theta))$,
+%that is, \begin{equation}\label{eq:vi}
+%  \langle F(x^\star;\theta),\, x - x^\star \rangle \geq 0
+%  \qquad \forall\, x \in \mathcal{X}(\theta),
+%\end{equation}
+where $F(x;\theta):= \operatorname{col}\big(\nabla_{x_n} J_n(x_n;\theta_n)\big)_{n \in \mathcal{N}}$
+is the pseudo-gradient of the game.{\hfill $\square$}
+\end{definition}
+
+We denote the set of all v-GNEs of \eqref{eq:game} as
+$ \mathrm{SOL}\big(\mathcal{X}(\theta),
+  F(x;\theta)\big)
+$. In Lemma~\ref{lem:existence} in Section~\ref{sec:guarantees}, we prove that this set is nonempty.
+
+%____________________________________________________%
+\subsection{Distributed market-clearing design objectives}
+\label{sec:2b}
+
+In practice, analytical solutions of \eqref{eq:game} are unavailable, and a solution is instead computed iteratively. Since P2P energy markets are decentralized, clearing must be carried out through distributed schemes in which each prosumer updates its operational profile based on local data and messages exchanged \citep{baroche2019prosumer, belgioioso2022operationally, cadre_peer-peer_2020}.
+
+%Motivated by the large number of iterations, each requiring a round of communication among trading prosumers, of these methods
+%Motivated by the communication bottleneck of these methods
+%Motivated by the limitations of these iterative methods
+Motivated by the large number of iterations, each requiring a round of communication among trading prosumers, of these methods \citep{pinson2023may, baroche2019prosumer}, we seek a market-clearing scheme that improves performance on the instances encountered in practice while retaining convergence guarantees and distributed implementability.
+More generally, a distributed iterative market-clearing scheme can be described by a collection of local update maps $\pi=\{\pi_n^k\}_{n\in\mathcal{N}, k\geq0}$ executed by prosumers. Different choices of $\pi$ correspond to different distributed equilibrium-seeking algorithms. In particular, at iteration $k$, agent $n$ updates its local variables according to
+%Formally, we seek a single update mapping $\pi$, shared by all prosumers, of the form
+
+%
+\begin{equation}\label{eq:recursionN}
+  x_n^{k+1} = \pi^k_n\Big(\{x_n^t\}_{0\leq t\leq k},\, \theta_n,\,
+  \{q_{nm}^k\}_{m\in\Omega_n}\Big).
+\end{equation}
+%
+Here, $q_{nm}^k$ denotes the trade information received from neighbors, so that each update is computed using only local data, and messages exchanged. Among all such distributed schemes, we consider the class $\Pi$ of structurally-admissible schemes whose local update mappings are well defined for arbitrary neighborhood cardinalities and are permutation equivariant with respect to the ordering of neighbor-indexed information. These properties allow the same algorithmic construction to be applied to market instances with different numbers of prosumers and trading topologies.
+
+P2P markets are cleared repeatedly (e.g. at each trading interval) over the same community of prosumers. We denote by $\mathbb{P}$ the distribution over market-clearing instances, of which historical data provide samples. Rather than clearing each instance from scratch with a generic algorithm, we pose the design of the update rule as an optimization problem of the form
+%
+\begin{subequations}
+\label{eq:optimal-iteration-design-problem}
+     \begin{align}
+         \label{eq:meta_loss}
+          \inf_{\pi \in \Pi} &~~ \mathbb{E}_{\eta \sim \mathbb{P}} \left[\mathcal{L}_K(\{x^k\}_{k=0}^{K}, \eta)\right]\\
+         \text{s.t.} &~~ \eqref{eq:recursionN} \text{ hold},
+  \quad \forall x^0 \in \mathbb{R}^{n_x},~ \forall n \in \mathcal{N}, \label{eq:meta_loss_constr1}\\
+         %&~~x^t\rightarrow x^* \in \mathrm{SOL}\big(\mathcal{X}(\theta),   F(x;\theta)\big), \quad \forall\, \eta,\ \forall\, x^0,\\
+         &~~ \lim_{k \to \infty}\operatorname{dist}(x^k, \mathrm{SOL}\big(\mathcal{X}(\theta),   F(x;\theta)\big)) = 0,\label{eq:meta_loss_constr2}%\\
+         \end{align}
+ \end{subequations}
+%
+The restriction in $\pi$ encodes the distributed and structural requirements introduced above, while~\eqref{eq:meta_loss_constr2} enforces convergence to a v-GNE for every admissible market instance, already provided by classical market-clearing schemes. The objective~\eqref{eq:meta_loss} instead favors improved finite-time performance over the instances encountered in practice, as represented by historical data. An ideal criterion would measure how rapidly the market iterates approach the v-GNE set. A natural choice is
+%
+\begin{equation}
+\label{eq:ideal_loss}
+    \mathcal{L}^{\mathrm{ideal}}_K
+    \left(\{x^k\}_{k=0}^{K},\eta\right)
+    :=
+    \sum_{k=1}^{K}
+    \alpha_k\,
+    \operatorname{dist}
+    \left(x^k,\mathrm{SOL}\big(\mathcal{X}(\theta),   F(x;\theta)\big)\right),
+\end{equation}
+%
+where $\alpha_k>0$ are iteration weights. This criterion penalizes trajectories that remain far from the equilibrium set over the finite horizon.  However, evaluating~\eqref{eq:ideal_loss} requires knowledge of $\mathrm{SOL}\big(\mathcal{X}(\theta),   F(x;\theta)\big)$, which is precisely the object to be computed and is therefore generally unavailable a priori. Instead, we use a tractable finite-horizon surrogate $\mathcal{L}_K$, whose concrete form is introduced in Appendix~\ref{app:gnn1}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Learning-Enhanced Market Clearing}
+\label{sec:learned_dr}
+We develop a market-clearing algorithm that leverages historical market data to improve finite-time performance, while retaining distributed implementability, applicability across heterogeneous markets, and convergence to a v-GNE, as required by the design problem in Section~\ref{sec:2b}.
+
+Rather than searching over arbitrary admissible update rules $\pi\in\Pi$, we consider a structured class obtained by augmenting a fixed distributed equilibrium-seeking algorithm with a learned component aimed at improving its transient behavior~\citep{martin_learning_2026}.
+Specifically, we use a distributed DR splitting method as the baseline solver. The learned component enters as an additive perturbation to the iteration, constructed to satisfy the distributed, and convergence requirements of the market-clearing problem, while the baseline fixed-point structure is retained.
+
+%We first present the learning-enhanced DR algorithm in Section~\ref{sec:3a}. Section~\ref{sec:gnn} then introduces the Graph Neural Network (GNN) parametrization of the learned component, leading to the specific form of the distributed update rule~\eqref{eq:recursionN}. Finally, Section~\ref{app:gnn1} formulates the corresponding offline learning problem and introduces the finite-horizon training loss.
+%_______________________________________%
+\subsection{Learning-enhanced Douglas--Rachford algorithm} \label{sec:3a}
+
+Given a market-clearing instance $\eta = (\mathcal{G}, \theta)$, the proposed scheme is summarized in Algorithm~\ref{alg:learned_dr}, executed in parallel by every node $n\in\mathcal{N}$.
+
+
+\begin{algorithm}[H]
+\caption{Learning-enhanced Market Clearing}
+\label{alg:alg1}
+\label{alg:learned_dr}
+\begin{algorithmic}[1]
+\STATE \textbf{Input (local data):} $\theta_n \in \Theta_n$
+\STATE \textbf{Parameters:} relaxation $\lambda \in (0,2)$; step size $\gamma > 0$; tolerance $\epsilon>0$;
+
+\STATE \textbf{Init:} $x_n^0 = (D_n^0, G_n^0, q_n^0)$
+\FOR{$k = 0, 1, 2, \ldots$ until convergence}
+%<<<<<<< HEAD
+  \STATE Send $q_{mn}^{k}$ to (receive $q_{nm}^{k}$ from) each $m \in \Omega_n$
+  \STATE $\tilde q_{mn}^{k} = q_{mn}^{k} - \tfrac{1}{2} \max\{0,\, q_{mn}^{k} + q_{nm}^{k}\}$,
+         \quad $\forall m \in \Omega_n$
+    \STATE
+    $
+    \tilde x_n^k
+    =
+    (D_n^k,G_n^k,\tilde q_n^k),
+    $
+
+  \STATE $r_{mn}^{k} = 2\tilde q_{mn}^{k} - q_{mn}^{k}, \quad \forall m \in \Omega_n$\\[.2em]
+  \STATE
+    $
+    z_n^k
+    =
+    \underset{\xi\in\mathcal{X}_n^{\mathrm{\text{loc}}}(\theta_n)}
+    {\operatorname{arg\,min}}
+    \left\{
+        \gamma J_n(\xi;\theta_n)
+        +
+        \frac{1}{2}
+        \left\|
+            \xi
+            -
+            \left[ \begin{smallmatrix}
+                D_n^k\\
+                G_n^k\\
+                r_n^k
+            \end{smallmatrix}\right]
+        \right\|^2
+    \right\}
+    $
+
+
+  \STATE $\hat x_{n}^{k} = x_{n}^{k} + \lambda\,(z_n^{k} - \tilde x_n^k)$
+         %\hfill {\footnotesize(DR update on $q$)}
+  \STATE $v_n^k = \text{GNN}(x^k_n, \theta_n, \{q^k_{nm}\}_{m\in\Omega_n}, \text{local state})$
+  %\hfill {\footnotesize(learned perturbation)}
+  \STATE $x_n^{k+1} \gets \hat x_n^{k} + v_n^k$
+
+\ENDFOR
+%\STATE $\bar q_{mn}^{k+1} = q_{mn}^{k+1} - \tfrac{1}{2} \max\{0,\, q_{mn}^{k+1} + q_{nm}^{k+1}\}$,\quad $\forall m \in \Omega_n$
+%\STATE  $\bar x_n^{k+1} \gets (D_n^{k+1},G_n^{k+1},\bar q_n^{k+1}),    $
+\RETURN $\tilde x^{k+1}$%$\bar x^{k+1} \gets \operatorname{proj}_{\mathcal{X}^{\mathrm{rec}}} (x^{k+1})$
+\end{algorithmic}
+\end{algorithm}
+Lines 5-10 implement a fully-distributed relaxed DR iteration to solve the VI in Def \ref{def:vgne}. %At each iteration, prosumers exchanges its trade variables with their neighbors (line~5), projects them onto the reciprocity set to obtain $\tilde x_n^k$ (line~6--7), reflects in $r^k_n=(r_{mn})_{m\in\Omega_n}$ (line~8), performs a local proximal step definint $z^k_n$(line~9), and finally relaxes the update in $\hat x^k_n$ (line~10).
+A formal derivation is provided in Appendix \ref{app:proof}-B.
+
+\begin{remark}[baseline iteration]
+The DR splitting has several favorable properties in this context: it works under mere monotonicity of the pseudo-gradient and its resolvent steps decompose according to trading network topology of the market. In principle, however, any other distributed market-clearing algorithm with a fixed-point interpretation, e.g.,  \citep{sorin2018consensus, baroche2019prosumer, moret2020loss, belgioioso2022operationally, cadre_peer-peer_2020}, can be used as a baseline.
+{\hfill $\square$}
+\end{remark}
+
+The learned term $v_n^k$ (line~11) is evaluated locally by each prosumer using a parametrized map trained offline over instances drawn from $\mathbb{P}$. Its distributed GNN parametrization, internal state, and trainable parameter are specified next.
+Note that the sequence \(\{x^k\}_{k\geq 0}\) is the auxiliary fixed-point sequence of the perturbed DR splitting and does not, in general, represent a feasible market allocation.  The market-clearing solution is instead recovered as the limit of the shadow
+iterates \(\{ \bar x^k\}_{k\geq 0} \), where $\bar x^k=\operatorname{proj}_{\mathcal{X}^{\mathrm{rec}}}(x^k)$ satisfies trading reciprocity at all iterations $k$.
+
+%____________________________________________________%
+\subsection{Distributed graph neural networks parametrization}
+\label{sec:gnn}
+
+% \subsubsection{Motivation}
+% \subsubsection{Motivation}
+
+The learned component in Algorithm~\ref{alg:alg1} must preserve the distributed and structural requirements defining $\Pi$. Each prosumer must compute its local perturbation $v_n^k$ using only locally available information, while the same parameterization must remain well defined for arbitrary neighborhood cardinalities and equivariant to the ordering of neighboring prosumers.
+We therefore adopt a message-passing Graph Neural Network (GNN)
+\footnote{Standard recurrent architectures commonly used in L2O do not directly satisfy these requirements. For example, the LSTM-based parametrization in~\citep{martin_learning_2026} operates on the joint iterate $x^k$, requiring centralized information collection, and its input and output dimensions scale with the problem size.}\citep{qian2024exploring}, whose trainable weights are shared across nodes and trading links.
+The neural messages are constructed from variables already exchanged in line~5 of Algorithm~\ref{alg:alg1} and therefore introduce no additional communication.
+At iteration $k$, $n$ constructs a node feature $h_n^k\in\mathbb{R}^{d_v}$ and, for each $m\in\Omega_n$, an edge feature $e_{mn}^k\in\mathbb{R}^{d_e}$,
+\begin{equation}
+\begin{aligned}
+  h_n^k &= \big(\hat D_n^k,\, \hat G_n^k,\, \hat D_n^{\text{ref}},\,
+  h_{\mathrm{bal},n}^k,\, h_{\mathrm{prev},n}^k,\, h_{\mathrm{stall},n}^k,\,
+  \tilde a_n^{\text{norm}},\, a_n^{\text{norm}},\, b_n^{\text{norm}}\big),\\
+  e_{mn}^k &= \big(q_{mn}^k/\kappa_{mn},\; q_{nm}^k/\kappa_{mn},\; c_{nm}^{\text{norm}}\big),
+\end{aligned}
+\label{eq:features}
+\end{equation}
+where $\hat D_n^k := 2\frac{D_n^k-\underline D_n}{\overline D_n-\underline D_n}-1$, and similarly $\hat G_n^k$, $\hat D_n^{\text{ref}}$, map demand, generation, and target demand from their local operating ranges to $[-1,1]$; $h_{\mathrm{bal},n}^k = \frac{D_n^k-G_n^k-\Delta G_n-Q_n^k}{\overline D_n-\underline D_n}$ is the normalized energy-balance residual; and $h_{\mathrm{prev},n}^k$, $h_{\mathrm{stall},n}^k$ are the normalized displacement of the local iterate and its exponentially weighted moving average, capturing the progress and persistent slowdowns of the iterative process. Node features thus describe the local optimization state and its evolution, while edge features characterize each bilateral trade relative to the link capacity. Since all features are normalized by local physical scales or fixed parameter ranges and follow the same template at every node and edge, $d_v=9$ and $d_e=3$ are independent of the market size and node degrees.
+
+A shared multilayer perceptron (MLP)~\citep{taud2017multilayer} $\phi_{\mathrm{msg}}$ maps each edge feature to a message in $\mathbb{R}^{d_h}$. The messages are aggregated and fed, together with $h_n^k$, to a Gated Recurrent Unit (GRU)~\citep{cho2014learning} that updates a private memory $\mathrm{mem}_n^k\in\mathbb{R}^{d_h}$:
+\begin{equation}
+  h_n^{\mathrm{agg},k} = \frac{1}{\sqrt{|\Omega_n|}}\sum_{m\in\Omega_n}\phi_{\mathrm{msg}}\big(e_{mn}^k\big),
+  \qquad
+  \mathrm{mem}_n^k = \operatorname{GRU}\big(\operatorname{col}(h_n^k, h_n^{\mathrm{agg},k}),\, \mathrm{mem}_n^{k-1}\big),
+  \label{eq:gnn}
+\end{equation}
+with $\mathrm{mem}_n^{-1}=0$, where $|\Omega_n|\geq1$ since $\mathcal G$ is connected and $N\geq 2$. The symmetric aggregation is invariant to the ordering of neighbors and yields a fixed-dimensional input independently of $|\Omega_n|$, while the memory remains local and is never communicated. From the shared memory $\mathrm{mem}_n^k$, two independent pairs of node/edge heads -- a \emph{fast} channel ($\mathrm f$) and a \emph{slow} channel ($\mathrm s$) -- each produce a direction bounded in $[-1,1]^{2+|\Omega_n|}$ via a $\tanh$ output activation, further modulated by its own learned confidence gate $g_n^{k,\bullet} = \sigma\big(\phi_{\mathrm{gate}}^{\bullet}(\mathrm{mem}_n^k)\big)\in[0,1]$, $\bullet\in\{\mathrm f,\mathrm s\}$, so that the gated direction $u_n^{k,\bullet}\in[-1,1]^{2+|\Omega_n|}$ remains bounded for any trainable weights, with the gate multiplicatively shrinking it toward the no-op direction whenever the channel's correction is not (yet) warranted. The two channels share the same memory $\mathrm{mem}_n^k$ but are otherwise parametrized independently, and are biased at initialization toward $g_n^{k,\bullet}\approx 0$, so that training has to be talked into activating either channel rather than starting from an active correction. We denote the resulting shared local map by $(u_n^{k,\mathrm f},u_n^{k,\mathrm s},\mathrm{mem}_n^k)=\Phi_w\big(h_n^k,\{e_{mn}^k\}_{m\in\Omega_n},\mathrm{mem}_n^{k-1}\big)$, with trainable parameters $w$.
+
+The local update rule~\eqref{eq:recursionN} consequently takes the form
+\begin{equation}
+  x_n^{k+1} = \pi_{\mathrm{DR},n}^k\big(x_n^k,\theta_n,\{q_{nm}^k\}_{m\in\Omega_n}\big) + v_n^k,
+  \qquad
+  v_n^k = \rho_{\mathrm f}^k\, s_{\mathrm f}\, u_n^{k,\mathrm f} + \rho_{\mathrm s}^k\, s_{\mathrm s}\, u_n^{k,\mathrm s},
+  \quad
+  \rho_{\mathrm f},\rho_{\mathrm s}\in(0,1),\ s_{\mathrm f},s_{\mathrm s}>0,
+  \label{eq:decaying_perturbation}
+\end{equation}
+where $\pi_{\mathrm{DR},n}^k$ denotes the local DR update, and the decay rates $\rho_{\mathrm f},\rho_{\mathrm s}$ and physical-scale amplitudes $s_{\mathrm f},s_{\mathrm s}$ are fixed a priori and not trained. The fast channel ($\rho_{\mathrm f}$ short, e.g.\ $\rho_{\mathrm f}=1-10/K$) protects the timing-sensitive end of the unrolling horizon, while the slow channel ($\rho_{\mathrm s}>\rho_{\mathrm f}$, long decay, gated to start essentially inactive) is free to pursue larger corrections on instances whose transient is genuinely slow, without the two objectives competing over a single shared schedule. Using two geometrically-decaying, independently-gated channels rather than one is an empirical design choice (Appendix~\ref{app:impl}), not required by the convergence argument below, which only uses that each channel is individually summable. The geometric decay, together with the bounded gated output of $\Phi_w$, makes the aggregate perturbation summable for any $w$ (Lemma~\ref{lem:summability}), key condition to retain convergence of the underlying DR iteration (Theorem~\ref{thm:convergence}).
+Moreover, since all trainable maps operate on fixed-dimensional representations and their parameters are shared across the graph, the same parametrization can be deployed on instances with different sizes and trading topologies.
+
+%__________________________________________________%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Convergence analysis}
+\label{sec:guarantees}
+
+In this section, we establish the theoretical guarantees of the scheme introduced in Section~\ref{sec:learned_dr}, without requiring uniqueness of the equilibrium.
+
+%____________________________________________%
+\subsection{Existence of a variational GNE}
+
+\begin{assumption}[Market feasibility]\label{ass:game}
+For every market instance $\eta=(\mathcal{G}, \theta)$ under consideration, the joint feasible set $\mathcal{X}(\theta) = \mathcal{X}^{\text{loc}}(\theta) \cap \mathcal{X}^{rec}$ is nonempty.
+\end{assumption}
+
+This assumption only restricts $\theta$, imposes compatibility
+between the local operational and reciprocity
+constraints.
+Under it,
+$\mathcal X^{\mathrm{\text{loc}}}(\theta)$ is a compact convex polyhedron and
+$\mathcal X^{\mathrm{rec}}$ is a closed convex polyhedral set, hence their
+intersection $\mathcal X(\theta)$ is nonempty, compact, and convex, and bounded by the box and capacity constraints in~\eqref{eq:local_set}.
+Furthermore, each cost $J_n$ is continuously differentiable and convex, so its gradient is monotone. For notational simplicity, we fix a market instance $\eta=(\mathcal G,\theta) $ and omit the dependence on $\theta$, writing $F(x):=F(x;\theta)$, $\mathcal X^{\mathrm{\text{loc}}}:=\mathcal X^{\mathrm{\text{loc}}}(\theta)$, and $\mathcal X:=\mathcal X(\theta)$.
+
+\begin{lemma}[Existence]\label{lem:existence} Under Assumption~\ref{ass:game}, the P2P market game~\eqref{eq:game} admits at least one v-GNE.
+%, i.e.,$    \mathrm{SOL}\big(\mathcal{X},   F(x)\big)    \neq \varnothing.$
+\end{lemma}
+
+
+\begin{proof}
+%Since each $J_n$ is convex and continuously differentiable in $x_n$, the pseudo-gradient $F=\operatorname{col}\big((\nabla_{x_n}J_n)_{n\in\mathcal N}\big)$ is monotone and continuous, hence maximally monotone~\citep[Cor.~20.28]{bauschke2017convex}. As $\mathcal X$ is nonempty, closed, and convex, $N_{\mathcal X}$ is maximally monotone~\citep[Ex.~20.26]{bauschke2017convex}, and so is $T:=F+N_{\mathcal X}$, since $\operatorname{dom}F=\mathbb R^{n_x}$~\citep[Cor.~25.5(i)]{bauschke2017convex}. Because $\operatorname{dom}T=\mathcal X$ is bounded, $T$ is surjective~\citep[Cor.~21.25]{bauschke2017convex}. Hence, there exists $x^\star\in\mathcal X$ such that $0\in F(x^\star)+N_{\mathcal X}(x^\star)$, i.e., $x^\star\in\operatorname{SOL}(\mathcal X,F(x))$, which is a v-GNE by Definition~\ref{def:vgne}.
+The proof is reported in Appendix~\ref{app:proofLemma}.
+\end{proof}
+
+%_________________________________________________________%
+\subsection{Convergence under learned perturbations}
+\begin{lemma}[Summability of the learned perturbation]
+\label{lem:summability}
+For any market instance $\eta$, any choice of the trainable parameters $w$, and any \(\rho_{\mathrm f},\rho_{\mathrm s}\in(0,1)\), the aggregate perturbation sequence $v^k:=\operatorname{col}\bigl((v_n^k)_{n\in\mathcal N}\bigr)$
+generated by~\eqref{eq:decaying_perturbation} is summable, i.e., $\{v^k\}_{k\geq0}\in\ell_1.$
+\end{lemma}
+
+\begin{proof}
+By construction of \(\Phi_w\), every component of \(u^{k,\bullet}:=\operatorname{col}\bigl((u_n^{k,\bullet})_{n\in\mathcal N}\bigr)\), $\bullet\in\{\mathrm f,\mathrm s\}$, is bounded in $[-1,1]$ through the $\operatorname{tanh}$ output activation and the $[0,1]$-valued gate, and hence there exists a finite constant \(C(\eta)>0\), independent of \(k\) and \(w\), such that
+$\|u^{k,\mathrm f}\|\leq C(\eta)$ and $\|u^{k,\mathrm s}\|\leq C(\eta),\ \forall k\geq0.$
+Since \(v^k=\rho_{\mathrm f}^k\, s_{\mathrm f}\, u^{k,\mathrm f} + \rho_{\mathrm s}^k\, s_{\mathrm s}\, u^{k,\mathrm s}\) with \(\rho_{\mathrm f},\rho_{\mathrm s}\in(0,1)\), the triangle inequality gives
+$
+\|v^k\|
+\leq
+s_{\mathrm f} C(\eta)\rho_{\mathrm f}^k + s_{\mathrm s} C(\eta)\rho_{\mathrm s}^k.
+$
+Therefore, $\sum_{k=0}^{\infty}\|v^k\|\leq C(\eta)\Big(s_{\mathrm f}\sum_{k=0}^{\infty}\rho_{\mathrm f}^k + s_{\mathrm s}\sum_{k=0}^{\infty}\rho_{\mathrm s}^k\Big)
+=C(\eta)\Big(\frac{s_{\mathrm f}}{1-\rho_{\mathrm f}}+\frac{s_{\mathrm s}}{1-\rho_{\mathrm s}}\Big)<\infty,$
+a finite sum of two summable geometric series, which proves that \(\{v^k\}_{k\geq0}\in\ell_1\).
+\end{proof}
+
+\begin{theorem}[Convergence]
+\label{thm:convergence}
+    Let Assumption~\ref{ass:game} hold, let $\gamma>0$, $\lambda\in(0,2)$, and $\rho_{\mathrm f},\rho_{\mathrm s}\in(0,1)$. Then, for any market instance $\eta$, for every initialization $x^0\in\mathbb{R}^{n_x}$ and every choice of the trainable parameters $w$, there exists $x^*\in \mathrm{SOL}\big(\mathcal{X}(\theta),   F(x;\theta)\big)$ such that the shadow iterates $\bar x^k := \operatorname{proj}_{\mathcal{X}^{\mathrm{rec}}}(x^k)$ of Algorithm~\ref{alg:learned_dr} satisfy $\bar x^k \to x^\star$, hence, converges to a v-GNE of the P2P market game~\ref{eq:game}.
+\end{theorem}
+\begin{proof}
+%The key idea is to write Algorithm~\ref{alg:learned_dr} as a perturbed fixed-point iteration. Its baseline component (lines~5--10) is a relaxed DR iteration, whose firmly nonexpansive operator has fixed points that recover the v-GNEs via projection onto $\mathcal X^{\mathrm{rec}}$. The learned correction enters as an additive perturbation, which is summable by Lemma~\ref{lem:summability}, so that the overall scheme is an inexact Krasnosel'ski\u{\i}--Mann iteration and still converges to a fixed point~\citep[Prop.~3]{martin_learning_2026}. By continuity of the projection, the shadow iterates converge to a v-GNE.
+The proof is reported in Appendix~\ref{app:proof}.
+\end{proof}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Numerical Results}
+\label{sec:numerical}
+
+We evaluate whether a correction trained on a small set of historical market instances reduces the number of iterations, and hence of communication rounds, that Algorithm~\ref{alg:alg1} requires to clear new, unseen instances, compared with the baseline DR iteration, and with alternative acceleration strategies. We additionally assess how this improvement degrades as test instances move away from the training distribution, both in their operating conditions and in the underlying trading network.
+
+\subsection{Experimental setup}
+\label{sec:setup}
+\paragraph{Test case and market data}
+We consider P2P markets with $N = 10$ prosumers, generated according to
+the model of Section~\ref{sec:probformulation}, including
+heterogeneous and asymmetric trading preferences.
+ince real P2P market records are not
+publicly available, and the only public benchmark, the P2P-IEEE 14-bus
+system of \citet{sousa2019peer}, has a single trading topology, the
+parameters are drawn from ranges of the same order as the test case of
+\citet{cadre_peer-peer_2020}.
+%“I dati sono realistici?” Risposta: struttura di Le Cadre, range dello stesso ordine del suo test case, check di plausibilità sugli equilibri.
+
+A base market collects the trading graph, costs, and preferences of the prosumers, which characterize the community and are kept fixed. To emulate historical market data, where recurring instances share the same trading network
+and prosumer population but differ in operating conditions, we perturb
+only the demand- and supply-related parameters $(D^{\mathrm{ref}}_n, \underline{D}_n, \overline{D}_n, \underline{G}_n, \overline{G}_n, \Delta G_n)$. Each perturbation shifts the center of each interval, as well as $D_n^{\mathrm{ref}}$ and $\Delta G_n$, by up to $\pm10\%$, and independently rescales the interval widths by up to $\pm4\%$. For each base market, we generate $M = 50$
+training instances, 10 validation instances, and $30$ test
+instances.
+
+The trading graph is initialized as a random spanning
+tree, after which a fraction $\delta$ of the remaining edges is added
+uniformly at random. This yields networks ranging from $16$ edges at
+$\delta = 0.2$ to the complete graph with $45$ edges at $\delta = 1$,
+the density $\delta$ thus represents the connectivity level of the
+trading network. For each
+$\delta \in \{0.2, 0.4, 0.5, 0.6, 0.8, 1\}$, we generate a base
+market.
+
+
+\paragraph{Training and evaluation}
+%M = 50, K, ρ, selezione sul validation set; criterio di arresto, iterazioni = round di comunicazione, Δᵢ, win-rate and gap → App. B
+We train a separate GNN for each density, with hidden dimension $d_h=32$ and only one hidden layer per MLP. Algorithm~\ref{alg:alg1} is unrolled for $K$
+iterations, with $K$ set to half of the average number of iterations
+required by DR on the training set. The fast channel decays at rate
+$\rho_{\mathrm f} = 1 - 10/K$ for every density, so that it is effectively switched off by the end of
+the training horizon, while the slow channel's decay rate $\rho_{\mathrm s}=0.99$ is fixed and its amplitude $s_{\mathrm s}$ (zero at $\delta\in\{0.2,0.5,0.6\}$, $0.4$ at $\delta\in\{0.4,0.8,1.0\}$) is selected on the validation set; we
+optimize~\eqref{eq:training-loss} for $25$ epochs using Adam with cosine learning-rate decay. At test time,
+all methods start from the same initial point and run until the
+fixed-point residual falls below $10^{-5}$, with a maximum of $4000$
+iterations. For each test instance $i$, we report the relative iteration
+reduction $\Delta_i := (k^i_{\mathrm{DR}} - k^i)/k^i_{\mathrm{DR}}$, where
+$k^i_{\mathrm{DR}}$ and $k^i$ denote the iteration counts of the baseline
+and of the evaluated method, respectively. The DR parameters are tuned by grid search and kept identical for the baseline and learned methods, so that any performance difference can be attributed to the learned correction. Implementation details, hardware, and computation times are reported in Appendix~\ref{app:impl}.
+
+
+%APPENDIX
+%A. Market data: parametri, perturbazioni, costruzione dei test OOD, plausibilità
+%B. Implementation and evaluation details: hw, tempi, iperparametri di phi, L2WS e A2DR, grid search su γ, metriche di gap
+%C. Additional results: tabelle complete, ecc
+
+\subsection{In-distribution performance}
+\paragraph{Compared methods}
+The baseline is the DR iteration, i.e., lines 5--10 of
+Algorithm~\ref{alg:alg1} with $v^k_n = 0$. The DR parameters are tuned by
+grid search on the training instances and kept identical for all methods,
+so that any performance difference can be attributed to the acceleration
+strategy. We compare with a learned warm start (L2WS)
+\citep{sambharya2024learning}, which maps the parameters of each prosumer
+to the initial iterate, trained either by regressing onto the DR fixed
+point computed offline (L2WS-reg) or with the self-supervised
+loss~\eqref{eq:training-loss} (L2WS-asym). To respect the distributed
+nature of the market, the warm start is parametrized by a GNN with $L$
+message-passing layers, in which each prosumer maps its own parameters, and those of its trading links, to its local initial iterate; since each layer requires one round of communication, $L$ rounds are added to its iteration count, and $L$, the architecture, and the training hyperparameters are selected on the validation instances.
+
+Finally, we report three centralized references, which require a
+coordinator with access to the data of all prosumers and are therefore not
+implementable in a P2P market: the original L2WS, parametrized by an MLP
+over the parameters of all prosumers, trained with the same two losses as its distributed counterpart (L2WS-reg~(cent.) and L2WS-asym~(cent.)), and Anderson-accelerated DR
+(A2DR)~\citep{fu2020anderson}, applied to the same DR operator with the
+safeguard of~\citet{fu2020anderson}, with memory and regularization
+selected per density on the validation instances by a grid search over
+memory $\in\{3,5,10\}$ and regularization $\in\{10^{-8},10^{-6},3\cdot10^{-5},10^{-4}\}$
+(selected values reported in Appendix~\ref{app:impl}; the paper's own default
+memory~$5$/regularization~$3\cdot10^{-5}$ is recovered as the winner at
+$\delta\in\{0.6,1.0\}$, while the remaining densities select a different
+point on the grid). Each A2DR iteration
+additionally requires global inner products among all prosumers.
+
+\subsection{Out-of-distribution performance}
+
+
+
+\begin{table}[H]
+  \centering
+  \caption{Iterations to convergence.}
+  \label{tab:results}
+  \small
+  \begin{tabular}{ll cccccc}
+    \toprule
+    & & \multicolumn{6}{c}{density} \\
+    \cmidrule(lr){3-8}
+    test & method & 0.2 & 0.4 & 0.5 & 0.6 & 0.8 & 1.0 \\
+    \midrule
+    \multirow{2}{*}{ID}
+      & DR      & 840 $\pm$ 219 & 640 $\pm$ 115 & 800 $\pm$ 91 & 656 $\pm$ 82 & 1379 $\pm$ 270 & 762 $\pm$ 160 \\
+      & learned & 217 $\pm$ 26 & 357 $\pm$ 25 & 574 $\pm$ 66 & 454 $\pm$ 59 & 428 $\pm$ 46 & 450 $\pm$ 30 \\
+    \midrule
+    \multirow{2}{*}{OOD $\pm$20\%}
+      & DR      & 872 $\pm$ 223 & 642 $\pm$ 115 & 804 $\pm$ 95 & 617 $\pm$ 86 & 1362 $\pm$ 295 & 787 $\pm$ 160 \\
+      & learned & 240 $\pm$ 45 & 373 $\pm$ 29 & 577 $\pm$ 83 & 450 $\pm$ 51 & 467 $\pm$ 99 & 490 $\pm$ 119 \\
+    \midrule
+    \multirow{2}{*}{OOD $\pm$30\%}
+      & DR      & 924 $\pm$ 254 & 636 $\pm$ 109 & 819 $\pm$ 114 & 661 $\pm$ 188 & 1394 $\pm$ 316 & 808 $\pm$ 177 \\
+      & learned & 306 $\pm$ 135 & 415 $\pm$ 95 & 626 $\pm$ 110 & 582 $\pm$ 290 & 569 $\pm$ 170 & 543 $\pm$ 107 \\
+    \midrule
+    \multirow{2}{*}{OOD $\pm$40\%}
+      & DR      & 960 $\pm$ 269 & 632 $\pm$ 120 & 885 $\pm$ 205 & 696 $\pm$ 194 & 1396 $\pm$ 297 & 842 $\pm$ 186 \\
+      & learned & 353 $\pm$ 138 & 547 $\pm$ 276 & 733 $\pm$ 239 & 644 $\pm$ 358 & 761 $\pm$ 401 & 679 $\pm$ 265 \\
+    \midrule
+    \multirow{2}{*}{$\pm$1 node}
+      & DR      & 911 $\pm$ 412 & 571 $\pm$ 227 & 737 $\pm$ 187 & 777 $\pm$ 711 & 748 $\pm$ 247 & 1274 $\pm$ 837 \\
+      & learned & 333 $\pm$ 207 & 470 $\pm$ 231 & 768 $\pm$ 665 & 962 $\pm$ 1061 & 779 $\pm$ 655 & 1185 $\pm$ 574 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\floatconts
+  {fig:boxplots}
+  {\caption{Iteration-count reduction of Algorithm~\ref{alg:alg1} with respect to the
+  baseline DR, for each graph density $\delta$, over $30$ test instances per setting. Markers denote the median and error bars the interquartile range.}}
+
+      \includegraphics[width=1\linewidth]{figures/fig_blocks/fig4_blocks_faceted_median_iqr_pm1_paperstyle_with05.png}%
+
+\end{figure}
+
+
+\newcommand{\TBD}[1]{\textcolor{red}{[#1]}}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+We showed how historical market data can be used to speed up the clearing of decentralized P2P electricity markets. We augmented a distributed Douglas--Rachford scheme with a GNN-based correction, trained offline on past market instances, which preserves convergence to a v-GNE for any trained parameters by construction, and is fully distributed, introducing neither additional communication nor central coordination. On unseen instances, the learned scheme reduces the number of iterations, and hence of communication rounds, with substantial gains retained under distribution shift. The experiments show that a small set of historical market instances can be used to substantially accelerate the distributed clearing of future instances without changing the communication pattern of the underlying solver. The largest and most consistent gains are obtained on recurring operating conditions from the same market family, and remain substantial under considerable demand and supply shifts. The same trained model can be deployed zero-shot on modified trading networks, although the acceleration becomes less uniform under such structural changes.
+
+Future work includes ...
+
+%the two approaches are compatible, since Theorem 6 holds for any initialization, and their combination is left for future work.
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\acks{%All authors are with the Department of Decision and Control Systems, KTH Royal Institute of Technology, SE-100 44 Stockholm, Sweden.
+This work was supported by Digital Futures and the Wallenberg AI, Autonomous Systems and Software Program (WASP) funded by the Knut and Alice Wallenberg Foundation.
+}
+
+\bibliography{l4dc-sample}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\appendix
+
+\section{Offline training }
+\label{app:gnn1}
+The parameters $w$ are learned once, offline and centrally, from historical market data, i.e., a dataset of $M$ past market-clearing instances $\mathcal D_{\mathrm{tr}}=\{\eta^{i}\}_{i=1}^{M}$, viewed as samples from $\mathbb P$. For each one, Algorithm~\ref{alg:alg1} and the baseline DR method are unrolled for $K$ iterations, yielding $\{x^{k,i}(w)\}_{k=0}^{K}$ and $\{x_{\mathrm{DR}}^{k,i}\}_{k=0}^{K}$, respectively; the latter is computed without gradient tracking and serves only as an offline reference. Since the ideal criterion in~\eqref{eq:ideal_loss} requires the unknown equilibrium set, we measure finite-time progress through the normalized iterate residuals
+$
+\hat r_i^k(w)
+=
+\|x^{k,i}(w)-x^{k-1,i}(w)\|/(\|\sigma_i\|+\varepsilon),
+$
+and analogously $\hat r_{\mathrm{DR},i}^k$, where $\sigma_i$ collects fixed physical reference scales of $\eta^i$ and $\varepsilon>0$ is a regularization constant. The finite-horizon training loss for sample $i$ is
+\begin{equation}
+\mathcal{L}_K^i(w)
+=
+\frac{1}{K}\sum_{k=1}^{K}
+\ell\big(\hat r_i^k(w)-\hat r_{\mathrm{DR},i}^k\big)
++
+\frac{\beta}{K-1}\sum_{k=1}^{K-1}
+\big[\hat r_i^{k+1}(w)-\hat r_i^k(w)\big]_+,
+\label{eq:training-loss}
+\end{equation}
+with $\ell(a)=\alpha_{\mathrm{behind}}[a]_+-\alpha_{\mathrm{ahead}}[-a]_+$, $[a]_+:=\max\{a,0\}$, $\alpha_{\mathrm{behind}}>\alpha_{\mathrm{ahead}}>0$, and $\beta\geq0$. The first term rewards progress ahead of the DR baseline while penalizing lagging behind it, the unequal slopes ensure that the baseline residual shapes the gradient with respect to $w$, rather than acting as an additive constant. The second term penalizes residual increases, promoting rapid and regular decay. Neither term requires equilibrium labels or precomputed solutions, hence, training only requires the past market instances, not their cleared outcomes.
+
+Since $\mathbb P$ is unknown, $w^\star\in\arg\min_w \frac{1}{M}\sum_{i=1}^{M}\mathcal{L}_K^i(w)$ is computed by backpropagating through the learned $K$-step unroll.
+The distributed and convergence requirements in~\eqref{eq:optimal-iteration-design-problem} are enforced by the baseline iteration and the correction architecture, while learning only improves the finite-horizon objective. Once trained, $w^\star$ is shared with all prosumers, which evaluate $\Phi_{w^\star}$ using only local information and their private memory; neither the baseline rollout nor any central coordination is required during market operation.
+
+
+\section{Proof of Lemma~\ref{lem:existence} }
+\label{app:proofLemma}
+\begin{proof}
+Since each $J_n$ is convex and continuously differentiable in $x_n$, the pseudo-gradient $F=\operatorname{col}\big((\nabla_{x_n}J_n)_{n\in\mathcal N}\big)$ is monotone and continuous, hence maximally monotone~\citep[Cor.~20.28]{bauschke2017convex}. As $\mathcal X$ is nonempty, closed, and convex, $N_{\mathcal X}$ is maximally monotone~\citep[Ex.~20.26]{bauschke2017convex}, and so is $T:=F+N_{\mathcal X}$, since $\operatorname{dom}F=\mathbb R^{n_x}$~\citep[Cor.~25.5(i)]{bauschke2017convex}. Because $\operatorname{dom}T=\mathcal X$ is bounded, $T$ is surjective~\citep[Cor.~21.25]{bauschke2017convex}. Hence, there exists $x^\star\in\mathcal X$ such that $0\in F(x^\star)+N_{\mathcal X}(x^\star)$, i.e., $x^\star\in\operatorname{SOL}(\mathcal X,F(x))$, which is a v-GNE by Definition~\ref{def:vgne}.
+\end{proof}
+
+
+\section{Proof of Theorem~\ref{thm:convergence}}
+\label{app:proof}
+\begin{proof}
+We first show that Algorithm~\ref{alg:learned_dr} is a perturbed DR iteration. Define the two operators
+\begin{equation}\label{eq:AB}
+  \mathcal{A} := F + N_{\mathcal{X}^{\mathrm{loc}}},
+  \qquad
+  \mathcal{B} := N_{\mathcal{X}^{\mathrm{rec}}},
+\end{equation}
+which isolate the local operational constraints and the coupling reciprocity constraints, respectively. Let $J:=\sum_{n\in\mathcal N}J_n$. Since the costs are separable and differentiable, $F=\nabla J=\partial J$~\citep[Prop.~17.31(i)]{bauschke2017convex}, and, as $\operatorname{dom}J=\mathbb R^{n_x}$, the sum rule gives $\mathcal A=\partial\big(J+\iota_{\mathcal X^{\mathrm{loc}}}\big)$~\citep[Cor.~16.48(iii)]{bauschke2017convex}, where $\iota_C$ denotes the indicator function of a set $C$. Hence, $\mathcal A$ is maximally monotone~\citep[Thm.~20.25]{bauschke2017convex}, and its resolvent $J_{\gamma\mathcal A}=\operatorname{prox}_{\gamma(J+\iota_{\mathcal X^{\mathrm{loc}}})}$~\citep[Ex.~23.3]{bauschke2017convex} decouples, by separability, into the node-wise minimizations of line~9~\citep[Prop.~24.11 \& Def.~12.23]{bauschke2017convex}. Similarly, $\mathcal B$ is maximally monotone~\citep[Ex.~20.26]{bauschke2017convex}, and, since $\gamma N_{\mathcal X^{\mathrm{rec}}}=N_{\mathcal X^{\mathrm{rec}}}$, $J_{\gamma\mathcal B}=\operatorname{proj}_{\mathcal X^{\mathrm{rec}}}$~\citep[Ex.~23.4]{bauschke2017convex}. Since each constraint in~\eqref{eq:reciprocity} involves a distinct pair of trade variables, this projection is computed edge-wise in lines~6--7, yielding $\tilde x^k=J_{\gamma\mathcal B}(x^k)$, while line~8 evaluates the reflected resolvent $R_{\gamma\mathcal B}:=2J_{\gamma\mathcal B}-\mathrm{Id}$, as $r^k=2\tilde x^k-x^k$. Both resolvents are therefore computable from local data and one-hop communication only. Hence, $z^k=J_{\gamma\mathcal A}R_{\gamma\mathcal B}(x^k)$. Defining the DR operator $T_{\mathrm{DR}}:=J_{\gamma\mathcal A}R_{\gamma\mathcal B}+\mathrm{Id}-J_{\gamma\mathcal B}$, so that $T_{\mathrm{DR}}(x^k)-x^k=z^k-\tilde x^k$, line~10 of Algorithm~\ref{alg:alg1} can be written at the aggregate level as
+\begin{equation}
+    \hat x^{k}
+    =
+    x^k
+    +
+    \lambda
+    \big(
+        T_{\mathrm{DR}}(x^k)-x^k
+    \big),
+    \label{eq:baseline-dr-update}
+\end{equation}
+which is precisely the relaxed DR recursion associated with~\eqref{eq:AB}~\citep[Thm.~26.11]{bauschke2017convex}.
+
+We next identify the zeros of $\mathcal A+\mathcal B$ with the v-GNEs of the market game. Since $\mathcal X^{\mathrm{loc}}$ and $\mathcal X^{\mathrm{rec}}$ are polyhedral and $\mathcal X=\mathcal X^{\mathrm{loc}}\cap\mathcal X^{\mathrm{rec}}\neq\varnothing$ by Assumption~\ref{ass:game}, the polyhedral subdifferential sum rule~\citep[Thm.~16.47(iii)]{bauschke2017convex} gives $N_{\mathcal X^{\mathrm{loc}}}+N_{\mathcal X^{\mathrm{rec}}}=\partial(\iota_{\mathcal X^{\mathrm{loc}}}+\iota_{\mathcal X^{\mathrm{rec}}})=\partial\iota_{\mathcal X}=N_{\mathcal X}$. Hence, $\mathcal A+\mathcal B=F+N_{\mathcal X}$ and
+\begin{equation}
+    \operatorname{zer}(\mathcal A+\mathcal B)
+    =
+    \left\{
+        x\in\mathcal X
+        \mid
+        -F(x)\in N_{\mathcal X}(x)
+    \right\}
+    =
+    \operatorname{SOL}(\mathcal X,F),
+    \label{eq:zero-vgne}
+\end{equation}
+which is nonempty by Lemma~\ref{lem:existence}. Since $\mathcal A$ and $\mathcal B$ are maximally monotone, their reflected resolvents $R_{\gamma\mathcal A}$ and $R_{\gamma\mathcal B}$ are nonexpansive~\citep[Cor.~23.11]{bauschke2017convex}. As $T_{\mathrm{DR}}=\tfrac12\big(\mathrm{Id}+R_{\gamma\mathcal A}R_{\gamma\mathcal B}\big)$, it follows that $T_{\mathrm{DR}}$ is firmly nonexpansive, with $\operatorname{Fix}T_{\mathrm{DR}}=\operatorname{Fix}(R_{\gamma\mathcal A}R_{\gamma\mathcal B})$, and
+\begin{equation}
+    \operatorname{zer}(\mathcal A+\mathcal B)
+    =
+    J_{\gamma\mathcal B}
+    \left(
+        \operatorname{Fix}T_{\mathrm{DR}}
+    \right)
+    \label{eq:shadow-characterization}
+\end{equation}
+\citep[Prop.~26.1(iii)]{bauschke2017convex}. Since $\operatorname{zer}(\mathcal A+\mathcal B)\neq\varnothing$,
+it follows that
+$\operatorname{Fix}T_{\mathrm{DR}}\neq\varnothing$.
+
+We now account for the learned component. Line~11 of Algorithm~\ref{alg:learned_dr} evaluates the local correction $v_n^k$, and line~12 adds it to $\hat x_n^k$. Defining $v^k:=\operatorname{col}\big((v_n^k)_{n\in\mathcal N}\big)$, by~\eqref{eq:baseline-dr-update} the iteration reads
+\begin{equation}
+    x^{k+1}
+    =
+    x^k
+    +
+    \lambda
+    \big(
+        T_{\mathrm{DR}}(x^k)-x^k
+    \big)
+    +
+    v^k.
+    \label{eq:perturbed-dr}
+\end{equation}
+Thus, the learned map neither replaces the resolvents $J_{\gamma\mathcal A}$, $J_{\gamma\mathcal B}$ nor changes $T_{\mathrm{DR}}$, it only perturbs the auxiliary sequence additively. Let $R:=2T_{\mathrm{DR}}-\mathrm{Id}=R_{\gamma\mathcal A}R_{\gamma\mathcal B}$, which is nonexpansive with $\operatorname{Fix}R=\operatorname{Fix}T_{\mathrm{DR}}$. Then,~\eqref{eq:perturbed-dr} can be rewritten as
+$
+    x^{k+1}
+    =
+    x^k
+    +
+    \tfrac{\lambda}{2}
+    \big(
+        R(x^k)-x^k
+    \big)
+    +
+    v^k,
+$
+with $\tfrac{\lambda}{2}\in(0,1)$ since $\lambda\in(0,2)$, i.e., an inexact Krasnosel'ski\u{\i}--Mann (KM) iteration of nonexpansive operator $R$ whose perturbation $\{v^k\}_{k\geq0}$ is summable by Lemma~\ref{lem:summability}. By the convergence of summably perturbed KM iterations~\citep[Prop.~3]{martin_learning_2026}, $x^k$ converges to some $x_{\mathrm{aux}}^\star\in\operatorname{Fix}T_{\mathrm{DR}}$, strongly since the space is finite-dimensional. Finally, $J_{\gamma\mathcal B}$ is firmly nonexpansive, hence continuous, so that
+$
+    \bar x^k
+    =
+    J_{\gamma\mathcal B}(x^k)
+    \to
+    J_{\gamma\mathcal B}(x_{\mathrm{aux}}^\star)
+    =:
+    x^\star,
+$
+and $x^\star\in\operatorname{zer}(\mathcal A+\mathcal B)=\operatorname{SOL}(\mathcal X,F)$ by~\eqref{eq:shadow-characterization} and~\eqref{eq:zero-vgne}. Therefore, the shadow sequence generated by Algorithm~\ref{alg:learned_dr} converges to a v-GNE of the P2P market game.
+
+ \end{proof}
+
+
+
+\section{Implementation}
+\label{app:impl}
+All methods are implemented in Python and PyTorch, in double precision, and
+run on CPU. The local proximal step is solved by bisection on the
+multiplier of the local energy balance. Training requires \TBD{$\cdot$}
+minutes per base market; evaluating $\Phi_w$ requires \TBD{$\cdot$}\,ms
+per prosumer and iteration, compared with \TBD{$\cdot$}\,ms for the local
+proximal step.
+
+\paragraph{A2DR hyperparameters.} Memory and regularization were selected per
+density on the validation instances by a grid search over memory
+$\in\{3,5,10\}$ and regularization $\in\{10^{-8},10^{-6},3\cdot10^{-5},10^{-4}\}$:
+
+\begin{table}[H]
+  \centering
+  \caption{A2DR memory and regularization selected per density.}
+  \label{tab:a2dr-hyper}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    density & 0.2 & 0.4 & 0.5 & 0.6 & 0.8 & 1.0 \\
+    \midrule
+    memory & 3 & 5 & 5 & 5 & 3 & 5 \\
+    regularization & $10^{-4}$ & $10^{-4}$ & $10^{-4}$ & $3\cdot10^{-5}$ & $10^{-4}$ & $3\cdot10^{-5}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\end{document}

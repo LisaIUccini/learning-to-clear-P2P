@@ -1,0 +1,105 @@
+writing all artifacts to runs/l2ws/l2ws_N10_d0.4_seed3_regression/  (density=0.4  N=10  gamma=4.0  unroll=318  hidden_dim=64  n_hidden_layers=1  n_train=50  n_test=30  epochs=50  base_seed=3  lr=0.003  loss_mode=regression)
+======================================================================
+L2WS BENCHMARK -- Sambharya, Hall, Amos & Stellato (JMLR 2024)
+warm-start MLP h_w(theta) only, PLAIN DR thereafter (no per-step correction)
+density=0.4  base_seed=3  gamma=4.0  unroll(train k)=318
+======================================================================
+  [generator=old, c_old_range=(0.05, 0.18), c<b guaranteed: max(c)=0.18 < min(b)=0.2]
+  N=10  edges=23 (directed=46)  theta_dim=182  out_dim(=2N+E_directed)=66
+  train: 50 (17 discarded)  |  test: 30 (5 discarded)  |  val: 10 (1 discarded)
+
+training h_w (feedforward MLP, loss_mode=regression, k=318 steps)...
+  precomputing 50 train + 10 val fixed-point targets (plain DR to convergence, no grad)...
+  epoch   1/50 | train +0.0238 | val +0.0001
+  epoch   2/50 | train +0.0001 | val +0.0001
+  epoch   3/50 | train +0.0001 | val +0.0001
+  epoch   4/50 | train +0.0000 | val +0.0001
+  epoch   5/50 | train +0.0000 | val +0.0000
+  epoch   6/50 | train +0.0000 | val +0.0001
+  epoch   7/50 | train +0.0000 | val +0.0001
+  epoch   8/50 | train +0.0000 | val +0.0001
+  epoch   9/50 | train +0.0000 | val +0.0000
+  epoch  10/50 | train +0.0000 | val +0.0000
+  epoch  11/50 | train +0.0000 | val +0.0000
+  epoch  12/50 | train +0.0000 | val +0.0000
+  epoch  13/50 | train +0.0000 | val +0.0000
+  epoch  14/50 | train +0.0000 | val +0.0000
+  epoch  15/50 | train +0.0000 | val +0.0000
+  epoch  16/50 | train +0.0000 | val +0.0000
+  epoch  17/50 | train +0.0000 | val +0.0000
+  epoch  18/50 | train +0.0000 | val +0.0000
+  epoch  19/50 | train +0.0000 | val +0.0000
+  epoch  20/50 | train +0.0000 | val +0.0000
+  epoch  21/50 | train +0.0000 | val +0.0000
+  epoch  22/50 | train +0.0000 | val +0.0000
+  epoch  23/50 | train +0.0001 | val +0.0001
+  epoch  24/50 | train +0.0000 | val +0.0000
+  epoch  25/50 | train +0.0000 | val +0.0000
+  epoch  26/50 | train +0.0000 | val +0.0000
+  epoch  27/50 | train +0.0000 | val +0.0001
+  epoch  28/50 | train +0.0000 | val +0.0000
+  epoch  29/50 | train +0.0000 | val +0.0000
+  epoch  30/50 | train +0.0000 | val +0.0000
+  epoch  31/50 | train +0.0000 | val +0.0001
+  epoch  32/50 | train +0.0000 | val +0.0000
+  epoch  33/50 | train +0.0000 | val +0.0000
+  epoch  34/50 | train +0.0000 | val +0.0000
+  epoch  35/50 | train +0.0000 | val +0.0000
+  epoch  36/50 | train +0.0000 | val +0.0000
+  epoch  37/50 | train +0.0000 | val +0.0000
+  epoch  38/50 | train +0.0000 | val +0.0000
+  epoch  39/50 | train +0.0000 | val +0.0000
+  epoch  40/50 | train +0.0000 | val +0.0000
+  epoch  41/50 | train +0.0000 | val +0.0000
+  epoch  42/50 | train +0.0000 | val +0.0000
+  epoch  43/50 | train +0.0000 | val +0.0000
+  epoch  44/50 | train +0.0000 | val +0.0000
+  epoch  45/50 | train +0.0000 | val +0.0000
+  epoch  46/50 | train +0.0000 | val +0.0000
+  epoch  47/50 | train +0.0000 | val +0.0000
+  epoch  48/50 | train +0.0000 | val +0.0000
+  epoch  49/50 | train +0.0000 | val +0.0000
+  epoch  50/50 | train +0.0000 | val +0.0000
+saved runs/l2ws/l2ws_N10_d0.4_seed3_regression/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws/d0.4]  1/30  DR  1033 it  |  L2WS   386 it  |  x 2.68 (+62.6%)
+  [l2ws/d0.4]  2/30  DR   830 it  |  L2WS   375 it  |  x 2.21 (+54.8%)
+  [l2ws/d0.4]  3/30  DR  1276 it  |  L2WS   368 it  |  x 3.47 (+71.2%)
+  [l2ws/d0.4]  4/30  DR   663 it  |  L2WS   383 it  |  x 1.73 (+42.2%)
+  [l2ws/d0.4]  5/30  DR   727 it  |  L2WS   374 it  |  x 1.94 (+48.6%)
+  [l2ws/d0.4]  6/30  DR  1100 it  |  L2WS   317 it  |  x 3.47 (+71.2%)
+  [l2ws/d0.4]  7/30  DR   618 it  |  L2WS   372 it  |  x 1.66 (+39.8%)
+  [l2ws/d0.4]  8/30  DR   746 it  |  L2WS   346 it  |  x 2.16 (+53.6%)
+  [l2ws/d0.4]  9/30  DR  1144 it  |  L2WS   394 it  |  x 2.90 (+65.6%)
+  [l2ws/d0.4] 10/30  DR  1036 it  |  L2WS   363 it  |  x 2.85 (+65.0%)
+  [l2ws/d0.4] 11/30  DR   980 it  |  L2WS   319 it  |  x 3.07 (+67.4%)
+  [l2ws/d0.4] 12/30  DR  1269 it  |  L2WS   350 it  |  x 3.63 (+72.4%)
+  [l2ws/d0.4] 13/30  DR  1316 it  |  L2WS   419 it  |  x 3.14 (+68.2%)
+  [l2ws/d0.4] 14/30  DR   804 it  |  L2WS   405 it  |  x 1.99 (+49.6%)
+  [l2ws/d0.4] 15/30  DR   824 it  |  L2WS   334 it  |  x 2.47 (+59.5%)
+  [l2ws/d0.4] 16/30  DR   566 it  |  L2WS   375 it  |  x 1.51 (+33.7%)
+  [l2ws/d0.4] 17/30  DR   643 it  |  L2WS   330 it  |  x 1.95 (+48.7%)
+  [l2ws/d0.4] 18/30  DR  1040 it  |  L2WS   395 it  |  x 2.63 (+62.0%)
+  [l2ws/d0.4] 19/30  DR  1226 it  |  L2WS   380 it  |  x 3.23 (+69.0%)
+  [l2ws/d0.4] 20/30  DR   687 it  |  L2WS   341 it  |  x 2.01 (+50.4%)
+  [l2ws/d0.4] 21/30  DR   875 it  |  L2WS   347 it  |  x 2.52 (+60.3%)
+  [l2ws/d0.4] 22/30  DR   785 it  |  L2WS   395 it  |  x 1.99 (+49.7%)
+  [l2ws/d0.4] 23/30  DR   925 it  |  L2WS   400 it  |  x 2.31 (+56.8%)
+  [l2ws/d0.4] 24/30  DR   719 it  |  L2WS   346 it  |  x 2.08 (+51.9%)
+  [l2ws/d0.4] 25/30  DR  1137 it  |  L2WS   392 it  |  x 2.90 (+65.5%)
+  [l2ws/d0.4] 26/30  DR   863 it  |  L2WS   357 it  |  x 2.42 (+58.6%)
+  [l2ws/d0.4] 27/30  DR  1058 it  |  L2WS   373 it  |  x 2.84 (+64.7%)
+  [l2ws/d0.4] 28/30  DR  1273 it  |  L2WS   375 it  |  x 3.39 (+70.5%)
+  [l2ws/d0.4] 29/30  DR   782 it  |  L2WS   397 it  |  x 1.97 (+49.2%)
+  [l2ws/d0.4] 30/30  DR  1142 it  |  L2WS   370 it  |  x 3.09 (+67.6%)
+  [l2ws/d0.4] mean speed-up 2.54x   median 2.49x   min 1.51x   max 3.63x   win-rate 100% (30/30)
+  mean % reduction (per-instance average): mean=58.3%  median=59.9%
+saved runs/l2ws/l2ws_N10_d0.4_seed3_regression/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots + raw-trajectory JSON files to runs/l2ws/l2ws_N10_d0.4_seed3_regression/instance_plots/
+saved runs/l2ws/l2ws_N10_d0.4_seed3_regression/NOTES.md
+
+DONE -- runs/l2ws/l2ws_N10_d0.4_seed3_regression/

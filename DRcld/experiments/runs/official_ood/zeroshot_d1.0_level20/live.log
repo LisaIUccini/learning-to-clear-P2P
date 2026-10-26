@@ -1,0 +1,73 @@
+zero-shot OOD test (generator=old, c<b fix), discard+resample on DR non-convergence  (weights=runs/official/official_N10_d1.0_seed2_replicate/phi_w.pt  density=1.0  base_seed=2  n_test=30  pct_level=20%  pct_width=8%  dr_gamma=6.0  gnn_rho=0.9926  gnn_scale=1.8  gnn_rho_slow=0.99  gnn_scale_slow=0.4  DR_MAX_ITER=4000)
+  loaded checkpoint
+  base market: N=10  edges=45
+  [ood]  1/29 kept (attempt 1)  DR  2400 it  |  learned  1398 it
+  [ood]  2/29 kept (attempt 2)  DR  1495 it  |  learned  1280 it
+  [ood]  3/29 kept (attempt 1)  DR   995 it  |  learned  1306 it
+  [ood]  4/29 kept (attempt 1)  DR   990 it  |  learned   993 it
+  ... instance 5: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  [ood]  5/29 kept (attempt 4)  DR  3173 it  |  learned  1238 it
+  [ood]  6/29 kept (attempt 1)  DR  3947 it  |  learned  1313 it
+  ... instance 7: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  [ood]  7/29 kept (attempt 2)  DR  2297 it  |  learned  1225 it
+  [ood]  8/29 kept (attempt 1)  DR  1027 it  |  learned  1143 it
+  [ood]  9/29 kept (attempt 1)  DR  3845 it  |  learned  1174 it
+  [ood] 10/29 kept (attempt 10)  DR  1007 it  |  learned  1348 it
+  [ood] 11/29 kept (attempt 3)  DR  3416 it  |  learned  1340 it
+  [ood] 12/29 kept (attempt 1)  DR  1963 it  |  learned  1340 it
+  ... instance 13: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  ... instance 13: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 3)
+  [ood] 13/29 kept (attempt 4)  DR  3525 it  |  learned  1331 it
+  ... instance 14: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  [ood] 14/29 kept (attempt 2)  DR  2122 it  |  learned  1480 it
+  [ood] 15/29 kept (attempt 1)  DR  1991 it  |  learned  1356 it
+  ... instance 16: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  [ood] 16/29 kept (attempt 2)  DR  2405 it  |  learned  1261 it
+  [ood] 17/29 kept (attempt 1)  DR  3154 it  |  learned  2486 it
+  [ood] 18/29 kept (attempt 1)  DR  1736 it  |  learned  1375 it
+  [ood] 19/29 kept (attempt 1)  DR  2475 it  |  learned  1251 it
+  [ood] 20/29 kept (attempt 1)  DR  3492 it  |  learned  1230 it
+  [ood] 21/29 kept (attempt 1)  DR  3829 it  |  learned  1407 it
+  [ood] 22/29 kept (attempt 1)  DR  3485 it  |  learned  1395 it
+  [ood] 23/29 kept (attempt 2)  DR  3094 it  |  learned  1199 it
+  [ood] 24/29 kept (attempt 1)  DR  3737 it  |  learned  1409 it
+  [ood] 25/29 kept (attempt 1)  DR  2444 it  |  learned  1596 it
+  [ood] 26/29 kept (attempt 1)  DR  3047 it  |  learned  1349 it
+  [ood] 27/29 kept (attempt 1)  DR  3240 it  |  learned  1281 it
+  [ood] 28/29 kept (attempt 1)  DR  1820 it  |  learned  1272 it
+  [ood] 29/29 kept (attempt 2)  DR  3152 it  |  learned  1177 it
+  test set: 30 instances (slot 0 = original), level+width (+/-20%/+/-8%), x0 FRESH RANDOM per instance (17 infeasible discarded, 6 DR-non-converged discarded+resampled)
+----------------------------------------------------------------------
+  [ood]  1/30  DR  1652 it  |  learned  1332 it  |  x 1.24 (+19.4%)
+  [ood]  2/30  DR  2400 it  |  learned  1398 it  |  x 1.72 (+41.8%)
+  [ood]  3/30  DR  1495 it  |  learned  1280 it  |  x 1.17 (+14.4%)
+  [ood]  4/30  DR   995 it  |  learned  1306 it  |  x 0.76 (-31.3%)
+  [ood]  5/30  DR   990 it  |  learned   993 it  |  x 1.00 (-0.3%)
+  [ood]  6/30  DR  3173 it  |  learned  1238 it  |  x 2.56 (+61.0%)
+  [ood]  7/30  DR  3947 it  |  learned  1313 it  |  x 3.01 (+66.7%)
+  [ood]  8/30  DR  2297 it  |  learned  1225 it  |  x 1.88 (+46.7%)
+  [ood]  9/30  DR  1027 it  |  learned  1143 it  |  x 0.90 (-11.3%)
+  [ood] 10/30  DR  3845 it  |  learned  1174 it  |  x 3.28 (+69.5%)
+  [ood] 11/30  DR  1007 it  |  learned  1348 it  |  x 0.75 (-33.9%)
+  [ood] 12/30  DR  3416 it  |  learned  1340 it  |  x 2.55 (+60.8%)
+  [ood] 13/30  DR  1963 it  |  learned  1340 it  |  x 1.46 (+31.7%)
+  [ood] 14/30  DR  3525 it  |  learned  1331 it  |  x 2.65 (+62.2%)
+  [ood] 15/30  DR  2122 it  |  learned  1480 it  |  x 1.43 (+30.3%)
+  [ood] 16/30  DR  1991 it  |  learned  1356 it  |  x 1.47 (+31.9%)
+  [ood] 17/30  DR  2405 it  |  learned  1261 it  |  x 1.91 (+47.6%)
+  [ood] 18/30  DR  3154 it  |  learned  2486 it  |  x 1.27 (+21.2%)
+  [ood] 19/30  DR  1736 it  |  learned  1375 it  |  x 1.26 (+20.8%)
+  [ood] 20/30  DR  2475 it  |  learned  1251 it  |  x 1.98 (+49.5%)
+  [ood] 21/30  DR  3492 it  |  learned  1230 it  |  x 2.84 (+64.8%)
+  [ood] 22/30  DR  3829 it  |  learned  1407 it  |  x 2.72 (+63.3%)
+  [ood] 23/30  DR  3485 it  |  learned  1395 it  |  x 2.50 (+60.0%)
+  [ood] 24/30  DR  3094 it  |  learned  1199 it  |  x 2.58 (+61.2%)
+  [ood] 25/30  DR  3737 it  |  learned  1409 it  |  x 2.65 (+62.3%)
+  [ood] 26/30  DR  2444 it  |  learned  1596 it  |  x 1.53 (+34.7%)
+  [ood] 27/30  DR  3047 it  |  learned  1349 it  |  x 2.26 (+55.7%)
+  [ood] 28/30  DR  3240 it  |  learned  1281 it  |  x 2.53 (+60.5%)
+  [ood] 29/30  DR  1820 it  |  learned  1272 it  |  x 1.43 (+30.1%)
+  [ood] 30/30  DR  3152 it  |  learned  1177 it  |  x 2.68 (+62.7%)
+  [ood] mean speed-up 1.93x   median 1.89x   min 0.75x   max 3.28x   win-rate 87% (26/30)
+  [ood] mean % reduction (per-instance average): mean=38.5%  median=47.1%
+saved runs/official_ood/zeroshot_d1.0_level20/results.png

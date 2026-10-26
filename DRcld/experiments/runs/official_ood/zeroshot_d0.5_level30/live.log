@@ -1,0 +1,68 @@
+zero-shot OOD test (generator=old, c<b fix), discard+resample on DR non-convergence  (weights=runs/official/official_N10_d0.5_seed1_replicate/phi_w.pt  density=0.5  base_seed=1  n_test=30  pct_level=30%  pct_width=8%  dr_gamma=6.0  gnn_rho=0.9825  gnn_scale=1.0  gnn_rho_slow=0.99  gnn_scale_slow=0.0  DR_MAX_ITER=4000)
+  loaded checkpoint
+  base market: N=10  edges=27
+  [ood]  1/29 kept (attempt 1)  DR  1261 it  |  learned   614 it
+  [ood]  2/29 kept (attempt 2)  DR  1145 it  |  learned   987 it
+  [ood]  3/29 kept (attempt 1)  DR  1046 it  |  learned   691 it
+  ... instance 4: draw discarded, DR did not converge (hit 4000 iters), retrying (attempt 1)
+  [ood]  4/29 kept (attempt 4)  DR   811 it  |  learned   579 it
+  [ood]  5/29 kept (attempt 1)  DR  1241 it  |  learned   667 it
+  [ood]  6/29 kept (attempt 1)  DR  1178 it  |  learned   675 it
+  [ood]  7/29 kept (attempt 1)  DR   819 it  |  learned   713 it
+  [ood]  8/29 kept (attempt 1)  DR  1444 it  |  learned   714 it
+  [ood]  9/29 kept (attempt 1)  DR  1120 it  |  learned   675 it
+  [ood] 10/29 kept (attempt 2)  DR  1137 it  |  learned   740 it
+  [ood] 11/29 kept (attempt 1)  DR  1178 it  |  learned   475 it
+  [ood] 12/29 kept (attempt 1)  DR   828 it  |  learned   657 it
+  [ood] 13/29 kept (attempt 1)  DR  1517 it  |  learned   721 it
+  [ood] 14/29 kept (attempt 2)  DR  1301 it  |  learned   605 it
+  [ood] 15/29 kept (attempt 1)  DR  1002 it  |  learned   558 it
+  [ood] 16/29 kept (attempt 1)  DR  1023 it  |  learned   657 it
+  [ood] 17/29 kept (attempt 1)  DR  1169 it  |  learned   635 it
+  [ood] 18/29 kept (attempt 1)  DR  1025 it  |  learned   598 it
+  [ood] 19/29 kept (attempt 1)  DR   921 it  |  learned   536 it
+  [ood] 20/29 kept (attempt 1)  DR   893 it  |  learned   537 it
+  [ood] 21/29 kept (attempt 1)  DR  1323 it  |  learned   613 it
+  [ood] 22/29 kept (attempt 1)  DR   870 it  |  learned   709 it
+  [ood] 23/29 kept (attempt 1)  DR  1303 it  |  learned   567 it
+  [ood] 24/29 kept (attempt 1)  DR  1179 it  |  learned   707 it
+  [ood] 25/29 kept (attempt 1)  DR  1413 it  |  learned   577 it
+  [ood] 26/29 kept (attempt 1)  DR  1350 it  |  learned  1004 it
+  [ood] 27/29 kept (attempt 1)  DR  1040 it  |  learned   611 it
+  [ood] 28/29 kept (attempt 1)  DR   746 it  |  learned   518 it
+  [ood] 29/29 kept (attempt 2)  DR  1379 it  |  learned   486 it
+  test set: 30 instances (slot 0 = original), level+width (+/-30%/+/-8%), x0 FRESH RANDOM per instance (6 infeasible discarded, 1 DR-non-converged discarded+resampled)
+----------------------------------------------------------------------
+  [ood]  1/30  DR  1036 it  |  learned   509 it  |  x 2.04 (+50.9%)
+  [ood]  2/30  DR  1261 it  |  learned   614 it  |  x 2.05 (+51.3%)
+  [ood]  3/30  DR  1145 it  |  learned   987 it  |  x 1.16 (+13.8%)
+  [ood]  4/30  DR  1046 it  |  learned   691 it  |  x 1.51 (+33.9%)
+  [ood]  5/30  DR   811 it  |  learned   579 it  |  x 1.40 (+28.6%)
+  [ood]  6/30  DR  1241 it  |  learned   667 it  |  x 1.86 (+46.3%)
+  [ood]  7/30  DR  1178 it  |  learned   675 it  |  x 1.75 (+42.7%)
+  [ood]  8/30  DR   819 it  |  learned   713 it  |  x 1.15 (+12.9%)
+  [ood]  9/30  DR  1444 it  |  learned   714 it  |  x 2.02 (+50.6%)
+  [ood] 10/30  DR  1120 it  |  learned   675 it  |  x 1.66 (+39.7%)
+  [ood] 11/30  DR  1137 it  |  learned   740 it  |  x 1.54 (+34.9%)
+  [ood] 12/30  DR  1178 it  |  learned   475 it  |  x 2.48 (+59.7%)
+  [ood] 13/30  DR   828 it  |  learned   657 it  |  x 1.26 (+20.7%)
+  [ood] 14/30  DR  1517 it  |  learned   721 it  |  x 2.10 (+52.5%)
+  [ood] 15/30  DR  1301 it  |  learned   605 it  |  x 2.15 (+53.5%)
+  [ood] 16/30  DR  1002 it  |  learned   558 it  |  x 1.80 (+44.3%)
+  [ood] 17/30  DR  1023 it  |  learned   657 it  |  x 1.56 (+35.8%)
+  [ood] 18/30  DR  1169 it  |  learned   635 it  |  x 1.84 (+45.7%)
+  [ood] 19/30  DR  1025 it  |  learned   598 it  |  x 1.71 (+41.7%)
+  [ood] 20/30  DR   921 it  |  learned   536 it  |  x 1.72 (+41.8%)
+  [ood] 21/30  DR   893 it  |  learned   537 it  |  x 1.66 (+39.9%)
+  [ood] 22/30  DR  1323 it  |  learned   613 it  |  x 2.16 (+53.7%)
+  [ood] 23/30  DR   870 it  |  learned   709 it  |  x 1.23 (+18.5%)
+  [ood] 24/30  DR  1303 it  |  learned   567 it  |  x 2.30 (+56.5%)
+  [ood] 25/30  DR  1179 it  |  learned   707 it  |  x 1.67 (+40.0%)
+  [ood] 26/30  DR  1413 it  |  learned   577 it  |  x 2.45 (+59.2%)
+  [ood] 27/30  DR  1350 it  |  learned  1004 it  |  x 1.34 (+25.6%)
+  [ood] 28/30  DR  1040 it  |  learned   611 it  |  x 1.70 (+41.2%)
+  [ood] 29/30  DR   746 it  |  learned   518 it  |  x 1.44 (+30.6%)
+  [ood] 30/30  DR  1379 it  |  learned   486 it  |  x 2.84 (+64.8%)
+  [ood] mean speed-up 1.78x   median 1.72x   min 1.15x   max 2.84x   win-rate 100% (30/30)
+  [ood] mean % reduction (per-instance average): mean=41.0%  median=41.7%
+saved runs/official_ood/zeroshot_d0.5_level30/results.png

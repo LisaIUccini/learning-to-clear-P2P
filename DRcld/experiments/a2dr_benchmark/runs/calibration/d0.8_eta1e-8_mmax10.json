@@ -1,0 +1,37 @@
+{
+  "density": 0.8,
+  "eta": 1e-08,
+  "mmax": 10,
+  "n_val": 10,
+  "mean_speedup": 0.576575,
+  "median_speedup": 0.5475,
+  "min_speedup": 0.368,
+  "max_speedup": 0.7835,
+  "win_rate": 0.0,
+  "all_converged": false,
+  "n_nonconverged": 10,
+  "dr_iters": [
+    2137,
+    2674,
+    3134,
+    1659,
+    2150,
+    3037,
+    2615,
+    1472,
+    2230,
+    1955
+  ],
+  "a2dr_iters": [
+    4000,
+    4000,
+    4000,
+    4000,
+    4000,
+    4000,
+    4000,
+    4000,
+    4000,
+    4000
+  ]
+}

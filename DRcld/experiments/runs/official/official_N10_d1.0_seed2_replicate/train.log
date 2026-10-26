@@ -1,0 +1,80 @@
+writing all artifacts to runs/official/official_N10_d1.0_seed2_replicate/  (density=1.0  N=10  c_scheme=seller_discount  rho_variant=10  gamma*=6.0  unroll=1354  gnn_rho=0.9926  n_train=50  n_test=30  epochs=25  base_seed=2  omega_mode=dr_slope  omega_power=0.0  lr_final_frac=0.01)
+======================================================================
+OFFICIAL PILOT -- recalibrated market generator, density=1.0, base_seed=2
+gamma*=6.0 (resolved via plateau-center grid search), lambda=1.0, rho_variant=10 (gnn_rho=0.9926)
+======================================================================
+  [generator=old, c_old_range=(0.05, 0.18), c<b guaranteed: max(c)=0.18 < min(b)=0.2]
+  N=10  edges=45
+  train: 50 (35 discarded)  |  test: 30 (8 discarded)  |  val: 10 (1 discarded)
+  x0: FRESH RANDOM per (instance, epoch) during training, fresh per test instance at eval
+
+training Phi_w (centralised, self-supervised, loss_mode='asymmetric', omega_mode='dr_slope')
+slow channel: scale_slow=0.4  rho_slow=0.99
+  epoch   1/25 | train -0.0001 | val -0.0013
+  epoch   2/25 | train -0.0017 | val -0.0017
+  epoch   3/25 | train -0.0021 | val -0.0021
+  epoch   4/25 | train -0.0021 | val -0.0020
+  epoch   5/25 | train -0.0023 | val -0.0018
+  epoch   6/25 | train -0.0022 | val -0.0023
+  epoch   7/25 | train -0.0023 | val -0.0023
+  epoch   8/25 | train -0.0025 | val -0.0023
+  epoch   9/25 | train -0.0024 | val -0.0024
+  epoch  10/25 | train -0.0025 | val -0.0023
+  epoch  11/25 | train -0.0024 | val -0.0026
+  epoch  12/25 | train -0.0025 | val -0.0024
+  epoch  13/25 | train -0.0025 | val -0.0022
+  epoch  14/25 | train -0.0024 | val -0.0025
+  epoch  15/25 | train -0.0026 | val -0.0024
+  epoch  16/25 | train -0.0026 | val -0.0025
+  epoch  17/25 | train -0.0026 | val -0.0025
+  epoch  18/25 | train -0.0025 | val -0.0026
+  epoch  19/25 | train -0.0025 | val -0.0027
+  epoch  20/25 | train -0.0026 | val -0.0025
+  epoch  21/25 | train -0.0026 | val -0.0023
+  epoch  22/25 | train -0.0026 | val -0.0025
+  epoch  23/25 | train -0.0025 | val -0.0025
+  epoch  24/25 | train -0.0026 | val -0.0024
+  epoch  25/25 | train -0.0025 | val -0.0026
+saved runs/official/official_N10_d1.0_seed2_replicate/training_loss.png
+
+evaluating: plain DR vs DR + Phi_w, in-distribution test set, FRESH RANDOM x0
+----------------------------------------------------------------------
+  [d1.0/rho10]  1/30  DR  1909 it  |  learned  1347 it  |  x 1.42 (+29.4%)
+  [d1.0/rho10]  2/30  DR  2120 it  |  learned  1367 it  |  x 1.55 (+35.5%)
+  [d1.0/rho10]  3/30  DR  4000 it  |  learned  1260 it  |  x 3.17 (+68.5%)
+  [d1.0/rho10]  4/30  DR  1146 it  |  learned  1347 it  |  x 0.85 (-17.5%)
+  [d1.0/rho10]  5/30  DR  3806 it  |  learned  1121 it  |  x 3.40 (+70.5%)
+  [d1.0/rho10]  6/30  DR  4000 it  |  learned  1187 it  |  x 3.37 (+70.3%)
+  [d1.0/rho10]  7/30  DR  1233 it  |  learned  1158 it  |  x 1.06 (+6.1%)
+  [d1.0/rho10]  8/30  DR  4000 it  |  learned   955 it  |  x 4.19 (+76.1%)
+  [d1.0/rho10]  9/30  DR  2376 it  |  learned  1251 it  |  x 1.90 (+47.3%)
+  [d1.0/rho10] 10/30  DR  2076 it  |  learned  1156 it  |  x 1.80 (+44.3%)
+  [d1.0/rho10] 11/30  DR  4000 it  |  learned  1225 it  |  x 3.27 (+69.4%)
+  [d1.0/rho10] 12/30  DR  1635 it  |  learned  1337 it  |  x 1.22 (+18.2%)
+  [d1.0/rho10] 13/30  DR   973 it  |  learned  1203 it  |  x 0.81 (-23.6%)
+  [d1.0/rho10] 14/30  DR  3798 it  |  learned  1295 it  |  x 2.93 (+65.9%)
+  [d1.0/rho10] 15/30  DR  3044 it  |  learned  1228 it  |  x 2.48 (+59.7%)
+  [d1.0/rho10] 16/30  DR  1002 it  |  learned  1138 it  |  x 0.88 (-13.6%)
+  [d1.0/rho10] 17/30  DR  3947 it  |  learned  1195 it  |  x 3.30 (+69.7%)
+  [d1.0/rho10] 18/30  DR  1013 it  |  learned  1286 it  |  x 0.79 (-26.9%)
+  [d1.0/rho10] 19/30  DR  4000 it  |  learned  1352 it  |  x 2.96 (+66.2%)
+  [d1.0/rho10] 20/30  DR  3926 it  |  learned  1254 it  |  x 3.13 (+68.1%)
+  [d1.0/rho10] 21/30  DR  2356 it  |  learned  1182 it  |  x 1.99 (+49.8%)
+  [d1.0/rho10] 22/30  DR  1000 it  |  learned  1384 it  |  x 0.72 (-38.4%)
+  [d1.0/rho10] 23/30  DR  2791 it  |  learned  1317 it  |  x 2.12 (+52.8%)
+  [d1.0/rho10] 24/30  DR  1109 it  |  learned  1200 it  |  x 0.92 (-8.2%)
+  [d1.0/rho10] 25/30  DR   974 it  |  learned  1232 it  |  x 0.79 (-26.5%)
+  [d1.0/rho10] 26/30  DR  1120 it  |  learned  1285 it  |  x 0.87 (-14.7%)
+  [d1.0/rho10] 27/30  DR  4000 it  |  learned  1225 it  |  x 3.27 (+69.4%)
+  [d1.0/rho10] 28/30  DR  1953 it  |  learned  1306 it  |  x 1.50 (+33.1%)
+  [d1.0/rho10] 29/30  DR  3224 it  |  learned  1289 it  |  x 2.50 (+60.0%)
+  [d1.0/rho10] 30/30  DR  2191 it  |  learned  1507 it  |  x 1.45 (+31.2%)
+  [d1.0/rho10] mean speed-up 2.02x   median 1.85x   min 0.72x   max 4.19x   win-rate 73% (22/30)
+  mean % reduction (per-instance average): mean=33.1%  median=45.8%
+saved runs/official/official_N10_d1.0_seed2_replicate/results.png
+
+generating per-instance diagnostic plots (4 panels: residual x^k, residual xbar^k, relative optimality gap, local constraint violation)...
+saved 30 per-instance diagnostic plots + raw-trajectory JSON files to runs/official/official_N10_d1.0_seed2_replicate/instance_plots/
+saved runs/official/official_N10_d1.0_seed2_replicate/NOTES.md
+
+DONE -- runs/official/official_N10_d1.0_seed2_replicate/

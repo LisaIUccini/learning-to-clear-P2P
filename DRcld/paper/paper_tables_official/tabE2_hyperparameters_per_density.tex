@@ -1,0 +1,16 @@
+% DRAFT CAPTION (Table E2, \label{tab:hyper2}): the hyperparameters of Table E1
+% that vary by density (DR step size, unroll horizon, DR+GNN slow-channel scale,
+% A2DR memory/regularization), all selected on the validation set (K via the
+% training set, see Table E1).
+
+\begin{tabular}{lcccccc}
+\toprule
+parameter & $\delta=0.2$ & $\delta=0.4$ & $\delta=0.5$ & $\delta=0.6$ & $\delta=0.8$ & $\delta=1.0$ \\
+\midrule
+DR step size $\gamma$ & 4.0 & 4.0 & 6.0 & 4.0 & 4.0 & 6.0 \\
+unroll horizon $K$ & 426 & 318 & 570 & 321 & 1159 & 1354 \\
+slow-channel scale $s_{\mathrm s}$ & 0.0 & 0.4 & 0.0 & 0.0 & 0.4 & 0.4 \\
+A2DR memory $m$ & 3 & 5 & 5 & 5 & 3 & 5 \\
+A2DR reg. $\eta$ & 0.0001 & 0.0001 & 0.0001 & 3e-05 & 0.0001 & 3e-05 \\
+\bottomrule
+\end{tabular}

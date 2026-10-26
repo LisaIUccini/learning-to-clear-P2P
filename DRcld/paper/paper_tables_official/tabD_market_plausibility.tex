@@ -1,0 +1,19 @@
+% DRAFT CAPTION: Plausibility of the generated markets (market.MarketConfig, c in
+% U(0.05,0.18), the generator actually used for the reported results), 200
+% level+width-perturbed instances per density, solved exactly (equilibrium QP).
+% 'at capacity' is solver-dependent at tau=0 when the trading graph has cycles
+% (individual edge flows are non-unique there -- not a real diagnostic, see
+% equilibrium.py); kept only for completeness.
+
+\begin{tabular}{lcccccc}
+\toprule
+metric & $\delta=0.2$ & $\delta=0.4$ & $\delta=0.5$ & $\delta=0.6$ & $\delta=0.8$ & $\delta=1.0$ \\
+\midrule
+feasible instances & 100\% & 100\% & 100\% & 100\% & 100\% & 100\% \\
+buyers / sellers (avg. of 10) & 4.2 / 5.8 & 3.2 / 6.8 & 4.0 / 6.0 & 4.4 / 5.6 & 6.6 / 3.4 & 4.0 / 6.0 \\
+demand curtailment (median) & 20\% & 22\% & 19\% & 18\% & 21\% & 16\% \\
+dumping (unabsorbed export) & 0.0\% & 0.0\% & 0.0\% & 0.0\% & 0.0\% & 0.0\% \\
+nodal price $\lambda$ (median) & 2.671 & 2.701 & 3.596 & 3.124 & 2.469 & 3.938 \\
+trades at capacity$^{*}$ & 22\% & 30\% & 33\% & 36\% & 38\% & 41\% \\
+\bottomrule
+\end{tabular}

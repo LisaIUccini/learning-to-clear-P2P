@@ -1,0 +1,106 @@
+writing all artifacts to runs/l2ws/l2ws_N10_d0.6_seed3_asymmetric/  (density=0.6  N=10  gamma=4.0  unroll=321  hidden_dim=64  n_hidden_layers=1  n_train=50  n_test=30  epochs=50  base_seed=3  lr=0.003  loss_mode=asymmetric)
+======================================================================
+L2WS BENCHMARK -- Sambharya, Hall, Amos & Stellato (JMLR 2024)
+warm-start MLP h_w(theta) only, PLAIN DR thereafter (no per-step correction)
+density=0.6  base_seed=3  gamma=4.0  unroll(train k)=321
+======================================================================
+  [generator=old, c_old_range=(0.05, 0.18), c<b guaranteed: max(c)=0.18 < min(b)=0.2]
+  N=10  edges=31 (directed=62)  theta_dim=214  out_dim(=2N+E_directed)=82
+  train: 50 (0 discarded)  |  test: 30 (0 discarded)  |  val: 10 (0 discarded)
+
+training h_w (feedforward MLP, loss_mode=asymmetric, k=321 steps)...
+  asymmetric_loss params: gamma_mono=2.0  w_behind=2.0  w_ahead=1.0  omega_mode=dr_slope  omega_power=0.0
+  precomputing 50 train + 10 val cold-start reference trajectories (plain DR, 321 steps, no grad)...
+  epoch   1/50 | train -0.0015 | val -0.0054
+  epoch   2/50 | train -0.0070 | val -0.0078
+  epoch   3/50 | train -0.0077 | val -0.0078
+  epoch   4/50 | train -0.0078 | val -0.0080
+  epoch   5/50 | train -0.0078 | val -0.0080
+  epoch   6/50 | train -0.0078 | val -0.0079
+  epoch   7/50 | train -0.0079 | val -0.0082
+  epoch   8/50 | train -0.0080 | val -0.0080
+  epoch   9/50 | train -0.0079 | val -0.0082
+  epoch  10/50 | train -0.0079 | val -0.0081
+  epoch  11/50 | train -0.0079 | val -0.0081
+  epoch  12/50 | train -0.0079 | val -0.0080
+  epoch  13/50 | train -0.0080 | val -0.0082
+  epoch  14/50 | train -0.0080 | val -0.0080
+  epoch  15/50 | train -0.0080 | val -0.0080
+  epoch  16/50 | train -0.0080 | val -0.0082
+  epoch  17/50 | train -0.0079 | val -0.0081
+  epoch  18/50 | train -0.0080 | val -0.0082
+  epoch  19/50 | train -0.0080 | val -0.0083
+  epoch  20/50 | train -0.0080 | val -0.0082
+  epoch  21/50 | train -0.0080 | val -0.0082
+  epoch  22/50 | train -0.0080 | val -0.0083
+  epoch  23/50 | train -0.0080 | val -0.0081
+  epoch  24/50 | train -0.0080 | val -0.0080
+  epoch  25/50 | train -0.0079 | val -0.0080
+  epoch  26/50 | train -0.0080 | val -0.0081
+  epoch  27/50 | train -0.0079 | val -0.0081
+  epoch  28/50 | train -0.0079 | val -0.0082
+  epoch  29/50 | train -0.0081 | val -0.0082
+  epoch  30/50 | train -0.0080 | val -0.0081
+  epoch  31/50 | train -0.0080 | val -0.0082
+  epoch  32/50 | train -0.0080 | val -0.0082
+  epoch  33/50 | train -0.0080 | val -0.0082
+  epoch  34/50 | train -0.0080 | val -0.0081
+  epoch  35/50 | train -0.0080 | val -0.0082
+  epoch  36/50 | train -0.0080 | val -0.0082
+  epoch  37/50 | train -0.0081 | val -0.0082
+  epoch  38/50 | train -0.0081 | val -0.0080
+  epoch  39/50 | train -0.0080 | val -0.0082
+  epoch  40/50 | train -0.0081 | val -0.0082
+  epoch  41/50 | train -0.0081 | val -0.0082
+  epoch  42/50 | train -0.0081 | val -0.0082
+  epoch  43/50 | train -0.0080 | val -0.0082
+  epoch  44/50 | train -0.0080 | val -0.0082
+  epoch  45/50 | train -0.0080 | val -0.0081
+  epoch  46/50 | train -0.0081 | val -0.0083
+  epoch  47/50 | train -0.0081 | val -0.0081
+  epoch  48/50 | train -0.0080 | val -0.0082
+  epoch  49/50 | train -0.0080 | val -0.0080
+  epoch  50/50 | train -0.0081 | val -0.0082
+saved runs/l2ws/l2ws_N10_d0.6_seed3_asymmetric/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws/d0.6]  1/30  DR   860 it  |  L2WS   356 it  |  x 2.42 (+58.6%)
+  [l2ws/d0.6]  2/30  DR   794 it  |  L2WS   319 it  |  x 2.49 (+59.8%)
+  [l2ws/d0.6]  3/30  DR  1064 it  |  L2WS   486 it  |  x 2.19 (+54.3%)
+  [l2ws/d0.6]  4/30  DR   878 it  |  L2WS   383 it  |  x 2.29 (+56.4%)
+  [l2ws/d0.6]  5/30  DR   906 it  |  L2WS   480 it  |  x 1.89 (+47.0%)
+  [l2ws/d0.6]  6/30  DR   975 it  |  L2WS   461 it  |  x 2.11 (+52.7%)
+  [l2ws/d0.6]  7/30  DR   859 it  |  L2WS   509 it  |  x 1.69 (+40.7%)
+  [l2ws/d0.6]  8/30  DR   698 it  |  L2WS   337 it  |  x 2.07 (+51.7%)
+  [l2ws/d0.6]  9/30  DR   663 it  |  L2WS   458 it  |  x 1.45 (+30.9%)
+  [l2ws/d0.6] 10/30  DR   676 it  |  L2WS   344 it  |  x 1.97 (+49.1%)
+  [l2ws/d0.6] 11/30  DR  1131 it  |  L2WS   488 it  |  x 2.32 (+56.9%)
+  [l2ws/d0.6] 12/30  DR   715 it  |  L2WS   396 it  |  x 1.81 (+44.6%)
+  [l2ws/d0.6] 13/30  DR   920 it  |  L2WS   315 it  |  x 2.92 (+65.8%)
+  [l2ws/d0.6] 14/30  DR  1020 it  |  L2WS   455 it  |  x 2.24 (+55.4%)
+  [l2ws/d0.6] 15/30  DR   885 it  |  L2WS   474 it  |  x 1.87 (+46.4%)
+  [l2ws/d0.6] 16/30  DR  1043 it  |  L2WS   454 it  |  x 2.30 (+56.5%)
+  [l2ws/d0.6] 17/30  DR   938 it  |  L2WS   484 it  |  x 1.94 (+48.4%)
+  [l2ws/d0.6] 18/30  DR   828 it  |  L2WS   293 it  |  x 2.83 (+64.6%)
+  [l2ws/d0.6] 19/30  DR   848 it  |  L2WS   387 it  |  x 2.19 (+54.4%)
+  [l2ws/d0.6] 20/30  DR   667 it  |  L2WS   383 it  |  x 1.74 (+42.6%)
+  [l2ws/d0.6] 21/30  DR   873 it  |  L2WS   452 it  |  x 1.93 (+48.2%)
+  [l2ws/d0.6] 22/30  DR   651 it  |  L2WS   360 it  |  x 1.81 (+44.7%)
+  [l2ws/d0.6] 23/30  DR   799 it  |  L2WS   376 it  |  x 2.12 (+52.9%)
+  [l2ws/d0.6] 24/30  DR   624 it  |  L2WS   387 it  |  x 1.61 (+38.0%)
+  [l2ws/d0.6] 25/30  DR   681 it  |  L2WS   352 it  |  x 1.93 (+48.3%)
+  [l2ws/d0.6] 26/30  DR   637 it  |  L2WS   372 it  |  x 1.71 (+41.6%)
+  [l2ws/d0.6] 27/30  DR   725 it  |  L2WS   336 it  |  x 2.16 (+53.7%)
+  [l2ws/d0.6] 28/30  DR   780 it  |  L2WS   360 it  |  x 2.17 (+53.8%)
+  [l2ws/d0.6] 29/30  DR   985 it  |  L2WS   455 it  |  x 2.16 (+53.8%)
+  [l2ws/d0.6] 30/30  DR   742 it  |  L2WS   486 it  |  x 1.53 (+34.5%)
+  [l2ws/d0.6] mean speed-up 2.06x   median 2.09x   min 1.45x   max 2.92x   win-rate 100% (30/30)
+  mean % reduction (per-instance average): mean=50.2%  median=52.2%
+saved runs/l2ws/l2ws_N10_d0.6_seed3_asymmetric/results.png
+
+generating per-instance diagnostic plots...
+saved 30 per-instance diagnostic plots + raw-trajectory JSON files to runs/l2ws/l2ws_N10_d0.6_seed3_asymmetric/instance_plots/
+saved runs/l2ws/l2ws_N10_d0.6_seed3_asymmetric/NOTES.md
+
+DONE -- runs/l2ws/l2ws_N10_d0.6_seed3_asymmetric/

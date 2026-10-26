@@ -1,0 +1,28 @@
+% DRAFT CAPTION (Table E1): Hyperparameters of the final runs shared across
+% densities (read from logs/config, not defaults), and how each was selected.
+% Parameters that vary by density are in Table E2.
+
+\begin{tabular}{llp{4.2cm}}
+\toprule
+parameter & value(s) & selection \\
+\midrule
+\multicolumn{3}{l}{\textit{DR (baseline, shared by all methods)}} \\
+step size $\gamma$ / relaxation $\lambda$ & see Table~\ref{tab:hyper2} / 1.0 & grid search (train. set) / fixed \\
+bisection steps / tol. / cap & 30 / $10^{-5}$ / 4000 & fixed \\
+\multicolumn{3}{l}{\textit{DR+GNN ($\Phi_w$) architecture}} \\
+hidden dim $d_h$ / MLP depth & 32 / 1 hidden layer & fixed, all densities \\
+fast-channel decay $\rho_{\mathrm f}$ & $1-10/K$ & formula, verified exact all 6 densities \\
+slow-channel decay $\rho_{\mathrm s}$ & 0.99 & fixed, all densities \\
+slow-channel scale, unroll $K$ & see Table~\ref{tab:hyper2} & validation set / half mean DR iters. \\
+\multicolumn{3}{l}{\textit{DR+GNN training}} \\
+loss weights $\alpha_{\text{behind}},\alpha_{\text{ahead}},\beta$ & 2.0, 1.0, 2.0 & fixed \\
+optimizer / LR schedule & Adam lr$=3\times10^{-3}$ / cosine to 1\% & fixed \\
+gradient clipping / epochs & $\|\nabla\|\le 1.0$ / 25 & fixed \\
+\multicolumn{3}{l}{\textit{L2WS (distributed)}} \\
+message-passing rounds $L$ & 3 & ablation: $L\in\{1..5\}$, validation loss \\
+architecture & shared weights, residual update & ablation: shared/separate $\times$ GRU/residual \\
+optimizer / epochs & Adam lr$=3\times10^{-3}$ / 50 & ablation: lr $\times$ epochs grid \\
+\multicolumn{3}{l}{\textit{A2DR}} \\
+memory $m$ / regularization $\eta$ & see Table~\ref{tab:hyper2} & grid search, validation set \\
+\bottomrule
+\end{tabular}

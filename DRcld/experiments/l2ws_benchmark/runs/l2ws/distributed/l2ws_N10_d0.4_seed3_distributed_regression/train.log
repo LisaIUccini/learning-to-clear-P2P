@@ -1,0 +1,102 @@
+writing all artifacts to runs/l2ws/distributed/l2ws_N10_d0.4_seed3_distributed_regression/  (density=0.4  N=10  gamma=4.0  unroll=318  hidden_dim=32  n_rounds=3  shared_weights=True  update_type=residual  n_train=50  n_test=30  epochs=50  base_seed=3  lr=0.003  loss_mode=regression)
+======================================================================
+DISTRIBUTED L2WS -- message-passing GNN warm-start (prototype)
+h_w = L=3-round message-passing GNN (shared weights, residual update), PLAIN DR thereafter
+density=0.4  base_seed=3  gamma=4.0  unroll(train k)=318
+======================================================================
+  N=10  edges=23
+  train: 50 (17 discarded)  |  test: 30 (5 discarded)  |  val: 10 (1 discarded)
+  model: 10019 parameters (independent of N)
+
+training distributed h_w (loss_mode=regression, k=318 steps)...
+  precomputing 50 train + 10 val fixed-point targets (plain DR to convergence, no grad)...
+  epoch   1/50 | train +0.0505 | val +0.0285
+  epoch   2/50 | train +0.0309 | val +0.0277
+  epoch   3/50 | train +0.0304 | val +0.0274
+  epoch   4/50 | train +0.0302 | val +0.0269
+  epoch   5/50 | train +0.0301 | val +0.0268
+  epoch   6/50 | train +0.0300 | val +0.0267
+  epoch   7/50 | train +0.0299 | val +0.0266
+  epoch   8/50 | train +0.0299 | val +0.0266
+  epoch   9/50 | train +0.0303 | val +0.0235
+  epoch  10/50 | train +0.0080 | val +0.0003
+  epoch  11/50 | train +0.0007 | val +0.0003
+  epoch  12/50 | train +0.0002 | val +0.0002
+  epoch  13/50 | train +0.0001 | val +0.0001
+  epoch  14/50 | train +0.0001 | val +0.0002
+  epoch  15/50 | train +0.0001 | val +0.0002
+  epoch  16/50 | train +0.0001 | val +0.0001
+  epoch  17/50 | train +0.0001 | val +0.0001
+  epoch  18/50 | train +0.0001 | val +0.0001
+  epoch  19/50 | train +0.0001 | val +0.0001
+  epoch  20/50 | train +0.0001 | val +0.0001
+  epoch  21/50 | train +0.0001 | val +0.0001
+  epoch  22/50 | train +0.0001 | val +0.0001
+  epoch  23/50 | train +0.0001 | val +0.0001
+  epoch  24/50 | train +0.0001 | val +0.0001
+  epoch  25/50 | train +0.0001 | val +0.0001
+  epoch  26/50 | train +0.0001 | val +0.0001
+  epoch  27/50 | train +0.0001 | val +0.0001
+  epoch  28/50 | train +0.0001 | val +0.0001
+  epoch  29/50 | train +0.0001 | val +0.0001
+  epoch  30/50 | train +0.0001 | val +0.0001
+  epoch  31/50 | train +0.0001 | val +0.0001
+  epoch  32/50 | train +0.0001 | val +0.0001
+  epoch  33/50 | train +0.0001 | val +0.0001
+  epoch  34/50 | train +0.0001 | val +0.0000
+  epoch  35/50 | train +0.0001 | val +0.0001
+  epoch  36/50 | train +0.0001 | val +0.0001
+  epoch  37/50 | train +0.0001 | val +0.0001
+  epoch  38/50 | train +0.0001 | val +0.0001
+  epoch  39/50 | train +0.0001 | val +0.0001
+  epoch  40/50 | train +0.0001 | val +0.0001
+  epoch  41/50 | train +0.0001 | val +0.0001
+  epoch  42/50 | train +0.0001 | val +0.0001
+  epoch  43/50 | train +0.0001 | val +0.0001
+  epoch  44/50 | train +0.0001 | val +0.0001
+  epoch  45/50 | train +0.0001 | val +0.0001
+  epoch  46/50 | train +0.0001 | val +0.0001
+  epoch  47/50 | train +0.0001 | val +0.0001
+  epoch  48/50 | train +0.0001 | val +0.0001
+  epoch  49/50 | train +0.0001 | val +0.0001
+  epoch  50/50 | train +0.0001 | val +0.0001
+saved runs/l2ws/distributed/l2ws_N10_d0.4_seed3_distributed_regression/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by distributed h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws-dist/d0.4]  1/30  DR  1033 it  |  L2WS   429 it  |  x 2.41 (+58.5%)
+  [l2ws-dist/d0.4]  2/30  DR   830 it  |  L2WS   399 it  |  x 2.08 (+51.9%)
+  [l2ws-dist/d0.4]  3/30  DR  1276 it  |  L2WS   429 it  |  x 2.97 (+66.4%)
+  [l2ws-dist/d0.4]  4/30  DR   663 it  |  L2WS   430 it  |  x 1.54 (+35.1%)
+  [l2ws-dist/d0.4]  5/30  DR   727 it  |  L2WS   442 it  |  x 1.64 (+39.2%)
+  [l2ws-dist/d0.4]  6/30  DR  1100 it  |  L2WS   433 it  |  x 2.54 (+60.6%)
+  [l2ws-dist/d0.4]  7/30  DR   618 it  |  L2WS   472 it  |  x 1.31 (+23.6%)
+  [l2ws-dist/d0.4]  8/30  DR   746 it  |  L2WS   442 it  |  x 1.69 (+40.8%)
+  [l2ws-dist/d0.4]  9/30  DR  1144 it  |  L2WS   431 it  |  x 2.65 (+62.3%)
+  [l2ws-dist/d0.4] 10/30  DR  1036 it  |  L2WS   401 it  |  x 2.58 (+61.3%)
+  [l2ws-dist/d0.4] 11/30  DR   980 it  |  L2WS   430 it  |  x 2.28 (+56.1%)
+  [l2ws-dist/d0.4] 12/30  DR  1269 it  |  L2WS   416 it  |  x 3.05 (+67.2%)
+  [l2ws-dist/d0.4] 13/30  DR  1316 it  |  L2WS   418 it  |  x 3.15 (+68.2%)
+  [l2ws-dist/d0.4] 14/30  DR   804 it  |  L2WS   432 it  |  x 1.86 (+46.3%)
+  [l2ws-dist/d0.4] 15/30  DR   824 it  |  L2WS   416 it  |  x 1.98 (+49.5%)
+  [l2ws-dist/d0.4] 16/30  DR   566 it  |  L2WS   432 it  |  x 1.31 (+23.7%)
+  [l2ws-dist/d0.4] 17/30  DR   643 it  |  L2WS   468 it  |  x 1.37 (+27.2%)
+  [l2ws-dist/d0.4] 18/30  DR  1040 it  |  L2WS   417 it  |  x 2.49 (+59.9%)
+  [l2ws-dist/d0.4] 19/30  DR  1226 it  |  L2WS   430 it  |  x 2.85 (+64.9%)
+  [l2ws-dist/d0.4] 20/30  DR   687 it  |  L2WS   440 it  |  x 1.56 (+36.0%)
+  [l2ws-dist/d0.4] 21/30  DR   875 it  |  L2WS   436 it  |  x 2.01 (+50.2%)
+  [l2ws-dist/d0.4] 22/30  DR   785 it  |  L2WS   404 it  |  x 1.94 (+48.5%)
+  [l2ws-dist/d0.4] 23/30  DR   925 it  |  L2WS   458 it  |  x 2.02 (+50.5%)
+  [l2ws-dist/d0.4] 24/30  DR   719 it  |  L2WS   440 it  |  x 1.63 (+38.8%)
+  [l2ws-dist/d0.4] 25/30  DR  1137 it  |  L2WS   448 it  |  x 2.54 (+60.6%)
+  [l2ws-dist/d0.4] 26/30  DR   863 it  |  L2WS   424 it  |  x 2.04 (+50.9%)
+  [l2ws-dist/d0.4] 27/30  DR  1058 it  |  L2WS   436 it  |  x 2.43 (+58.8%)
+  [l2ws-dist/d0.4] 28/30  DR  1273 it  |  L2WS   430 it  |  x 2.96 (+66.2%)
+  [l2ws-dist/d0.4] 29/30  DR   782 it  |  L2WS   434 it  |  x 1.80 (+44.5%)
+  [l2ws-dist/d0.4] 30/30  DR  1142 it  |  L2WS   424 it  |  x 2.69 (+62.9%)
+  [l2ws-dist/d0.4] mean speed-up 2.18x   median 2.06x   min 1.31x   max 3.15x   win-rate 100% (30/30)
+  mean % reduction (per-instance average): mean=51.0%  median=51.4%
+saved runs/l2ws/distributed/l2ws_N10_d0.4_seed3_distributed_regression/results.png
+saved runs/l2ws/distributed/l2ws_N10_d0.4_seed3_distributed_regression/NOTES.md
+
+DONE -- runs/l2ws/distributed/l2ws_N10_d0.4_seed3_distributed_regression/

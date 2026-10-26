@@ -1,0 +1,102 @@
+writing all artifacts to runs/l2ws/distributed/l2ws_N10_d0.5_seed1_distributed_asymmetric/  (density=0.5  N=10  gamma=6.0  unroll=570  hidden_dim=32  n_rounds=3  shared_weights=True  update_type=residual  n_train=50  n_test=30  epochs=50  base_seed=1  lr=0.003  loss_mode=asymmetric)
+======================================================================
+DISTRIBUTED L2WS -- message-passing GNN warm-start (prototype)
+h_w = L=3-round message-passing GNN (shared weights, residual update), PLAIN DR thereafter
+density=0.5  base_seed=1  gamma=6.0  unroll(train k)=570
+======================================================================
+  N=10  edges=27
+  train: 50 (4 discarded)  |  test: 30 (0 discarded)  |  val: 10 (0 discarded)
+  model: 10019 parameters (independent of N)
+
+training distributed h_w (loss_mode=asymmetric, k=570 steps)...
+  precomputing 50 train + 10 val cold-start reference trajectories (plain DR, 570 steps, no grad)...
+  epoch   1/50 | train -0.0013 | val -0.0018
+  epoch   2/50 | train -0.0018 | val -0.0018
+  epoch   3/50 | train -0.0018 | val -0.0018
+  epoch   4/50 | train -0.0018 | val -0.0018
+  epoch   5/50 | train -0.0018 | val -0.0018
+  epoch   6/50 | train -0.0018 | val -0.0018
+  epoch   7/50 | train -0.0018 | val -0.0018
+  epoch   8/50 | train -0.0018 | val -0.0018
+  epoch   9/50 | train -0.0018 | val -0.0018
+  epoch  10/50 | train -0.0018 | val -0.0018
+  epoch  11/50 | train -0.0018 | val -0.0018
+  epoch  12/50 | train -0.0018 | val -0.0018
+  epoch  13/50 | train -0.0018 | val -0.0018
+  epoch  14/50 | train -0.0018 | val -0.0018
+  epoch  15/50 | train -0.0018 | val -0.0018
+  epoch  16/50 | train -0.0018 | val -0.0018
+  epoch  17/50 | train -0.0018 | val -0.0018
+  epoch  18/50 | train -0.0018 | val -0.0018
+  epoch  19/50 | train -0.0018 | val -0.0018
+  epoch  20/50 | train -0.0018 | val -0.0018
+  epoch  21/50 | train -0.0018 | val -0.0018
+  epoch  22/50 | train -0.0018 | val -0.0018
+  epoch  23/50 | train -0.0018 | val -0.0018
+  epoch  24/50 | train -0.0018 | val -0.0018
+  epoch  25/50 | train -0.0018 | val -0.0018
+  epoch  26/50 | train -0.0018 | val -0.0018
+  epoch  27/50 | train -0.0018 | val -0.0018
+  epoch  28/50 | train -0.0018 | val -0.0018
+  epoch  29/50 | train -0.0018 | val -0.0018
+  epoch  30/50 | train -0.0018 | val -0.0018
+  epoch  31/50 | train -0.0018 | val -0.0018
+  epoch  32/50 | train -0.0018 | val -0.0018
+  epoch  33/50 | train -0.0018 | val -0.0018
+  epoch  34/50 | train -0.0018 | val -0.0018
+  epoch  35/50 | train -0.0018 | val -0.0018
+  epoch  36/50 | train -0.0018 | val -0.0018
+  epoch  37/50 | train -0.0018 | val -0.0018
+  epoch  38/50 | train -0.0018 | val -0.0018
+  epoch  39/50 | train -0.0018 | val -0.0018
+  epoch  40/50 | train -0.0018 | val -0.0018
+  epoch  41/50 | train -0.0018 | val -0.0018
+  epoch  42/50 | train -0.0018 | val -0.0018
+  epoch  43/50 | train -0.0018 | val -0.0018
+  epoch  44/50 | train -0.0018 | val -0.0018
+  epoch  45/50 | train -0.0018 | val -0.0018
+  epoch  46/50 | train -0.0018 | val -0.0018
+  epoch  47/50 | train -0.0018 | val -0.0018
+  epoch  48/50 | train -0.0018 | val -0.0018
+  epoch  49/50 | train -0.0018 | val -0.0018
+  epoch  50/50 | train -0.0018 | val -0.0018
+saved runs/l2ws/distributed/l2ws_N10_d0.5_seed1_distributed_asymmetric/training_loss.png
+
+evaluating: cold-start plain DR vs plain DR warm-started by distributed h_w(theta), in-distribution test set
+----------------------------------------------------------------------
+  [l2ws-dist/d0.5]  1/30  DR  1034 it  |  L2WS  1154 it  |  x 0.90 (-11.6%)
+  [l2ws-dist/d0.5]  2/30  DR   884 it  |  L2WS  1183 it  |  x 0.75 (-33.8%)
+  [l2ws-dist/d0.5]  3/30  DR  1588 it  |  L2WS  1125 it  |  x 1.41 (+29.2%)
+  [l2ws-dist/d0.5]  4/30  DR  1198 it  |  L2WS  1148 it  |  x 1.04 (+4.2%)
+  [l2ws-dist/d0.5]  5/30  DR   769 it  |  L2WS  1094 it  |  x 0.70 (-42.3%)
+  [l2ws-dist/d0.5]  6/30  DR  1307 it  |  L2WS  1135 it  |  x 1.15 (+13.2%)
+  [l2ws-dist/d0.5]  7/30  DR  1229 it  |  L2WS  1144 it  |  x 1.07 (+6.9%)
+  [l2ws-dist/d0.5]  8/30  DR  1342 it  |  L2WS  1136 it  |  x 1.18 (+15.4%)
+  [l2ws-dist/d0.5]  9/30  DR  1184 it  |  L2WS  1142 it  |  x 1.04 (+3.5%)
+  [l2ws-dist/d0.5] 10/30  DR   980 it  |  L2WS  1189 it  |  x 0.82 (-21.3%)
+  [l2ws-dist/d0.5] 11/30  DR  1118 it  |  L2WS  1167 it  |  x 0.96 (-4.4%)
+  [l2ws-dist/d0.5] 12/30  DR  1091 it  |  L2WS  1209 it  |  x 0.90 (-10.8%)
+  [l2ws-dist/d0.5] 13/30  DR  1089 it  |  L2WS  1164 it  |  x 0.94 (-6.9%)
+  [l2ws-dist/d0.5] 14/30  DR  1252 it  |  L2WS  1129 it  |  x 1.11 (+9.8%)
+  [l2ws-dist/d0.5] 15/30  DR  1202 it  |  L2WS  1177 it  |  x 1.02 (+2.1%)
+  [l2ws-dist/d0.5] 16/30  DR  1215 it  |  L2WS  1097 it  |  x 1.11 (+9.7%)
+  [l2ws-dist/d0.5] 17/30  DR   926 it  |  L2WS  1101 it  |  x 0.84 (-18.9%)
+  [l2ws-dist/d0.5] 18/30  DR  1446 it  |  L2WS  1179 it  |  x 1.23 (+18.5%)
+  [l2ws-dist/d0.5] 19/30  DR  1015 it  |  L2WS  1193 it  |  x 0.85 (-17.5%)
+  [l2ws-dist/d0.5] 20/30  DR  1223 it  |  L2WS  1181 it  |  x 1.04 (+3.4%)
+  [l2ws-dist/d0.5] 21/30  DR  1175 it  |  L2WS  1150 it  |  x 1.02 (+2.1%)
+  [l2ws-dist/d0.5] 22/30  DR  1284 it  |  L2WS  1168 it  |  x 1.10 (+9.0%)
+  [l2ws-dist/d0.5] 23/30  DR   934 it  |  L2WS  1125 it  |  x 0.83 (-20.4%)
+  [l2ws-dist/d0.5] 24/30  DR   893 it  |  L2WS  1116 it  |  x 0.80 (-25.0%)
+  [l2ws-dist/d0.5] 25/30  DR   894 it  |  L2WS  1163 it  |  x 0.77 (-30.1%)
+  [l2ws-dist/d0.5] 26/30  DR   951 it  |  L2WS  1184 it  |  x 0.80 (-24.5%)
+  [l2ws-dist/d0.5] 27/30  DR  1259 it  |  L2WS  1205 it  |  x 1.04 (+4.3%)
+  [l2ws-dist/d0.5] 28/30  DR   922 it  |  L2WS  1187 it  |  x 0.78 (-28.7%)
+  [l2ws-dist/d0.5] 29/30  DR  1184 it  |  L2WS  1109 it  |  x 1.07 (+6.3%)
+  [l2ws-dist/d0.5] 30/30  DR   932 it  |  L2WS  1102 it  |  x 0.85 (-18.2%)
+  [l2ws-dist/d0.5] mean speed-up 0.97x   median 0.99x   min 0.70x   max 1.41x   win-rate 50% (15/30)
+  mean % reduction (per-instance average): mean=-5.9%  median=-1.2%
+saved runs/l2ws/distributed/l2ws_N10_d0.5_seed1_distributed_asymmetric/results.png
+saved runs/l2ws/distributed/l2ws_N10_d0.5_seed1_distributed_asymmetric/NOTES.md
+
+DONE -- runs/l2ws/distributed/l2ws_N10_d0.5_seed1_distributed_asymmetric/
