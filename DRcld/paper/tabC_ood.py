@@ -14,11 +14,10 @@ from __future__ import annotations
 import os
 import numpy as np
 
-import make_paper_figures as mpf
+import common
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_tables_official")
+OUT_DIR = common.TABLES
 os.makedirs(OUT_DIR, exist_ok=True)
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
 CATS = [("id", "ID"), ("level20", "$\\pm20\\%$"), ("level30", "$\\pm30\\%$"),
         ("level40", "$\\pm40\\%$"), ("plus1", "$+1$ prosumer"), ("minus1", "$-1$ prosumer")]
@@ -27,14 +26,14 @@ PM1_KIND = {"plus1": "add", "minus1": "remove"}
 
 
 def load_all():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
     ood = {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         for level in ("level20", "level30", "level40"):
-            rec = mpf.load_ood_level(RESULTS_DIR, d, level)
+            rec = common.load_ood_level(d, level)
             if rec is not None:
                 ood[(d, level)] = rec
-        rec = mpf.load_ood_pm1(RESULTS_DIR, d)
+        rec = common.load_ood_pm1(d)
         if rec is not None:
             ood[(d, "pm1")] = rec
     return official, ood
@@ -68,7 +67,7 @@ def fmt_cell(d):
 
 def main():
     official, ood = load_all()
-    cols = mpf.DENSITIES
+    cols = common.DENSITIES
 
     lines = []
     n_pm = {key: [len(iters(key, d, official, ood, "dr") or []) for d in cols] for key in PM1_KIND}

@@ -1,0 +1,119 @@
+{
+ "ood_level20_d0.2": [
+  [
+   1609,
+   223
+  ],
+  [
+   1243,
+   185
+  ],
+  [
+   2258,
+   311
+  ]
+ ],
+ "ood_pm1_d0.2": [
+  [
+   208,
+   214
+  ],
+  [
+   2203,
+   613
+  ],
+  [
+   1953,
+   435
+  ]
+ ],
+ "l2ws_centralized_asymmetric": {
+  "checkpoint": "8dd60abf6ea3a6e91903f79762b975379a0af60c0e17bac400aa194b137da9d7",
+  "iters": [
+   [
+    1674,
+    1667
+   ],
+   [
+    1675,
+    1763
+   ]
+  ]
+ },
+ "l2ws_centralized_regression": {
+  "checkpoint": "d4da842ebb542629f89299f0387530b2cf2b16b3960a880ab6ba8a5e0729fbd3",
+  "iters": [
+   [
+    1674,
+    1618
+   ],
+   [
+    1675,
+    1720
+   ]
+  ]
+ },
+ "l2ws_distributed_asymmetric": {
+  "checkpoint": "7acc809f8a88f70abd6f8b470466c1cd92723e140d76fc4deff5465ed3b601d9",
+  "iters": [
+   [
+    1674,
+    1663
+   ],
+   [
+    1675,
+    1756
+   ]
+  ]
+ },
+ "l2ws_distributed_regression": {
+  "checkpoint": "f4ef608ed442d08c184588d2d12589fb2b5767aef22ac5ac4f566dc8a779c185",
+  "iters": [
+   [
+    1674,
+    1657
+   ],
+   [
+    1675,
+    1750
+   ]
+  ]
+ },
+ "a2dr_compare_d0.2": {
+  "dr_iters": [
+   1674,
+   1675
+  ],
+  "a2dr_iters": [
+   921,
+   2049
+  ],
+  "learned_iters": [
+   228,
+   263
+  ],
+  "trading_graph_diameter": 4,
+  "a2dr_rounds_per_iter": 9
+ },
+ "a2dr_calibrate_d0.2_eta1e-4_mmax3": {
+  "density": 0.2,
+  "eta": 0.0001,
+  "mmax": 3,
+  "n_val": 2,
+  "mean_speedup": 0.9487733315764604,
+  "median_speedup": 0.9487733315764604,
+  "min_speedup": 0.916920731707317,
+  "max_speedup": 0.9806259314456036,
+  "win_rate": 0.0,
+  "all_converged": true,
+  "n_nonconverged": 0,
+  "dr_iters": [
+   2632,
+   1203
+  ],
+  "a2dr_iters": [
+   2684,
+   1312
+  ]
+ }
+}

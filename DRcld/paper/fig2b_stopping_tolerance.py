@@ -20,7 +20,6 @@ no bordo top/right, no titolo interno, PNG + PDF vettoriale.
 """
 from __future__ import annotations
 
-import json
 import os
 import numpy as np
 import matplotlib
@@ -28,15 +27,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
-import make_paper_figures as mpf
+import common
 import paper_style
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
-FIG2_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fig2_data")
+OUT_DIR = common.FIGURES
+FIG2_DATA_DIR = os.path.join(common.PAPER_DATA, "fig2_data")
 os.makedirs(OUT_DIR, exist_ok=True)
 
-TEXTWIDTH_IN = mpf.TEXTWIDTH_IN
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
+TEXTWIDTH_IN = common.TEXTWIDTH_IN
 
 paper_style.apply()  # font/colori come il testo del paper (Times)
 
@@ -77,14 +75,14 @@ def plot_method(ax, mk, res_arrs, offset=0):
 
 
 def main():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
 
     fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.56),
                               gridspec_kw={"hspace": 0.28, "wspace": 0.30})
     axes = axes.ravel()
 
     missing = []
-    for ax, density in zip(axes, mpf.DENSITIES):
+    for ax, density in zip(axes, common.DENSITIES):
         off = official.get(density)
         if off is not None:
             plot_method(ax, "dr", [i["dr"]["residual"] for i in off["instances"]])

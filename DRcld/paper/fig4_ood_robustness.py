@@ -25,14 +25,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-import make_paper_figures as mpf
+import common
 import paper_style
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
+OUT_DIR = common.FIGURES
 os.makedirs(OUT_DIR, exist_ok=True)
 
-TEXTWIDTH_IN = mpf.TEXTWIDTH_IN
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
+TEXTWIDTH_IN = common.TEXTWIDTH_IN
 
 paper_style.apply()  # font/colori come il testo del paper (Times)
 
@@ -49,14 +48,14 @@ CATS = [
 
 
 def load_all():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
     ood = {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         for level in ("level20", "level30", "level40"):
-            rec = mpf.load_ood_level(RESULTS_DIR, d, level)
+            rec = common.load_ood_level(d, level)
             if rec is not None:
                 ood[(d, level)] = rec
-        rec = mpf.load_ood_pm1(RESULTS_DIR, d)
+        rec = common.load_ood_pm1(d)
         if rec is not None:
             ood[(d, "pm1")] = rec
     return official, ood
@@ -67,11 +66,11 @@ def delta_for(key, density, official, ood):
         off = official.get(density)
         if off is None:
             return None
-        return mpf.delta_pct([i["k_DR"] for i in off["instances"]], [i["k_learned"] for i in off["instances"]])
+        return common.delta_pct([i["k_DR"] for i in off["instances"]], [i["k_learned"] for i in off["instances"]])
     rec = ood.get((density, key))
     if rec is None:
         return None
-    return mpf.delta_pct(rec["dr_iters"], rec["learned_iters"])
+    return common.delta_pct(rec["dr_iters"], rec["learned_iters"])
 
 
 def main():
@@ -84,7 +83,7 @@ def main():
 
     missing = []
     panel_data = {}
-    for density in mpf.DENSITIES:
+    for density in common.DENSITIES:
         rows = []
         for mi, (key, label, color) in enumerate(CATS):
             d = delta_for(key, density, official, ood)
@@ -93,7 +92,7 @@ def main():
             rows.append((mi, np.median(d), np.percentile(d, 25), np.percentile(d, 75), color))
         panel_data[density] = rows
 
-    for ax, density in zip(axes, mpf.DENSITIES):
+    for ax, density in zip(axes, common.DENSITIES):
         for pos, med, q1, q3, c in panel_data[density]:
             ax.errorbar([pos], [med], yerr=[[med - q1], [q3 - med]],
                         fmt="s", ecolor="black", markerfacecolor=c,

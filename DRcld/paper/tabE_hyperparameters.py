@@ -17,23 +17,22 @@ from __future__ import annotations
 import os
 import re
 
-import make_paper_figures as mpf
+import common
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_tables_official")
+OUT_DIR = common.TABLES
 os.makedirs(OUT_DIR, exist_ok=True)
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
 
 def main():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
-    a2dr = {d: v for d, v in ((d, mpf.load_a2dr(RESULTS_DIR, d)) for d in mpf.DENSITIES) if v is not None}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
+    a2dr = {d: v for d, v in ((d, common.load_a2dr(d)) for d in common.DENSITIES) if v is not None}
 
     def grab(text, key):
         m = re.search(rf"{key}=([^\s)]+)", text)
         return m.group(1) if m else "?"
 
     gamma_per_d, K_per_d, scale_s_per_d = {}, {}, {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         off = official[d]
         h, sl = off["header"], off["slow_line"]
         gamma_per_d[d] = grab(h, "gamma.")
@@ -89,18 +88,18 @@ def main():
                   "% that vary by density (DR step size, unroll horizon, DR+GNN slow-channel scale,\n"
                   "% A2DR memory/regularization), all selected on the validation set (K via the\n"
                   "% training set, see Table E1).\n")
-    lines2.append("\\begin{tabular}{l" + "c" * len(mpf.DENSITIES) + "}")
+    lines2.append("\\begin{tabular}{l" + "c" * len(common.DENSITIES) + "}")
     lines2.append("\\toprule")
-    header = " & ".join(f"$\\delta={d}$" for d in mpf.DENSITIES)
+    header = " & ".join(f"$\\delta={d}$" for d in common.DENSITIES)
     lines2.append("parameter & " + header + " \\\\")
     lines2.append("\\midrule")
-    lines2.append("DR step size $\\gamma$ & " + " & ".join(gamma_per_d[d] for d in mpf.DENSITIES) + " \\\\")
-    lines2.append("unroll horizon $K$ & " + " & ".join(K_per_d[d] for d in mpf.DENSITIES) + " \\\\")
-    lines2.append("slow-channel scale $s_{\\mathrm s}$ & " + " & ".join(scale_s_per_d[d] for d in mpf.DENSITIES) + " \\\\")
+    lines2.append("DR step size $\\gamma$ & " + " & ".join(gamma_per_d[d] for d in common.DENSITIES) + " \\\\")
+    lines2.append("unroll horizon $K$ & " + " & ".join(K_per_d[d] for d in common.DENSITIES) + " \\\\")
+    lines2.append("slow-channel scale $s_{\\mathrm s}$ & " + " & ".join(scale_s_per_d[d] for d in common.DENSITIES) + " \\\\")
     lines2.append("A2DR memory $m$ & " +
-                  " & ".join(str(a2dr[d]["data"]["a2dr_mmax"]) if d in a2dr else "--" for d in mpf.DENSITIES) + " \\\\")
+                  " & ".join(str(a2dr[d]["data"]["a2dr_mmax"]) if d in a2dr else "--" for d in common.DENSITIES) + " \\\\")
     lines2.append("A2DR reg. $\\eta$ & " +
-                  " & ".join(f"{a2dr[d]['data']['a2dr_eta']:g}" if d in a2dr else "--" for d in mpf.DENSITIES) + " \\\\")
+                  " & ".join(f"{a2dr[d]['data']['a2dr_eta']:g}" if d in a2dr else "--" for d in common.DENSITIES) + " \\\\")
     lines2.append("\\bottomrule")
     lines2.append("\\end{tabular}")
 

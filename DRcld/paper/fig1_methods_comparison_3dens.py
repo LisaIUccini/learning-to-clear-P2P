@@ -17,7 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-import make_paper_figures as mpf
+import common
 from fig1_methods_comparison import load_all, delta_for, METHOD_ORDER, DISPLAY_NAME, OUT_DIR, TEXTWIDTH_IN
 
 DENSITIES_SUBSET = [0.2, 0.6, 1.0]
@@ -41,7 +41,7 @@ def main(method_order=METHOD_ORDER, suffix=""):
                 continue
             med = np.median(d)
             q1, q3 = np.percentile(d, 25), np.percentile(d, 75)
-            rows.append((mi, med, q1, q3, mpf.METHODS[mk]["color"], mpf.METHODS[mk]["filled"]))
+            rows.append((mi, med, q1, q3, common.METHODS[mk]["color"], common.METHODS[mk]["filled"]))
         panel_data[density] = rows
 
     for ax, density in zip(axes, DENSITIES_SUBSET):
@@ -68,10 +68,10 @@ def main(method_order=METHOD_ORDER, suffix=""):
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
                      xytext=(0, -18), textcoords="offset points", ha="center", fontsize=8.5)
 
-    legend_handles = [Patch(facecolor=mpf.METHODS[mk]["color"] if mpf.METHODS[mk]["filled"] else "white",
-                             edgecolor="black" if mpf.METHODS[mk]["filled"] else mpf.METHODS[mk]["color"],
+    legend_handles = [Patch(facecolor=common.METHODS[mk]["color"] if common.METHODS[mk]["filled"] else "white",
+                             edgecolor="black" if common.METHODS[mk]["filled"] else common.METHODS[mk]["color"],
                              alpha=1.0, linewidth=0.8,
-                             label=DISPLAY_NAME.get(mk, mpf.METHODS[mk]["name"].replace("$^\\dagger$", "")))
+                             label=DISPLAY_NAME.get(mk, common.METHODS[mk]["name"].replace("$^\\dagger$", "")))
                       for mk in method_order]
     fig.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.52, 1.0),
                ncol=3 if n_methods > 4 else n_methods, frameon=False, handlelength=1.3, handleheight=1.1,

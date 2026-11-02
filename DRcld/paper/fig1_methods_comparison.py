@@ -15,7 +15,7 @@ griglia leggera solo orizzontale, no bordo top/right, tratteggiata a 0,
 stessi limiti y fra pannelli, no titolo interno, no pallini (outlier),
 salvataggio PNG + PDF vettoriale.
 
-Riusa i loader e le convenzioni di colore/metodo di make_paper_figures.py.
+Riusa i loader e le convenzioni di colore/metodo di common.py.
 """
 from __future__ import annotations
 
@@ -26,14 +26,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-import make_paper_figures as mpf
+import common
 import paper_style
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
+OUT_DIR = common.FIGURES
 os.makedirs(OUT_DIR, exist_ok=True)
 
-TEXTWIDTH_IN = mpf.TEXTWIDTH_IN  # 6.00in, stesso valore (non verificato, vedi report precedente)
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
+TEXTWIDTH_IN = common.TEXTWIDTH_IN  # 6.00in, stesso valore (non verificato, vedi report precedente)
 
 paper_style.apply()  # font/colori come il testo del paper (Times)
 
@@ -42,17 +41,17 @@ DISPLAY_NAME = {"learned": "DR+GNN"}
 
 
 def load_all():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
     l2ws_cent, l2ws_dist = {}, {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         for loss in ("regression", "asymmetric"):
-            lc = mpf.load_l2ws_cent(RESULTS_DIR, d, loss)
+            lc = common.load_l2ws_cent(d, loss)
             if lc is not None:
                 l2ws_cent[(d, loss)] = lc
-            ld = mpf.load_l2ws_dist(RESULTS_DIR, d, loss)
+            ld = common.load_l2ws_dist(d, loss)
             if ld is not None:
                 l2ws_dist[(d, loss)] = ld
-    a2dr = {d: v for d, v in ((d, mpf.load_a2dr(RESULTS_DIR, d)) for d in mpf.DENSITIES) if v is not None}
+    a2dr = {d: v for d, v in ((d, common.load_a2dr(d)) for d in common.DENSITIES) if v is not None}
     return official, l2ws_cent, l2ws_dist, a2dr
 
 
@@ -61,25 +60,25 @@ def delta_for(mk, density, official, l2ws_cent, l2ws_dist, a2dr):
         off = official.get(density)
         if off is None:
             return None
-        return mpf.delta_pct([i["k_DR"] for i in off["instances"]], [i["k_learned"] for i in off["instances"]])
+        return common.delta_pct([i["k_DR"] for i in off["instances"]], [i["k_learned"] for i in off["instances"]])
     if mk == "a2dr":
         ad = a2dr.get(density)
         if ad is None:
             return None
-        return mpf.delta_pct(ad["data"]["dr_iters"], ad["data"]["a2dr_iters"])
+        return common.delta_pct(ad["data"]["dr_iters"], ad["data"]["a2dr_iters"])
     if mk in ("l2ws_reg_cent", "l2ws_asym_cent"):
         loss = "regression" if mk == "l2ws_reg_cent" else "asymmetric"
         lc = l2ws_cent.get((density, loss))
         if lc is None:
             return None
-        return mpf.delta_pct(lc["timing"]["dr_iters"], lc["timing"]["l2ws_iters"])
+        return common.delta_pct(lc["timing"]["dr_iters"], lc["timing"]["l2ws_iters"])
     if mk in ("l2ws_reg_dist", "l2ws_asym_dist"):
         loss = "regression" if mk == "l2ws_reg_dist" else "asymmetric"
         ld = l2ws_dist.get((density, loss))
         if ld is None:
             return None
         post = np.array(ld["l2ws_post_iters"]) + ld["L"]
-        return mpf.delta_pct(ld["dr_iters"], post)
+        return common.delta_pct(ld["dr_iters"], post)
     return None
 
 
@@ -93,7 +92,7 @@ def main(method_order=METHOD_ORDER, suffix=""):
 
     missing = []
     panel_data = {}  # density -> list of (pos, med, q1, q3, color, filled)
-    for density in mpf.DENSITIES:
+    for density in common.DENSITIES:
         rows = []
         for mi, mk in enumerate(method_order):
             d = delta_for(mk, density, official, l2ws_cent, l2ws_dist, a2dr)
@@ -102,10 +101,10 @@ def main(method_order=METHOD_ORDER, suffix=""):
                 continue
             med = np.median(d)
             q1, q3 = np.percentile(d, 25), np.percentile(d, 75)
-            rows.append((mi, med, q1, q3, mpf.METHODS[mk]["color"], mpf.METHODS[mk]["filled"]))
+            rows.append((mi, med, q1, q3, common.METHODS[mk]["color"], common.METHODS[mk]["filled"]))
         panel_data[density] = rows
 
-    for ax, density in zip(axes, mpf.DENSITIES):
+    for ax, density in zip(axes, common.DENSITIES):
         for pos, med, q1, q3, c, filled in panel_data[density]:
             # bordi del marker e baffi neri per contrasto -- eccetto i marker
             # "hollow" (distribuito), dove il bordo colorato e' l'unico modo
@@ -129,16 +128,16 @@ def main(method_order=METHOD_ORDER, suffix=""):
 
     fig.supylabel("iteration reduction vs. DR (%)", fontsize=9)
     fig.subplots_adjust(left=0.085, right=0.985, bottom=0.07, top=0.82 if n_methods > 4 else 0.90)
-    for ax, density in zip(axes, mpf.DENSITIES):
+    for ax, density in zip(axes, common.DENSITIES):
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
                      xytext=(0, -10), textcoords="offset points", ha="center", fontsize=8.5)
 
     # alpha=1.0 (colore pieno): i marker nei pannelli sono gia' pieni
     # (errorbar non applica alpha), la legenda deve corrispondere esattamente
-    legend_handles = [Patch(facecolor=mpf.METHODS[mk]["color"] if mpf.METHODS[mk]["filled"] else "white",
-                             edgecolor="black" if mpf.METHODS[mk]["filled"] else mpf.METHODS[mk]["color"],
+    legend_handles = [Patch(facecolor=common.METHODS[mk]["color"] if common.METHODS[mk]["filled"] else "white",
+                             edgecolor="black" if common.METHODS[mk]["filled"] else common.METHODS[mk]["color"],
                              alpha=1.0, linewidth=0.8,
-                             label=DISPLAY_NAME.get(mk, mpf.METHODS[mk]["name"].replace("$^\\dagger$", "")))
+                             label=DISPLAY_NAME.get(mk, common.METHODS[mk]["name"].replace("$^\\dagger$", "")))
                       for mk in method_order]
     fig.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.52, 1.0),
                ncol=3 if n_methods > 4 else n_methods, frameon=False, handlelength=1.3, handleheight=1.1,

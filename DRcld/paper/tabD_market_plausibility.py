@@ -13,8 +13,10 @@ from __future__ import annotations
 import os
 import json
 
-DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "table_d_data", "table_d_plausibility.json")
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_tables_official")
+import common
+
+DATA_PATH = os.path.join(common.PAPER_DATA, "table_d_data", "table_d_plausibility.json")
+OUT_DIR = common.TABLES
 os.makedirs(OUT_DIR, exist_ok=True)
 
 DENSITIES = [0.2, 0.4, 0.5, 0.6, 0.8, 1.0]

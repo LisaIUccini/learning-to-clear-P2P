@@ -29,14 +29,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-import make_paper_figures as mpf
+import common
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
-FIG2_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fig2_data")
+OUT_DIR = common.FIGURES
+FIG2_DATA_DIR = os.path.join(common.PAPER_DATA, "fig2_data")
 os.makedirs(OUT_DIR, exist_ok=True)
 
-TEXTWIDTH_IN = mpf.TEXTWIDTH_IN
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
+TEXTWIDTH_IN = common.TEXTWIDTH_IN
 
 plt.rcParams.update({
     "font.family": "serif",
@@ -99,15 +98,15 @@ def plot_method(ax, mk, gap_arrs, offset=0):
 
 
 def main():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
     l2ws_cent = {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         for loss in ("regression", "asymmetric"):
-            lc = mpf.load_l2ws_cent(RESULTS_DIR, d, loss)
+            lc = common.load_l2ws_cent(d, loss)
             if lc is not None:
                 l2ws_cent[(d, loss)] = lc
     extra = {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         p = os.path.join(FIG2_DATA_DIR, f"fig2_extra_trajectories_d{d}.json")
         if os.path.exists(p):
             extra[d] = json.load(open(p))
@@ -117,7 +116,7 @@ def main():
     axes = axes.ravel()
 
     missing = []
-    for ax, density in zip(axes, mpf.DENSITIES):
+    for ax, density in zip(axes, common.DENSITIES):
         off = official.get(density)
         if off is not None:
             plot_method(ax, "dr", [i["dr"]["relative_gap"] for i in off["instances"]])
@@ -155,7 +154,7 @@ def main():
 
     fig.supylabel("iterations (= communication rounds)", fontsize=9)
     fig.tight_layout(rect=(0.02, 0.0, 1, 0.84))
-    for ax, density in zip(axes, mpf.DENSITIES):
+    for ax, density in zip(axes, common.DENSITIES):
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
                      xytext=(0, -42), textcoords="offset points", ha="center", fontsize=8.5)
 

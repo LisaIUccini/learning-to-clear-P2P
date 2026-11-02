@@ -9,18 +9,17 @@ Prima riga: mediana delle iterazioni di DR. Grassetto sul miglior metodo
 DISTRIBUITO per colonna; (dagger) sui centralizzati. Solo booktabs
 (toprule/midrule/bottomrule), niente griglia verticale.
 
-Riusa i loader di make_paper_figures.py.
+Riusa i loader di common.py.
 """
 from __future__ import annotations
 
 import os
 import numpy as np
 
-import make_paper_figures as mpf
+import common
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_tables_official")
+OUT_DIR = common.TABLES
 os.makedirs(OUT_DIR, exist_ok=True)
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
 DIST_ORDER = ["learned", "l2ws_reg_dist", "l2ws_asym_dist"]
 CENT_ORDER = ["l2ws_reg_cent", "l2ws_asym_cent", "a2dr"]
@@ -28,17 +27,17 @@ DISPLAY_NAME = {"learned": "DR+GNN"}
 
 
 def load_all():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
     l2ws_cent, l2ws_dist = {}, {}
-    for d in mpf.DENSITIES:
+    for d in common.DENSITIES:
         for loss in ("regression", "asymmetric"):
-            lc = mpf.load_l2ws_cent(RESULTS_DIR, d, loss)
+            lc = common.load_l2ws_cent(d, loss)
             if lc is not None:
                 l2ws_cent[(d, loss)] = lc
-            ld = mpf.load_l2ws_dist(RESULTS_DIR, d, loss)
+            ld = common.load_l2ws_dist(d, loss)
             if ld is not None:
                 l2ws_dist[(d, loss)] = ld
-    a2dr = {d: v for d, v in ((d, mpf.load_a2dr(RESULTS_DIR, d)) for d in mpf.DENSITIES) if v is not None}
+    a2dr = {d: v for d, v in ((d, common.load_a2dr(d)) for d in common.DENSITIES) if v is not None}
     return official, l2ws_cent, l2ws_dist, a2dr
 
 
@@ -80,7 +79,7 @@ def fmt_cell(d):
 
 def main():
     official, l2ws_cent, l2ws_dist, a2dr = load_all()
-    cols = mpf.DENSITIES
+    cols = common.DENSITIES
 
     dr_median_row = []
     for density in cols:
@@ -133,7 +132,7 @@ def main():
                 cell = "\\textbf{" + cell + "}"
             cells.append(cell)
         extra = next((rows_dist[mk][d][1] for d in cols if rows_dist[mk][d] is not None), "--")
-        name = DISPLAY_NAME.get(mk, mpf.METHODS[mk]["name"]) + extra_suffix(extra)
+        name = DISPLAY_NAME.get(mk, common.METHODS[mk]["name"]) + extra_suffix(extra)
         lines.append(f"{name} & " + " & ".join(cells) + " \\\\")
 
     lines.append("\\midrule")
@@ -143,7 +142,7 @@ def main():
             r = rows_cent[mk][density]
             cells.append(fmt_cell(r[0]) if r is not None else "--")
         extra = next((rows_cent[mk][d][1] for d in cols if rows_cent[mk][d] is not None), "--")
-        name = mpf.METHODS[mk]["name"] + extra_suffix(extra)  # name already carries $^\dagger$
+        name = common.METHODS[mk]["name"] + extra_suffix(extra)  # name already carries $^\dagger$
         lines.append(f"{name} & " + " & ".join(cells) + " \\\\")
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")

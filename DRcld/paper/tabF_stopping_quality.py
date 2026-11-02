@@ -17,12 +17,11 @@ import os
 import json
 import numpy as np
 
-import make_paper_figures as mpf
+import common
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_tables_official")
+OUT_DIR = common.TABLES
 os.makedirs(OUT_DIR, exist_ok=True)
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
-EK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "table_ek_data", "table_ek_comparison.json")
+EK_PATH = os.path.join(common.PAPER_DATA, "table_ek_data", "table_ek_comparison.json")
 
 
 def main():
@@ -43,8 +42,8 @@ def main():
         header += " & $e^k$ DR & $e^k$ DR+GNN"
     lines.append(header + " \\\\")
     lines.append("\\midrule")
-    for d in mpf.DENSITIES:
-        off = mpf.load_official(RESULTS_DIR, d)
+    for d in common.DENSITIES:
+        off = common.load_official(d)
         gap_dr = np.median([i["dr"]["relative_gap"][-1] for i in off["instances"]])
         gap_l = np.median([i["learned"]["relative_gap"][-1] for i in off["instances"]])
         viol_dr = np.median([i["dr"]["violation"][-1] for i in off["instances"]])

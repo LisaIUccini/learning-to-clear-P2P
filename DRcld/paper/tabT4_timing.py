@@ -14,9 +14,11 @@ from __future__ import annotations
 import os
 import json
 
-TIMING_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "table_t4_data", "table_t4_timing.json")
-TRAIN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "table_t4_data", "table_t4_train_time.json")
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_tables_official")
+import common
+
+TIMING_PATH = os.path.join(common.PAPER_DATA, "table_t4_data", "table_t4_timing.json")
+TRAIN_PATH = os.path.join(common.PAPER_DATA, "table_t4_data", "table_t4_train_time.json")
+OUT_DIR = common.TABLES
 os.makedirs(OUT_DIR, exist_ok=True)
 
 DENSITIES = [0.2, 0.4, 0.5, 0.6, 0.8, 1.0]

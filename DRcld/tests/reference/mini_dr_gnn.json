@@ -1,0 +1,16 @@
+{
+ "dr_gnn_d02": {
+  "weights": "54430f1a37f534d5d94de688a07de59fcc67d6850c794ce1c8ad601b5be43e1d",
+  "instances": {
+   "instance_01_N10.json": "666dfcf73a5392ebd2436af7db846ed3345fc39900ed8f6e5bde6b931c8a8309",
+   "instance_02_N10.json": "88f42ac018029675b34bde7d4279f4c35c802deb34bb703859c8af4837ab53da"
+  }
+ },
+ "dr_gnn_d08": {
+  "weights": "6bcc102d6190097d9b1187d8c716304277f691cfd80d347cad9ba117363380fd",
+  "instances": {
+   "instance_01_N10.json": "43a410631fca6dc6a3d53b7d39c9a5158343b108224b4432dd2907512c7e1c57",
+   "instance_02_N10.json": "b6a55ef2d5e1d9227dcb646b2d8adc557d4ec4b9964c66d784d37e9afd87879a"
+  }
+ }
+}

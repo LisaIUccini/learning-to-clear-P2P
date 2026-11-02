@@ -1,3 +1,0 @@
-mode=fixed weights=runs/density_1.0/seed0_gamma4_unroll300_scale10_epochs60_asymmetric/phi_w.pt density=1.0 base_seed=0 n_test=30 n_repeats=2
-ITERATION speed-up: mean 1.595x median 1.622x min 1.193x max 1.952x
-WALL-CLOCK speed-up: mean 1.013x median 1.028x min 0.764x max 1.245x

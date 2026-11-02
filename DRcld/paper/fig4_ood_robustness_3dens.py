@@ -17,7 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-import make_paper_figures as mpf
+import common
 from fig4_ood_robustness import load_all, delta_for, CATS, OUT_DIR, TEXTWIDTH_IN
 
 DENSITIES_SUBSET = [0.2, 0.6, 1.0]

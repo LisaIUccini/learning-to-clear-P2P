@@ -23,13 +23,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats as sstats
 
-import make_paper_figures as mpf
+import common
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
+OUT_DIR = common.FIGURES
 os.makedirs(OUT_DIR, exist_ok=True)
 
-TEXTWIDTH_IN = mpf.TEXTWIDTH_IN
-RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
+TEXTWIDTH_IN = common.TEXTWIDTH_IN
 
 plt.rcParams.update({
     "font.family": "serif",
@@ -48,20 +47,20 @@ plt.rcParams.update({
 
 
 def main():
-    official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
+    official = {d: common.load_official(d) for d in common.DENSITIES}
 
     fig, ax = plt.subplots(figsize=(TEXTWIDTH_IN * 0.48, TEXTWIDTH_IN * 0.48 * 0.75))
     cmap = plt.get_cmap("viridis")
 
     all_x, all_y = [], []
     per_density = {}
-    for idx, density in enumerate(mpf.DENSITIES):
+    for idx, density in enumerate(common.DENSITIES):
         off = official.get(density)
         if off is None:
             continue
         x = np.array([i["k_DR"] for i in off["instances"]], dtype=float)
-        y = mpf.delta_pct(x, [i["k_learned"] for i in off["instances"]])
-        ax.scatter(x, y, s=10, color=cmap(idx / (len(mpf.DENSITIES) - 1)),
+        y = common.delta_pct(x, [i["k_learned"] for i in off["instances"]])
+        ax.scatter(x, y, s=10, color=cmap(idx / (len(common.DENSITIES) - 1)),
                    alpha=0.6, edgecolors="none", label=f"$\\delta={density}$", zorder=3)
         all_x.extend(x); all_y.extend(y)
         rho, p = sstats.spearmanr(x, y)
