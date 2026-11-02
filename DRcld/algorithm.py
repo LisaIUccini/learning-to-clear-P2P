@@ -33,6 +33,9 @@ class DRConfig:
     lam: float = 1.0
     n_iter: int = 5000
     tol: float = 1e-5           # stop when ||x^{k+1}-x^k|| < tol
+    stop_on: str = "perturbed"  # "perturbed": ||x^{k+1}-x^k|| (incl. GNN v^k, the
+                                 # original rule); "unperturbed": ||lam*(z^k-xtilde^k)||,
+                                 # the DR-only part (identical for plain DR)
     bisect: int = 40
     tau: float = 0.0            # volume-dependent trading-tariff weight (quadratic term
                                  # (tau/2)*q_mn^2 added to every prosumer's trading cost --
@@ -46,6 +49,8 @@ class DRConfig:
             raise ValueError("gamma must be > 0")
         if not (0.0 < self.lam < 2.0):
             raise ValueError("lam must lie in (0,2)")
+        if self.stop_on not in ("perturbed", "unperturbed"):
+            raise ValueError("stop_on must be 'perturbed' or 'unperturbed'")
 
 
 @dataclass
@@ -56,6 +61,7 @@ class DRResult:
     shadow_residual: List[float] = field(default_factory=list)   # ||xbar^{k+1}-xbar^k||, FEASIBLE iterate
     cost: List[float] = field(default_factory=list)              # J(xbar^k), only if record=True
     violation: List[float] = field(default_factory=list)         # dist(xbar^k, X_loc), only if record=True
+    dr_residual: List[float] = field(default_factory=list)       # ||lam*(z^k-xtilde^k)||, only if record=True
 
 
 def run_dr(net, cfg: DRConfig, record: bool = True) -> DRResult:
@@ -87,6 +93,7 @@ def run_dr(net, cfg: DRConfig, record: bool = True) -> DRResult:
     shadow_residual: List[float] = []
     cost: List[float] = []
     violation: List[float] = []
+    dr_residual: List[float] = []
     converged = False
     k_run = 0
     prev_shadow = net.project_reciprocity(net.flatten()) if record else None
@@ -98,16 +105,18 @@ def run_dr(net, cfg: DRConfig, record: bool = True) -> DRResult:
             for p in net.prosumers:
                 p.dr_step(cfg.gamma, cfg.lam, n_bisect=cfg.bisect, tau=cfg.tau)
             r = net.aux_residual()
+            r_dr = net.dr_residual()
             if record:
                 residual.append(r)
+                dr_residual.append(r_dr)
                 shadow = net.project_reciprocity(net.flatten())
                 shadow_residual.append(float(torch.linalg.vector_norm(shadow - prev_shadow)))
                 cost.append(float(net.cost_at(shadow)))
                 violation.append(float(net.dist_to_Xloc(shadow)))
                 prev_shadow = shadow
-            if r < cfg.tol:
+            if (r if cfg.stop_on == "perturbed" else r_dr) < cfg.tol:
                 converged = True
                 break
 
     return DRResult(n_iter=k_run, converged=converged, residual=residual, violation=violation,
-                     shadow_residual=shadow_residual, cost=cost)
+                     shadow_residual=shadow_residual, cost=cost, dr_residual=dr_residual)

@@ -1,5 +1,6 @@
 % DRAFT CAPTION: Iterations under distribution shift, DR vs. DR+GNN (median $\pm$
-% half-IQR over 30 test instances per cell); percentages and win-rate are in Figure 4.
+% half-IQR over 30 test instances per cell; the 30 +/-1 prosumer instances are split
+% into +1 / -1, n per density = 0.2: 18/12, 0.4: 18/12, 0.5: 18/12, 0.6: 16/14, 0.8: 15/15, 1.0: 10/20); percentages and win-rate are in Figure 4.
 
 \begin{tabular}{llcccccc}
 \toprule
@@ -17,7 +18,10 @@ test set & method & $\delta=0.2$ & $\delta=0.4$ & $\delta=0.5$ & $\delta=0.6$ & 
 \multirow{2}{*}{$\pm40\%$} & DR & 1660 $\pm$ 384 & 904 $\pm$ 147 & 1132 $\pm$ 138 & 822 $\pm$ 79 & 2368 $\pm$ 356 & 2392 $\pm$ 926 \\
  & DR+GNN & 324 $\pm$ 123 & 436 $\pm$ 179 & 688 $\pm$ 110 & 570 $\pm$ 140 & 680 $\pm$ 119 & 1364 $\pm$ 204 \\
 \midrule
-\multirow{2}{*}{$\pm1$ prosumer} & DR & 1634 $\pm$ 572 & 769 $\pm$ 193 & 967 $\pm$ 174 & 733 $\pm$ 258 & 1028 $\pm$ 297 & 1517 $\pm$ 866 \\
- & DR+GNN & 299 $\pm$ 100 & 532 $\pm$ 131 & 747 $\pm$ 241 & 598 $\pm$ 256 & 786 $\pm$ 197 & 1392 $\pm$ 1129 \\
+\multirow{2}{*}{$+1$ prosumer} & DR & 1665 $\pm$ 481 & 700 $\pm$ 169 & 1020 $\pm$ 188 & 1040 $\pm$ 333 & 1385 $\pm$ 278 & 2236 $\pm$ 722 \\
+ & DR+GNN & 384 $\pm$ 98 & 626 $\pm$ 92 & 914 $\pm$ 389 & 957 $\pm$ 1682 & 991 $\pm$ 413 & 1968 $\pm$ 1035 \\
+\midrule
+\multirow{2}{*}{$-1$ prosumer} & DR & 1492 $\pm$ 783 & 830 $\pm$ 167 & 879 $\pm$ 171 & 538 $\pm$ 114 & 923 $\pm$ 110 & 1369 $\pm$ 1240 \\
+ & DR+GNN & 231 $\pm$ 25 & 436 $\pm$ 79 & 529 $\pm$ 99 & 494 $\pm$ 69 & 655 $\pm$ 92 & 1346 $\pm$ 694 \\
 \bottomrule
 \end{tabular}

@@ -23,9 +23,9 @@ from fig1_methods_comparison import load_all, delta_for, METHOD_ORDER, DISPLAY_N
 DENSITIES_SUBSET = [0.2, 0.6, 1.0]
 
 
-def main():
+def main(method_order=METHOD_ORDER, suffix=""):
     official, l2ws_cent, l2ws_dist, a2dr = load_all()
-    n_methods = len(METHOD_ORDER)
+    n_methods = len(method_order)
 
     fig, axes = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.35),
                               sharey=True, gridspec_kw={"wspace": 0.12})
@@ -34,7 +34,7 @@ def main():
     panel_data = {}
     for density in DENSITIES_SUBSET:
         rows = []
-        for mi, mk in enumerate(METHOD_ORDER):
+        for mi, mk in enumerate(method_order):
             d = delta_for(mk, density, official, l2ws_cent, l2ws_dist, a2dr)
             if d is None:
                 missing.append((mk, density))
@@ -63,7 +63,7 @@ def main():
     axes[0].set_yticks(yticks)
 
     fig.supylabel("iteration reduction vs. DR (%)", fontsize=9)
-    fig.subplots_adjust(left=0.10, right=0.985, bottom=0.14, top=0.72)
+    fig.subplots_adjust(left=0.10, right=0.985, bottom=0.14, top=0.72 if n_methods > 4 else 0.84)
     for ax, density in zip(axes, DENSITIES_SUBSET):
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
                      xytext=(0, -18), textcoords="offset points", ha="center", fontsize=8.5)
@@ -72,13 +72,13 @@ def main():
                              edgecolor="black" if mpf.METHODS[mk]["filled"] else mpf.METHODS[mk]["color"],
                              alpha=1.0, linewidth=0.8,
                              label=DISPLAY_NAME.get(mk, mpf.METHODS[mk]["name"].replace("$^\\dagger$", "")))
-                      for mk in METHOD_ORDER]
+                      for mk in method_order]
     fig.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.52, 1.0),
-               ncol=3, frameon=False, handlelength=1.3, handleheight=1.1,
+               ncol=3 if n_methods > 4 else n_methods, frameon=False, handlelength=1.3, handleheight=1.1,
                columnspacing=1.1, labelspacing=0.5, fontsize=8)
 
-    out_pdf = os.path.join(OUT_DIR, "fig1_methods_comparison_3dens.pdf")
-    out_png = os.path.join(OUT_DIR, "fig1_methods_comparison_3dens.png")
+    out_pdf = os.path.join(OUT_DIR, f"fig1_methods_comparison_3dens{suffix}.pdf")
+    out_png = os.path.join(OUT_DIR, f"fig1_methods_comparison_3dens{suffix}.png")
     fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.05)
     fig.savefig(out_png, dpi=200, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)

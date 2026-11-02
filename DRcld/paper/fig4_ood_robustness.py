@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 import make_paper_figures as mpf
+import paper_style
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -33,20 +34,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 TEXTWIDTH_IN = mpf.TEXTWIDTH_IN
 RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
-plt.rcParams.update({
-    "font.family": "serif",
-    "mathtext.fontset": "cm",
-    "font.size": 8.5,
-    "axes.labelsize": 9,
-    "xtick.labelsize": 7.5,
-    "ytick.labelsize": 7.5,
-    "legend.fontsize": 8,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.linewidth": 0.8,
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
-})
+paper_style.apply()  # font/colori come il testo del paper (Times)
 
 # stesso blu di "DR+GNN" in fig1 (#0072B2) come tonalita' piena/scura della
 # rampa (Figura 4 e' interamente su DR+GNN); nero per ID come baseline;

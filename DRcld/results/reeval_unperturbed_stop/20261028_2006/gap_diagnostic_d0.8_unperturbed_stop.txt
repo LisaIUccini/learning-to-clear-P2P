@@ -1,0 +1,19 @@
+delta=0.8, 30 instances. (a) x0 identical for DR / DR+GNN(P) / DR+GNN(U) on every instance: True
+Indexing: k=0 is xbar^0 = proj_Xrec(x0) (before any iteration); k>=1 is after k iterations (= relative_gap[k-1] in the official instance JSONs).
+Columns: median signed rel. gap (J-J*)/|J*| [min,max], median |gap| (Table 5 / Fig. gap def.), #instances with J<J*, median dist(xbar,X_loc), median max|nodal balance| of xbar.
+
+[DR]
+  k= 0  signed gap +1.740e+00 [+7.74e-02,+3.90e+00]  |gap| 1.740e+00  #J<J*  0  viol 0.000e+00  balance 9.678e+00
+  k= 1  signed gap -7.518e-01 [-8.64e-01,-5.97e-01]  |gap| 7.518e-01  #J<J* 30  viol 1.192e-07  balance 4.757e+00
+  k= 2  signed gap -7.513e-01 [-8.42e-01,-6.58e-01]  |gap| 7.513e-01  #J<J* 30  viol 0.000e+00  balance 3.108e+00
+  k= 5  signed gap -7.557e-01 [-8.42e-01,-6.57e-01]  |gap| 7.557e-01  #J<J* 30  viol 0.000e+00  balance 2.629e+00
+  k=10  signed gap -7.535e-01 [-8.19e-01,-6.57e-01]  |gap| 7.535e-01  #J<J* 30  viol 0.000e+00  balance 1.947e+00
+  first k with |gap|<=0.1 (fig2_gap_levels.first_hit): median 84, min 79, max 92;  J<J* at that k: 30/30;  |gap| later back above 0.1: 0/30
+
+[DR+GNN (perturbed stop)]
+  k= 0  signed gap +1.740e+00 [+7.74e-02,+3.90e+00]  |gap| 1.740e+00  #J<J*  0  viol 0.000e+00  balance 9.678e+00
+  k= 1  signed gap +3.693e-01 [+8.33e-02,+1.02e+00]  |gap| 3.693e-01  #J<J*  0  viol 1.347e-02  balance 4.362e+00
+  k= 2  signed gap -3.036e-02 [-2.56e-01,+4.89e-01]  |gap| 1.476e-01  #J<J* 17  viol 7.748e-01  balance 5.139e+00
+  k= 5  signed gap -1.788e-01 [-3.05e-01,+2.10e-01]  |gap| 1.972e-01  #J<J* 21  viol 1.501e+00  balance 4.471e+00
+  k=10  signed gap -1.814e-01 [-2.97e-01,+1.56e-01]  |gap| 1.814e-01  #J<J* 22  viol 9.743e-01  balance 4.203e+00
+  first k with |gap|<=0.1 (fig2_gap_levels.first_hit): median 3, min 1, max 69;  J<J* at that k: 16/30;  |gap| later back above 0.1: 12/30

@@ -223,7 +223,8 @@ def load_ood_pm1(results_dir, density):
         return None
     dr_iters = [int(c) for _, _, c, _ in matches]
     learned_iters = [int(d) for _, _, _, d in matches]
-    return {"dir": run_dir, "dr_iters": dr_iters, "learned_iters": learned_iters}
+    kinds = [k for k, _, _, _ in matches]   # "add" (+1 prosumer) / "remove" (-1 prosumer)
+    return {"dir": run_dir, "dr_iters": dr_iters, "learned_iters": learned_iters, "kinds": kinds}
 
 
 # ----------------------------------------------------------------------

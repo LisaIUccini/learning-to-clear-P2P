@@ -21,7 +21,9 @@ os.makedirs(OUT_DIR, exist_ok=True)
 RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
 CATS = [("id", "ID"), ("level20", "$\\pm20\\%$"), ("level30", "$\\pm30\\%$"),
-        ("level40", "$\\pm40\\%$"), ("pm1", "$\\pm1$ prosumer")]
+        ("level40", "$\\pm40\\%$"), ("plus1", "$+1$ prosumer"), ("minus1", "$-1$ prosumer")]
+# +1/-1 prosumer: sottoinsiemi del test pm1 (stesso log), separati per tipo
+PM1_KIND = {"plus1": "add", "minus1": "remove"}
 
 
 def load_all():
@@ -45,6 +47,13 @@ def iters(key, density, official, ood, field):
         if off is None:
             return None
         return [i["k_DR"] for i in off["instances"]] if field == "dr" else [i["k_learned"] for i in off["instances"]]
+    if key in PM1_KIND:
+        rec = ood.get((density, "pm1"))
+        if rec is None:
+            return None
+        vals = rec["dr_iters"] if field == "dr" else rec["learned_iters"]
+        sel = [v for v, k in zip(vals, rec["kinds"]) if k == PM1_KIND[key]]
+        return sel or None
     rec = ood.get((density, key))
     if rec is None:
         return None
@@ -62,8 +71,12 @@ def main():
     cols = mpf.DENSITIES
 
     lines = []
+    n_pm = {key: [len(iters(key, d, official, ood, "dr") or []) for d in cols] for key in PM1_KIND}
     lines.append("% DRAFT CAPTION: Iterations under distribution shift, DR vs. DR+GNN (median $\\pm$\n"
-                  "% half-IQR over 30 test instances per cell); percentages and win-rate are in Figure 4.\n")
+                  "% half-IQR over 30 test instances per cell; the 30 +/-1 prosumer instances are split\n"
+                  "% into +1 / -1, n per density = " +
+                  ", ".join(f"{d}: {a}/{b}" for d, a, b in zip(cols, n_pm["plus1"], n_pm["minus1"])) +
+                  "); percentages and win-rate are in Figure 4.\n")
     lines.append("\\begin{tabular}{ll" + "c" * len(cols) + "}")
     lines.append("\\toprule")
     header = " & ".join(f"$\\delta={d}$" for d in cols)

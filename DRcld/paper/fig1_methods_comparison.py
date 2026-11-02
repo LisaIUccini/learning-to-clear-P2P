@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 import make_paper_figures as mpf
+import paper_style
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -34,20 +35,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 TEXTWIDTH_IN = mpf.TEXTWIDTH_IN  # 6.00in, stesso valore (non verificato, vedi report precedente)
 RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
-plt.rcParams.update({
-    "font.family": "serif",
-    "mathtext.fontset": "cm",
-    "font.size": 8.5,
-    "axes.labelsize": 9,
-    "xtick.labelsize": 7.5,
-    "ytick.labelsize": 7.5,
-    "legend.fontsize": 8,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.linewidth": 0.8,
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
-})
+paper_style.apply()  # font/colori come il testo del paper (Times)
 
 METHOD_ORDER = ["learned", "a2dr", "l2ws_reg_cent", "l2ws_reg_dist", "l2ws_asym_cent", "l2ws_asym_dist"]
 DISPLAY_NAME = {"learned": "DR+GNN"}
@@ -95,9 +83,9 @@ def delta_for(mk, density, official, l2ws_cent, l2ws_dist, a2dr):
     return None
 
 
-def main():
+def main(method_order=METHOD_ORDER, suffix=""):
     official, l2ws_cent, l2ws_dist, a2dr = load_all()
-    n_methods = len(METHOD_ORDER)
+    n_methods = len(method_order)
 
     fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.60),
                               sharey=True, gridspec_kw={"hspace": 0.33, "wspace": 0.12})
@@ -107,7 +95,7 @@ def main():
     panel_data = {}  # density -> list of (pos, med, q1, q3, color, filled)
     for density in mpf.DENSITIES:
         rows = []
-        for mi, mk in enumerate(METHOD_ORDER):
+        for mi, mk in enumerate(method_order):
             d = delta_for(mk, density, official, l2ws_cent, l2ws_dist, a2dr)
             if d is None:
                 missing.append((mk, density))
@@ -140,7 +128,7 @@ def main():
     axes[0].set_yticks(yticks)
 
     fig.supylabel("iteration reduction vs. DR (%)", fontsize=9)
-    fig.subplots_adjust(left=0.085, right=0.985, bottom=0.07, top=0.82)
+    fig.subplots_adjust(left=0.085, right=0.985, bottom=0.07, top=0.82 if n_methods > 4 else 0.90)
     for ax, density in zip(axes, mpf.DENSITIES):
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
                      xytext=(0, -10), textcoords="offset points", ha="center", fontsize=8.5)
@@ -151,13 +139,13 @@ def main():
                              edgecolor="black" if mpf.METHODS[mk]["filled"] else mpf.METHODS[mk]["color"],
                              alpha=1.0, linewidth=0.8,
                              label=DISPLAY_NAME.get(mk, mpf.METHODS[mk]["name"].replace("$^\\dagger$", "")))
-                      for mk in METHOD_ORDER]
+                      for mk in method_order]
     fig.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.52, 1.0),
-               ncol=3, frameon=False, handlelength=1.3, handleheight=1.1,
+               ncol=3 if n_methods > 4 else n_methods, frameon=False, handlelength=1.3, handleheight=1.1,
                columnspacing=1.1, labelspacing=0.5, fontsize=8)
 
-    out_pdf = os.path.join(OUT_DIR, "fig1_methods_comparison.pdf")
-    out_png = os.path.join(OUT_DIR, "fig1_methods_comparison.png")
+    out_pdf = os.path.join(OUT_DIR, f"fig1_methods_comparison{suffix}.pdf")
+    out_png = os.path.join(OUT_DIR, f"fig1_methods_comparison{suffix}.png")
     fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.05)
     fig.savefig(out_png, dpi=200, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)

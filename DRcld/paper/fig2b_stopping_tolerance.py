@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 import make_paper_figures as mpf
+import paper_style
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_figs_official")
 FIG2_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fig2_data")
@@ -37,20 +38,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 TEXTWIDTH_IN = mpf.TEXTWIDTH_IN
 RESULTS_DIR = "/home/lisa/energy_market_fixed_point/DRcld/experiments"
 
-plt.rcParams.update({
-    "font.family": "serif",
-    "mathtext.fontset": "cm",
-    "font.size": 8.5,
-    "axes.labelsize": 9,
-    "xtick.labelsize": 7.5,
-    "ytick.labelsize": 7.5,
-    "legend.fontsize": 8,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.linewidth": 0.8,
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
-})
+paper_style.apply()  # font/colori come il testo del paper (Times)
 
 TAU_GRID = np.logspace(-1, -5, 25)
 
@@ -92,7 +80,7 @@ def main():
     official = {d: mpf.load_official(RESULTS_DIR, d) for d in mpf.DENSITIES}
 
     fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.56),
-                              gridspec_kw={"hspace": 0.28, "wspace": 0.22})
+                              gridspec_kw={"hspace": 0.28, "wspace": 0.30})
     axes = axes.ravel()
 
     missing = []

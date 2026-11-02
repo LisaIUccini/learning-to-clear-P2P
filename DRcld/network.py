@@ -64,6 +64,10 @@ class Prosumer:
 
         # residual bookkeeping (monitoring, and the GNN's temporal features)
         self.residual_sq = z.clone()          # ||x^{k+1}_n - x^k_n||^2
+        self.dr_residual_sq = z.clone()       # ||lam*(z^k_n - xtilde^k_n)||^2, DR part only
+                                                # (excludes the GNN's v^k; == residual_sq
+                                                # when no model is deployed) -- monitoring /
+                                                # DRConfig.stop_on="unperturbed" only
         self.prev_residual = z.clone()        # ||x^k_n - x^{k-1}_n||, own move
                                                 # on the PREVIOUS iteration (0 at
                                                 # k=0) -- a GNN input feature, see
@@ -244,6 +248,9 @@ class Prosumer:
         D_new = self.D + lam * (zD - self.D)                       # line 10
         G_new = self.G + lam * (zG - self.G)
         q_new = {m: self.q[m] + lam * (zq[m] - qbar[m]) for m in self.neighbors}
+        dr_parts = [(D_new - self.D) ** 2, (G_new - self.G) ** 2]
+        dr_parts += [(q_new[m] - self.q[m]) ** 2 for m in self.neighbors]
+        self.dr_residual_sq = torch.stack(dr_parts).sum().detach()
 
         if self.gnn_agent is not None:                              # lines 11-12
             state = self.gnn_agent.gnn.local_state(self)
@@ -264,6 +271,7 @@ class Prosumer:
 
     def reset(self) -> None:
         self.residual_sq = torch.zeros((), device=self.device)
+        self.dr_residual_sq = torch.zeros((), device=self.device)
         self.prev_residual = torch.zeros((), device=self.device)
         self.stall_ema = torch.zeros((), device=self.device)
         self._round = 0
@@ -517,6 +525,11 @@ class Network:
     def aux_residual(self) -> float:
         """||x^{k+1}-x^k||: sum of the prosumers' own local contributions."""
         return float(sum(float(p.residual_sq) for p in self.prosumers)) ** 0.5
+
+    def dr_residual(self) -> float:
+        """||lam*(z^k - xtilde^k)||: the DR-only part of the last step,
+        without the GNN perturbation v^k (== aux_residual() for plain DR)."""
+        return float(sum(float(p.dr_residual_sq) for p in self.prosumers)) ** 0.5
 
     def is_feasible(self, tol: float = 1e-4) -> bool:
         """Checked on the SHADOW x_bar = proj_X^rec(x), not the raw
