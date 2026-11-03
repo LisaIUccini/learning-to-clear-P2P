@@ -28,7 +28,7 @@ they come out identical.
 | `tabC_ood.tex` | `tabC_ood.py` | dr_gnn, ood | ✅ |
 | `tabD_market_plausibility.tex` | `tabD_market_plausibility.py` | paper_data/table_d_data | ✅ |
 | `tabE_hyperparameters.tex`, `tabE2_...` | `tabE_hyperparameters.py` | dr_gnn logs, a2dr | ✅ |
-| `tabF_stopping_quality.tex` (Table 5) | `tabF_stopping_quality.py` | dr_gnn, paper_data/table_ek_data | ⚠️ e^k column |
+| `tabF_stopping_quality.tex` (Table 5) | `tabF_stopping_quality.py` | dr_gnn, paper_data/table_ek_data | ✅ |
 | `tabT4_timing.tex` (Table 2) | `tabT4_timing.py` | paper_data/table_t4_data | ✅ |
 
 `results/official/paper_data/` is produced by `python3 -m scripts.paper_data
@@ -36,20 +36,27 @@ they come out identical.
 
 ## Open issues (they change numbers of the paper: decide before regenerating)
 
-1. **e^k column of Table 5.** The saved `table_ek_data` came from a script with a
-   copied DR loop that rebuilt the GNN with `scale=1.0` (the checkpoints of
-   densities 0.4/0.8/1.0 use 1.8) and did not update the `prev_residual` /
-   `stall_ema` features; even its plain-DR values do not match the official
-   runs. `scripts.paper_data stopping-quality` computes it on the real code:
-   at density 0.8, 4.3e-4 instead of 9.7e-6. Not regenerated yet.
-2. **Timing data of Table 2.** Measured by a copy of the same loop (same
-   `scale=1.0` issue). Per-call times hardly depend on it; `scripts.paper_data
-   timing`/`train-time` now time the real code. Not regenerated yet.
-3. **Gap figures (`fig2_gap_levels*`).** They use the first iteration with
+1. **Gap figures (`fig2_gap_levels*`).** They use the first iteration with
    |gap| <= eps; the gap crosses zero (the shadow iterate is not
    balance-feasible), so |gap| dips transiently. A "stays below eps until the
    stop" criterion is more meaningful.
-4. **Stopping rule.** With the unperturbed rule the median reduction drops (density
+2. **Stopping rule.** With the unperturbed rule the median reduction drops (density
    0.8: 75.4% -> 58.8%, 1.0: 45.8% -> 29.0%) and the accuracy at termination returns
    to DR's level. Figures 1/2b and Tables A/F use the perturbed (official) rule.
    See `results/reeval_unperturbed_stop/20261028_2006/REPORT.md`.
+
+## Regenerated on 2026-11-02 (Tables 2 and 5)
+
+The old `table_ek_data` and `table_t4_data` came from scripts with a copied
+DR+GNN loop that rebuilt the GNN with `scale=1.0` (the checkpoints of
+densities 0.4/0.8/1.0 use 1.8), did not update the `prev_residual` /
+`stall_ema` features and, for the training time, used w_behind/w_ahead = 2/1
+at every density. Both are now produced by `scripts.paper_data` on the real
+code (`stopping-quality`, `timing`, `train-time`).
+
+- Table 5, median e^k of DR+GNN: 0.4: 9.9e-6 -> 1.7e-5, 0.8: 9.7e-6 -> 4.3e-4,
+  1.0: 1.1e-5 -> 3.2e-5 (0.2/0.5/0.6 nearly unchanged). e^k of DR now equals
+  the residual stored in the official records on all 180 instances.
+- Table 2: Phi_w time unchanged (-1..3%), local prox ~15% lower, so the
+  overhead rises by 6-14 points; training times within -2..+10% (noise).
+  The runtime dtype is float32 (the old file said float64).

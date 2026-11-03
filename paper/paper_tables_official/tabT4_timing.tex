@@ -1,17 +1,17 @@
 % DRAFT CAPTION: Per-agent, per-iteration wall-clock time of the local prox step
 % (bisection) and of one Phi_w evaluation (messages, aggregation, GRU, output heads),
 % mean over ~5 test instances per density, all iterations and agents. Overhead =
-% Phi_w / prox. Hardware: x86_64 (Linux-5.15.0-194-generic-x86_64-with-glibc2.35), 1 thread, float64 (project default).
+% Phi_w / prox. Hardware: x86_64 (Linux-5.15.0-194-generic-x86_64-with-glibc2.35), 1 thread, float32.
 
 \begin{tabular}{lccccc}
 \toprule
 $\delta$ & local prox [ms/agent/iter.] & $\Phi_w$ [ms/agent/iter.] & overhead & training [min] \\
 \midrule
-$\delta=0.2$ & 0.894 & 0.363 & 41\% & 43.1 \\
-$\delta=0.4$ & 0.877 & 0.588 & 67\% & 35.6 \\
-$\delta=0.5$ & 0.929 & 0.467 & 50\% & 62.8 \\
-$\delta=0.6$ & 0.910 & 0.488 & 54\% & 33.6 \\
-$\delta=0.8$ & 0.917 & 0.737 & 80\% & 139.5 \\
-$\delta=1.0$ & 0.970 & 0.808 & 83\% & 172.8 \\
+$\delta=0.2$ & 0.760 & 0.359 & 47\% & 47.6 \\
+$\delta=0.4$ & 0.742 & 0.578 & 78\% & 38.2 \\
+$\delta=0.5$ & 0.789 & 0.461 & 58\% & 67.1 \\
+$\delta=0.6$ & 0.760 & 0.471 & 62\% & 35.5 \\
+$\delta=0.8$ & 0.771 & 0.720 & 93\% & 143.6 \\
+$\delta=1.0$ & 0.811 & 0.788 & 97\% & 169.8 \\
 \bottomrule
 \end{tabular}

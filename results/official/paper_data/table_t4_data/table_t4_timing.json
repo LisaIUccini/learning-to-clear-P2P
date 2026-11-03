@@ -1,0 +1,50 @@
+{
+  "hardware": "x86_64",
+  "platform": "Linux-5.15.0-194-generic-x86_64-with-glibc2.35",
+  "n_threads": 1,
+  "dtype": "float32",
+  "results": {
+    "0.2": {
+      "prox_ms_per_agent_iter": 0.7602601083039086,
+      "gnn_ms_per_agent_iter": 0.3591554450866157,
+      "overhead_pct": 47.24112723576519,
+      "n_prox_samples": 11120,
+      "n_gnn_samples": 11120
+    },
+    "0.4": {
+      "prox_ms_per_agent_iter": 0.7420045342454549,
+      "gnn_ms_per_agent_iter": 0.578384677856773,
+      "overhead_pct": 77.94894116717668,
+      "n_prox_samples": 18840,
+      "n_gnn_samples": 18840
+    },
+    "0.5": {
+      "prox_ms_per_agent_iter": 0.7886934519379533,
+      "gnn_ms_per_agent_iter": 0.461244580552115,
+      "overhead_pct": 58.48211106847141,
+      "n_prox_samples": 28000,
+      "n_gnn_samples": 28000
+    },
+    "0.6": {
+      "prox_ms_per_agent_iter": 0.7603740504053016,
+      "gnn_ms_per_agent_iter": 0.4714788335386923,
+      "overhead_pct": 62.00617094801964,
+      "n_prox_samples": 21990,
+      "n_gnn_samples": 21990
+    },
+    "0.8": {
+      "prox_ms_per_agent_iter": 0.7709852859448842,
+      "gnn_ms_per_agent_iter": 0.7204112674980994,
+      "overhead_pct": 93.44033934645022,
+      "n_prox_samples": 30440,
+      "n_gnn_samples": 30440
+    },
+    "1.0": {
+      "prox_ms_per_agent_iter": 0.8107629526497317,
+      "gnn_ms_per_agent_iter": 0.7882062194811672,
+      "overhead_pct": 97.2178386919574,
+      "n_prox_samples": 64420,
+      "n_gnn_samples": 64420
+    }
+  }
+}

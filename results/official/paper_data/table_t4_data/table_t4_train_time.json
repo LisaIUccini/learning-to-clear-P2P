@@ -1,0 +1,45 @@
+{
+  "hardware": "x86_64",
+  "platform": "Linux-5.15.0-194-generic-x86_64-with-glibc2.35",
+  "n_threads": 1,
+  "timed_epochs": 3,
+  "full_epochs": 25,
+  "results": {
+    "0.2": {
+      "timed_epochs": 3,
+      "timed_seconds": 342.53991781780496,
+      "extrapolated_25ep_minutes": 47.57498858580625,
+      "unroll_K": 426
+    },
+    "0.4": {
+      "timed_epochs": 3,
+      "timed_seconds": 275.32130401721224,
+      "extrapolated_25ep_minutes": 38.239070002390584,
+      "unroll_K": 318
+    },
+    "0.5": {
+      "timed_epochs": 3,
+      "timed_seconds": 483.28090026509017,
+      "extrapolated_25ep_minutes": 67.1223472590403,
+      "unroll_K": 570
+    },
+    "0.6": {
+      "timed_epochs": 3,
+      "timed_seconds": 255.9599838098511,
+      "extrapolated_25ep_minutes": 35.54999775136821,
+      "unroll_K": 321
+    },
+    "0.8": {
+      "timed_epochs": 3,
+      "timed_seconds": 1034.2581637129188,
+      "extrapolated_25ep_minutes": 143.64696718234984,
+      "unroll_K": 1159
+    },
+    "1.0": {
+      "timed_epochs": 3,
+      "timed_seconds": 1222.3132737423293,
+      "extrapolated_25ep_minutes": 169.76573246421242,
+      "unroll_K": 1354
+    }
+  }
+}

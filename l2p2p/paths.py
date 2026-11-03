@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent          # DRcld/
+ROOT = Path(__file__).resolve().parent.parent          # repository root
 RESULTS = ROOT / "results"
 OFFICIAL = RESULTS / "official"
 

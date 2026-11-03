@@ -31,6 +31,7 @@ from l2p2p.evaluation import relative_gap, run_pair
 from l2p2p.fixed_point import run_dr
 from l2p2p.l2ws.distributed_model import DistributedPredictor
 from l2p2p.scenarios import sample_level_width_dataset
+from l2p2p.training import Trainer
 from scripts.run_a2dr import a2dr_config
 from scripts.train_dr_gnn import train_model
 from scripts.train_l2ws import CHECKPOINT, output_dir
@@ -170,13 +171,20 @@ def timing(out_dir, densities, n_instances=5):
 
 
 def train_time(out_dir, densities, timed_epochs=3):
-    """Official training timed over `timed_epochs` epochs and extrapolated to all of them."""
+    """Official training (Trainer.fit only, single thread) timed over
+    `timed_epochs` epochs and extrapolated to all of them."""
+    torch.set_num_threads(1)
     results = {}
     for density in densities:
-        with tempfile.TemporaryDirectory() as tmp:
-            t0 = time.perf_counter()
-            train_model(density, tmp, epochs=timed_epochs)
-            elapsed = time.perf_counter() - t0
+        fit_t = []
+        fit = Trainer.fit
+        Trainer.fit = _timed(fit, fit_t)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                train_model(density, tmp, epochs=timed_epochs)
+        finally:
+            Trainer.fit = fit
+        elapsed = fit_t[0]
         full_min = elapsed / timed_epochs * official.EPOCHS / 60.0
         results[density] = {"timed_epochs": timed_epochs, "timed_seconds": elapsed,
                             "extrapolated_25ep_minutes": full_min, "unroll_K": official.DENSITY[density].unroll}
