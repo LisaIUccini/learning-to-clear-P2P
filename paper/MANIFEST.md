@@ -15,6 +15,7 @@ they come out identical.
 | `fig1_methods_comparison_3dens` | `fig1_methods_comparison_3dens.py` | same | ✅ |
 | `fig1_methods_comparison_noreg`, `..._3dens_noreg` | `fig1_noreg.py` | same, without L2WS-reg | ✅ |
 | `fig2b_stopping_tolerance` | `fig2b_stopping_tolerance.py` | dr_gnn residuals | ✅ (perturbed stopping rule) |
+| `fig2b_stopping_tolerance_3dens` | `fig2b_stopping_tolerance_3dens.py` | same | ✅ (perturbed stopping rule) |
 | `fig2_gap_levels` | `fig2_gap_levels.py` | dr_gnn, l2ws/centralized, paper_data/fig2_data | ⚠️ first-hit |
 | `fig2_gap_levels_2methods` | `fig2_gap_levels_2methods.py` | dr_gnn | ⚠️ first-hit |
 | `fig3_difficulty_gain` | `fig3_difficulty_gain.py` | dr_gnn | ✅ |
@@ -43,7 +44,7 @@ they come out identical.
 2. **Stopping rule.** With the unperturbed rule the median reduction drops (density
    0.8: 75.4% -> 58.8%, 1.0: 45.8% -> 29.0%) and the accuracy at termination returns
    to DR's level. Figures 1/2b and Tables A/F use the perturbed (official) rule.
-   See `results/reeval_unperturbed_stop/20261028_2006/REPORT.md`.
+   Full report (folder removed from the working tree): `git show ffcb491:results/reeval_unperturbed_stop/20261028_2006/REPORT.md`.
 
 ## Regenerated on 2026-11-02 (Tables 2 and 5)
 

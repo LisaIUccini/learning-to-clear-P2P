@@ -9,7 +9,7 @@ Same norm, tolerance and iteration cap as the official evaluation.
     python3 -m scripts.analysis.unperturbed_stop run <out_dir> <density> [<density> ...]
     python3 -m scripts.analysis.unperturbed_stop_report <out_dir>
 
-Results of 2026-10-28: results/reeval_unperturbed_stop/20261028_2006/REPORT.md.
+Results of 2026-10-28 (folder removed): git show ffcb491:results/reeval_unperturbed_stop/20261028_2006/REPORT.md
 """
 from __future__ import annotations
 

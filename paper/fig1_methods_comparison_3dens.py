@@ -18,17 +18,21 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 import common
+import paper_style
 from fig1_methods_comparison import load_all, delta_for, METHOD_ORDER, DISPLAY_NAME, OUT_DIR, TEXTWIDTH_IN
 
 DENSITIES_SUBSET = [0.2, 0.6, 1.0]
 
 
-def main(method_order=METHOD_ORDER, suffix=""):
+def main(method_order=METHOD_ORDER, suffix="", display_name=DISPLAY_NAME, compact=False):
     official, l2ws_cent, l2ws_dist, a2dr = load_all()
     n_methods = len(method_order)
 
-    fig, axes = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.35),
-                              sharey=True, gridspec_kw={"wspace": 0.12})
+    if compact:  # layout comune compatto (paper_style.grid_2x3 con una riga), coerente con fig2b/fig4
+        fig, axes = paper_style.grid_2x3(TEXTWIDTH_IN, sharey=True, nrows=1)
+    else:
+        fig, axes = plt.subplots(1, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.35),
+                                  sharey=True, gridspec_kw={"wspace": 0.12})
 
     missing = []
     panel_data = {}
@@ -62,16 +66,23 @@ def main(method_order=METHOD_ORDER, suffix=""):
     yticks = np.unique(np.concatenate([ticks_below, ticks_above]))
     axes[0].set_yticks(yticks)
 
-    fig.supylabel("iteration reduction vs. DR (%)", fontsize=9)
-    fig.subplots_adjust(left=0.10, right=0.985, bottom=0.14, top=0.72 if n_methods > 4 else 0.84)
+    if compact:  # 2 righe: una sola riga di pannelli
+        paper_style.supylabel(fig, "iteration reduction\nvs. DR (%)")
+    else:
+        fig.supylabel("iteration reduction vs. DR (%)", fontsize=9)
+    if not compact:
+        fig.subplots_adjust(left=0.10, right=0.985, bottom=0.14, top=0.72 if n_methods > 4 else 0.84)
     for ax, density in zip(axes, DENSITIES_SUBSET):
+        if compact:
+            paper_style.delta_label_below(ax, density)
+            continue
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
                      xytext=(0, -18), textcoords="offset points", ha="center", fontsize=8.5)
 
     legend_handles = [Patch(facecolor=common.METHODS[mk]["color"] if common.METHODS[mk]["filled"] else "white",
                              edgecolor="black" if common.METHODS[mk]["filled"] else common.METHODS[mk]["color"],
                              alpha=1.0, linewidth=0.8,
-                             label=DISPLAY_NAME.get(mk, common.METHODS[mk]["name"].replace("$^\\dagger$", "")))
+                             label=display_name.get(mk, common.METHODS[mk]["name"].replace("$^\\dagger$", "")))
                       for mk in method_order]
     fig.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.52, 1.0),
                ncol=3 if n_methods > 4 else n_methods, frameon=False, handlelength=1.3, handleheight=1.1,
@@ -79,8 +90,11 @@ def main(method_order=METHOD_ORDER, suffix=""):
 
     out_pdf = os.path.join(OUT_DIR, f"fig1_methods_comparison_3dens{suffix}.pdf")
     out_png = os.path.join(OUT_DIR, f"fig1_methods_comparison_3dens{suffix}.png")
-    fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.05)
-    fig.savefig(out_png, dpi=200, bbox_inches="tight", pad_inches=0.05)
+    if compact:
+        paper_style.save_fixed(fig, out_pdf, out_png)  # dimensione fissa, niente ritaglio
+    else:
+        fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.05)
+        fig.savefig(out_png, dpi=200, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     print(f"wrote {out_pdf}")
     print(f"wrote {out_png}")

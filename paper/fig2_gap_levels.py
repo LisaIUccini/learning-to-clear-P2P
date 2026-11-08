@@ -152,7 +152,7 @@ def main():
         ax.xaxis.grid(False)
         ax.set_xlabel("optimality gap $\\varepsilon$")
 
-    fig.supylabel("iterations (= communication rounds)", fontsize=9)
+    fig.supylabel("iterations", fontsize=9)
     fig.tight_layout(rect=(0.02, 0.0, 1, 0.84))
     for ax, density in zip(axes, common.DENSITIES):
         ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",

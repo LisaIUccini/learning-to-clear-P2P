@@ -77,9 +77,11 @@ def plot_method(ax, mk, res_arrs, offset=0):
 def main():
     official = {d: common.load_official(d) for d in common.DENSITIES}
 
-    fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.56),
-                              gridspec_kw={"hspace": 0.28, "wspace": 0.30})
-    axes = axes.ravel()
+    # layout comune compatto (paper_style.grid_2x3), coerente con fig1/fig4: asse x
+    # condiviso (stessa scala tau), numeri dei tick x solo sulla riga in basso,
+    # piu' l'xlabel condiviso in fondo
+    fig, axes = paper_style.grid_2x3(TEXTWIDTH_IN, sharex=True,
+                                     bottom_in=paper_style.BOTTOM_TICKS_IN, wspace=0.30)
 
     missing = []
     for ax, density in zip(axes, common.DENSITIES):
@@ -103,9 +105,8 @@ def main():
     # un solo xlabel condiviso (l'asse x e' "tolleranza di arresto" ovunque,
     # non serve ripeterlo sotto ogni pannello) -- posizionato esplicitamente
     # per evitare che si sovrapponga ai numeri dei tick del pannello sotto
-    fig.supxlabel("stopping tolerance $\\tau$", fontsize=9, y=0.015)
-    fig.supylabel("iterations (= communication rounds)", fontsize=9)
-    fig.subplots_adjust(left=0.115, right=0.985, bottom=0.11, top=0.86)
+    fig.supxlabel("stopping tolerance $\\tau$", fontsize=9, y=0.0, va="bottom")
+    paper_style.supylabel(fig, "iterations")
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.52, 1.0),
@@ -113,8 +114,7 @@ def main():
 
     out_pdf = os.path.join(OUT_DIR, "fig2b_stopping_tolerance.pdf")
     out_png = os.path.join(OUT_DIR, "fig2b_stopping_tolerance.png")
-    fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.05)
-    fig.savefig(out_png, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    paper_style.save_fixed(fig, out_pdf, out_png)  # dimensione fissa, niente ritaglio
     plt.close(fig)
     print(f"wrote {out_pdf}")
     print(f"wrote {out_png}")

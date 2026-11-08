@@ -47,7 +47,7 @@ def main():
                 ha="left", va="top", fontsize=8.5)
 
     fig.supxlabel("optimality gap $\\varepsilon$", fontsize=9, y=0.015)
-    fig.supylabel("iterations (= communication rounds)", fontsize=9)
+    fig.supylabel("iterations", fontsize=9)
     fig.subplots_adjust(left=0.115, right=0.985, bottom=0.11, top=0.86)
 
     handles, labels = axes[0].get_legend_handles_labels()

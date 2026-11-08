@@ -13,7 +13,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = [
     "fig1_methods_comparison.py", "fig1_methods_comparison_3dens.py", "fig1_noreg.py",
-    "fig2b_stopping_tolerance.py", "fig2_gap_levels.py", "fig2_gap_levels_2methods.py",
+    "fig2b_stopping_tolerance.py", "fig2b_stopping_tolerance_3dens.py",
+    "fig2_gap_levels.py", "fig2_gap_levels_2methods.py",
     "fig3_difficulty_gain.py", "fig4_ood_robustness.py", "fig4_ood_robustness_3dens.py",
     "tabA_comparison.py", "tabC_ood.py", "tabD_market_plausibility.py", "tabE_hyperparameters.py",
     "tabF_stopping_quality.py", "tabT4_timing.py",

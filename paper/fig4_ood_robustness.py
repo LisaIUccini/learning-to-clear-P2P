@@ -77,9 +77,8 @@ def main():
     official, ood = load_all()
     n_cats = len(CATS)
 
-    fig, axes = plt.subplots(2, 3, figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 0.58),
-                              sharey=True, gridspec_kw={"hspace": 0.50, "wspace": 0.12})
-    axes = axes.ravel()
+    # layout comune compatto (paper_style.grid_2x3), coerente con fig1/fig2b
+    fig, axes = paper_style.grid_2x3(TEXTWIDTH_IN, sharey=True)
 
     missing = []
     panel_data = {}
@@ -103,16 +102,14 @@ def main():
         ax.xaxis.grid(False)
         ax.set_xticks([])
         ax.set_xlim(-0.7, n_cats - 0.3)
-        ax.annotate(f"$\\delta = {density}$", xy=(0.5, 0), xycoords="axes fraction",
-                     xytext=(0, -10), textcoords="offset points", ha="center", fontsize=8.5)
+        paper_style.delta_label_below(ax, density)
 
     # asse y piu' dettagliato (step 25 invece di 50), stessa convenzione di fig1
     ymin, ymax = axes[0].get_ylim()
     yticks = np.arange(np.floor(ymin / 25) * 25, np.ceil(ymax / 25) * 25 + 1, 25)
     axes[0].set_yticks(yticks)
 
-    fig.supylabel("iteration reduction vs. DR (%)", fontsize=9)
-    fig.subplots_adjust(left=0.085, right=0.985, bottom=0.11, top=0.84)
+    paper_style.supylabel(fig, "iteration reduction vs. DR (%)")
 
     legend_handles = [Patch(facecolor=c, edgecolor="black", alpha=1.0, linewidth=0.8, label=label)
                       for _, label, c in CATS]
@@ -122,8 +119,7 @@ def main():
 
     out_pdf = os.path.join(OUT_DIR, "fig4_ood_robustness.pdf")
     out_png = os.path.join(OUT_DIR, "fig4_ood_robustness.png")
-    fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.05)
-    fig.savefig(out_png, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    paper_style.save_fixed(fig, out_pdf, out_png)  # dimensione fissa, niente ritaglio
     plt.close(fig)
     print(f"wrote {out_pdf}")
     print(f"wrote {out_png}")
