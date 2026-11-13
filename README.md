@@ -1,4 +1,4 @@
-# Learning to Clear Peer-to-Peer Electricity Markets
+# Learning to Clear Peer-to-Peer Energy Markets
 
 Code of the paper: a distributed Douglas–Rachford (DR) market-clearing
 iteration augmented with a learned, summable correction parametrised by a
